@@ -1,0 +1,15 @@
+import type { ReactNode, FormEvent } from 'react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Check, ShoppingBag, Search } from 'lucide-react';
+import { Button, Card, Badge, Page, Stat, Logo, Empty } from '../components/UI';
+import { classes, courts, memberships, products, revenue, performance } from '../data';
+import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
+import {
+  LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
+  BarChart, Bar
+} from 'recharts';
+import OptimizedImage from '../components/OptimizedImage';
+
+export function Dashboard(){const {user}=useAuth();const {bookings}=useApp();return <Page title={`Good morning, ${user?.name?.split(' ')[0]||'Athlete'}.`} eyebrow="Member dashboard" actions={<Link to="/book"><Button>Book a session</Button></Link>}><div className="grid gap-4 md:grid-cols-3"><Stat label="Membership" value="Athlete" sub="ACTIVE · expires 24 Oct 2026"/><Stat label="Sessions" value="24" sub="+4 this month"/><Stat label="Streak" value="7 days" sub="Keep it going"/></div><div className="mt-6 grid gap-6 lg:grid-cols-[1.3fr_.7fr]"><Card className="p-6"><div className="flex items-start justify-between"><div><p className="text-xs font-bold tracking-widest text-zawana-accent">NEXT SESSION</p><h2 className="mt-2 text-2xl font-black">{bookings.find(b=>b.status==='confirmed')?.title||'No upcoming session'}</h2><p className="mt-2 text-sm text-zawana-500">{bookings.find(b=>b.status==='confirmed')?.date||'Book your next session'} · {bookings.find(b=>b.status==='confirmed')?.time||''}</p></div><Badge good>Confirmed</Badge></div><div className="mt-8 flex gap-2"><Link to="/bookings"><Button variant="secondary">View booking</Button></Link><Link to="/book"><Button>Book another</Button></Link></div></Card><Card className="p-6"><p className="text-xs font-bold tracking-widest text-zawana-500">QUICK ACTIONS</p><div className="mt-4 grid gap-2">{[['/book','Book court'],['/membership','Membership'],['/performance','Performance'],['/recovery','Recovery']].map(([to,label])=><Link key={to} to={to} className="flex items-center justify-between rounded-xl bg-zawana-950/5 p-3 text-sm font-bold hover:bg-zawana-950/8">{label}<ArrowRight size={16}/></Link>)}</div></Card></div><div className="mt-6"><Card className="p-6"><div className="flex justify-between"><div><p className="text-xs font-bold tracking-widest text-zawana-500">RECENT ACTIVITY</p><h3 className="mt-2 text-xl font-black">Your Zawana week</h3></div><Link to="/performance" className="text-sm font-bold text-zawana-accent">Performance →</Link></div><div className="mt-6 grid gap-3 md:grid-cols-3">{['Court session completed','Squat PR recorded','Membership renewed'].map((x,i)=><div key={x} className="rounded-xl border border-zawana-950/7 p-4"><p className="text-sm font-bold">{x}</p><p className="mt-1 text-xs text-zawana-500">{i+1} day{i?'s':''} ago</p></div>)}</div></Card></div></Page>}

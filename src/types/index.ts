@@ -1,0 +1,10 @@
+export type UserRole='member'|'coach'|'admin';
+export type User={id:string;name:string;email:string;role:UserRole;membership?:string;avatar?:string};
+export type Court={id:string;name:string;type:'Premium'|'Standard';price:number;status:'available'|'maintenance';features:string[]};
+export type Booking={id:string;kind:'court'|'class'|'pt'|'recovery';title:string;date:string;time:string;location:string;status:'confirmed'|'completed'|'cancelled';price:number;meta?:string};
+export type ClassItem={id:string;title:string;coach:string;time:string;duration:number;capacity:number;booked:number;level:string;location:string;price:number};
+export type Membership={id:string;name:string;price:number;period:string;features:string[]};
+export type Notification={id:string;title:string;body:string;time:string;read:boolean};
+export type Product={id:string;name:string;price:number;category:string;description:string};
+export type CartItem={productId:string;quantity:number};
+export type MetricPoint={name:string;value:number;value2?:number};
