@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-
+import ScrollToTop from "./components/ScrollToTop";
 import { useAuth } from "./context/AuthContext";
 import { AppLayout } from "./layouts/Layouts";
 
@@ -23,7 +23,7 @@ import {
   Signup,
   Store,
   Training,
-} from "./pages/AppPages";
+} from "./pages";
 
 import { classes, courts } from "./data/index";
 
@@ -107,13 +107,14 @@ function Guard({ role, children }: GuardProps) {
   return <AppLayout role={role}>{children}</AppLayout>;
 }
 
-
 // ─────────────────────────────────────────────
 // Application Routes
 // ─────────────────────────────────────────────
 
 export default function App() {
   return (
+    <>
+       <ScrollToTop />
     <Routes>
       {/* ═══════════════════════════════════════
           PUBLIC
@@ -500,5 +501,6 @@ export default function App() {
         element={<Navigate to="/" replace />}
       />
     </Routes>
+    </>
   );
 }

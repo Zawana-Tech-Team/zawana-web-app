@@ -259,40 +259,77 @@ export function Home(){
         </div>
 
       </section>
-
-      <section id="arena" className="mx-auto max-w-[1440px] px-5 py-24 md:px-10 md:py-32">
+   
+      <section
+        id="arena"
+        className="mx-auto max-w-[1440px] px-5 py-20 md:px-10 md:py-28"
+      >
         <div className="max-w-3xl">
           <p className="eyebrow text-zawana-gold">01 · The arena</p>
-          <h2 className="mt-4 text-4xl font-black tracking-[-.06em] md:text-6xl">One arena.<br/>Multiple ways to move.</h2>
-          <p className="mt-6 max-w-2xl text-base leading-7 text-zawana-500 md:text-lg">Every part of Zawana is designed to make training easier to start, easier to sustain and harder to outgrow.</p>
+
+          <h2 className="mt-4 text-4xl font-black tracking-[-.06em] md:text-6xl">
+            One arena.
+            <br />
+            Multiple ways to move.
+          </h2>
+
+          <p className="mt-5 max-w-2xl text-base leading-7 text-zawana-500 md:text-lg">
+            Every part of Zawana is designed to make training easier to start,
+            easier to sustain and harder to outgrow.
+          </p>
         </div>
-        <div className="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {facilities.map((facility) => (
+
+        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {facilities.map((facility, index) => (
             <Card
               key={facility.name}
-              className="group relative min-h-[360px] overflow-hidden p-0 transition duration-500 hover:-translate-y-1 hover:shadow-2xl"
+              className="
+                group relative overflow-hidden p-0
+                min-h-[300px] md:min-h-[320px]
+                border-0
+                bg-zawana-950
+                transform-gpu
+                transition-transform duration-300
+                hover:-translate-y-1
+              "
             >
               {/* Image */}
               <OptimizedImage
                 src={facility.image}
-                alt={facility.name}
-                loading="lazy"
+                alt=""
+                loading={index < 3 ? "eager" : "lazy"}
+                decoding="async"
+                fetchPriority={index === 0 ? "high" : "auto"}
                 sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                className="
+                  absolute inset-0
+                  h-full w-full
+                  object-cover
+                  transform-gpu
+                  transition-transform duration-500
+                  group-hover:scale-[1.02]
+                "
               />
 
-              {/* Dark gradient */}
-              <div className="absolute inset-0 bg-gradient-to-t from-zawana-950 via-zawana-950/45 to-transparent" />
+              {/* Lightweight overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
 
               {/* Content */}
-              <div className="relative flex h-full min-h-[360px] flex-col justify-end p-7 text-white">
-                <div className="mb-6 h-1 w-12 bg-zawana-gold transition-all duration-500 group-hover:w-20" />
+              <div className="relative flex min-h-[300px] md:min-h-[320px] flex-col justify-end p-6 md:p-7 text-white">
+                <div
+                  className="
+                    mb-5 h-1 w-10
+                    bg-zawana-gold
+                    transition-all duration-300
+                    group-hover:w-14
+                  "
+                />
 
-                <h3 className="text-2xl font-black tracking-[-.04em]">
+                <h3 className="text-xl font-black tracking-[-.03em] md:text-2xl">
                   {facility.name}
                 </h3>
 
-                <p className="mt-3 max-w-sm text-sm leading-6 text-white/65">
+                <p className="mt-2 max-w-sm text-sm leading-6 text-white/60">
                   Purpose-built spaces for movement, technical practice and
                   long-term athlete development.
                 </p>
