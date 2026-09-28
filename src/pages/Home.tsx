@@ -17,26 +17,38 @@ export function Home(){
   {
     name: 'Badminton Courts',
     image: '/facilities/court.webp',
+    purpose:
+      'From social games to junior classes and national-level training, our courts are built for every level of play.',
   },
   {
     name: 'High Performance Gym',
     image: '/facilities/gym.webp',
+    purpose:
+      'Train with purpose through strength, conditioning, and performance-focused programs designed to make you better.',
   },
   {
     name: 'Training Studio',
     image: '/facilities/gx-studio.webp',
+    purpose:
+      'Move, sweat, and learn with Zumba, kickboxing, Taekwondo, functional training, yoga, and more.',
   },
   {
     name: 'Cut Lab',
     image: '/facilities/cutlab.webp',
+    purpose:
+      'Stay sharp with professional barbering, styling, and grooming in a dedicated space built for your look.',
   },
   {
     name: 'Zawana Cafe',
     image: '/facilities/cafe.webp',
+    purpose:
+      'Refuel your body, grab a coffee, or relax while you wait. Your space to recharge between sessions.',
   },
   {
     name: 'Revive Clinic',
     image: '/facilities/revive.webp',
+    purpose:
+      'From everyday aches to sports injuries, get the care, recovery, and treatment you need to get moving again.',
   },
 ];
 
@@ -330,8 +342,7 @@ export function Home(){
                 </h3>
 
                 <p className="mt-2 max-w-sm text-sm leading-6 text-white/60">
-                  Purpose-built spaces for movement, technical practice and
-                  long-term athlete development.
+                  {facility.purpose}
                 </p>
               </div>
             </Card>
