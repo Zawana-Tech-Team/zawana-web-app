@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+// @ts-expect-error ScrollToTop is a JSX module without a TypeScript declaration.
 import ScrollToTop from "./components/ScrollToTop";
 import { useAuth } from "./context/AuthContext";
 import { AppLayout } from "./layouts/Layouts";
