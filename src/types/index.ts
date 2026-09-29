@@ -208,6 +208,27 @@ export type Appointment = {
   paymentStatus: 'paid' | 'pending';
 };
 
+
+export type ManagedCourt = {
+  id: string;
+  name: string;
+  type: 'Premium' | 'Standard';
+  surface: string;
+  price: number;
+  status: 'available' | 'maintenance' | 'inactive';
+  features: string[];
+};
+
+export type CoachProfile = {
+  id: string;
+  name: string;
+  specialty: string;
+  phone: string;
+  email: string;
+  status: 'active' | 'inactive';
+  color: string;
+};
+
 export type Schedule = {
   id: string;
   person: string;

@@ -1,0 +1,316 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  member
+  coach
+  admin
+  gym_fo
+  clinic_fo
+  badminton_fo
+  store_fo
+  cafe_fo
+  doctor
+}
+
+enum CourtStatus {
+  available
+  maintenance
+  inactive
+}
+
+enum BookingKind {
+  court
+  class
+  pt
+  recovery
+}
+
+enum BookingStatus {
+  pending
+  confirmed
+  completed
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  refunded
+}
+
+enum CoachStatus {
+  active
+  inactive
+}
+
+enum ScheduleRole {
+  coach
+  doctor
+}
+
+enum AppointmentStatus {
+  pending
+  confirmed
+  checked_in
+  completed
+  cancelled
+}
+
+enum ProductStatus {
+  active
+  inactive
+}
+
+enum TransactionBusiness {
+  Gym
+  Badminton
+  Clinic
+  Store
+  Cafe
+  Academy
+}
+
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  passwordHash String
+  role         Role         @default(member)
+  phone        String?
+  membership   String?
+  avatar       String?
+  createdAt    DateTime     @default(now())
+  bookings     Booking[]
+  notifications Notification[]
+}
+
+model Court {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  type      String
+  surface   String
+  price     Int
+  status    CourtStatus @default(available)
+  features  Json
+  createdAt DateTime    @default(now())
+  bookings  Booking[]
+}
+
+model Coach {
+  id        String      @id @default(cuid())
+  name      String
+  specialty String
+  phone     String
+  email     String
+  status    CoachStatus @default(active)
+  color     String      @default("#D6FF3F")
+  schedules Schedule[]
+  bookings  Booking[]
+}
+
+model Schedule {
+  id        String       @id @default(cuid())
+  person    String
+  role      ScheduleRole
+  day       String
+  start     String
+  end       String
+  service   String?
+  active    Boolean      @default(true)
+  coachId   String?
+  coach     Coach?       @relation(fields: [coachId], references: [id], onDelete: SetNull)
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  code          String        @unique
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind          BookingKind
+  title         String
+  date          String
+  time          String
+  location      String
+  status        BookingStatus @default(pending)
+  price         Int
+  courtId       String?
+  court         Court?        @relation(fields: [courtId], references: [id], onDelete: SetNull)
+  coachId       String?
+  coach         Coach?        @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  meta          String?
+  paymentStatus PaymentStatus @default(pending)
+  createdAt     DateTime      @default(now())
+}
+
+model Class {
+  id          String  @id @default(cuid())
+  title       String
+  coach       String
+  time        String
+  duration    Int
+  capacity    Int
+  booked      Int     @default(0)
+  level       String
+  location    String
+  price       Int
+}
+
+model MembershipPlan {
+  id       String   @id @default(cuid())
+  title    String
+  price    Int
+  duration Int
+  kind     String
+  features Json
+  status   String   @default("active")
+}
+
+model Membership {
+  id         String @id @default(cuid())
+  customerId String
+  customer   String
+  phone      String
+  packageId  String
+  package    String
+  startDate  String
+  expiryDate String
+  status     String
+  lastCheckIn String?
+}
+
+model Product {
+  id                    String                  @id @default(cuid())
+  name                  String
+  price                 Int
+  category              String
+  description           String
+  sku                   String                  @unique
+  barcode               String                  @unique
+  stock                 Int                     @default(0)
+  cost                  Int                     @default(0)
+  tax                   Int                     @default(0)
+  status                ProductStatus           @default(active)
+  inventoryTransactions InventoryTransaction[]
+}
+
+model InventoryTransaction {
+  id        String   @id @default(cuid())
+  productId String
+  type      String
+  quantity  Int
+  note      String
+  date      String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model StoreOrder {
+  id       String @id @default(cuid())
+  customer String
+  total    Int
+  paid     Int
+  dueDate  String?
+  status   String
+  items    Json
+}
+
+model CafeOrder {
+  id            String @id @default(cuid())
+  customer      String
+  items         Json
+  floor         String
+  orderTime     String
+  paymentMethod String
+  status        String
+}
+
+model Transaction {
+  id            String              @id @default(cuid())
+  date          String
+  customer      String
+  business      TransactionBusiness
+  item          String
+  amount        Int
+  discount      Int
+  tax           Int
+  finalAmount   Int
+  paymentMethod String
+  staff         String
+  status        String
+  createdAt     DateTime            @default(now())
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  patient       String
+  doctor        String
+  date          String
+  time          String
+  type          String
+  status        AppointmentStatus @default(pending)
+  notes         String?
+  paymentStatus PaymentStatus     @default(pending)
+}
+
+model Student {
+  id            String @id @default(cuid())
+  name          String
+  phone         String
+  className     String
+  coach         String
+  package       String
+  paymentStatus String
+  attendance    Int
+  expiryDate    String
+  status        String
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String?
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  link      String?
+  audience  String?
+  type      String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BadmintonPackage {
+  id          String @id @default(cuid())
+  title       String
+  price       Int
+  sessions    Int
+  validity    Int
+  description String
+  status      String @default("active")
+}
+
+model GymPackage {
+  id          String @id @default(cuid())
+  title       String
+  price       Int
+  duration    Int
+  description String
+  benefits    Json
+  status      String @default("active")
+}
+
+model ContentItem {
+  id             String @id @default(cuid())
+  title          String
+  image          String
+  description    String
+  googleFormLink String
+  status         String @default("draft")
+  publishDate    String
+}

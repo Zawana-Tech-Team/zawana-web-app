@@ -87,3 +87,12 @@ export function Empty({ title, body, action }: { title: string; body: string; ac
     </Card>
   );
 }
+
+
+export function Toast({message,type="success",onClose}:{message:string;type?:"success"|"error"|"info";onClose?:()=>void}) {
+  const icon = type==="success" ? "✓" : type==="error" ? "!" : "i";
+  return <motion.div initial={{opacity:0,y:20,scale:.96}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:10}} className="fixed bottom-6 right-6 z-[120] w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-zawana-950/10 bg-white shadow-[0_24px_70px_rgba(29,27,71,.2)]">
+    <div className="flex items-center gap-3 p-4"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-black ${type==="error"?"bg-red-100 text-red-700":type==="info"?"bg-zawana-900 text-zawana-950":"bg-zawana-gold text-zawana-950"}`}>{icon}</span><p className="flex-1 text-sm font-bold text-zawana-950">{message}</p>{onClose&&<button onClick={onClose} className="text-zawana-500">×</button>}</div>
+    <div className={`h-1 ${type==="error"?"bg-red-500":type==="info"?"bg-zawana-950":"bg-zawana-gold"}`}/>
+  </motion.div>
+}

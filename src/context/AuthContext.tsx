@@ -1,3 +1,41 @@
-import {createContext,useContext,useEffect,useState,ReactNode} from 'react'; import {users} from '../data'; import type {User} from '../types';
-type Ctx={user:User|null;login:(email:string,password:string)=>Promise<boolean>;logout:()=>void;signup:(name:string,email:string,password:string)=>Promise<void>}; const AuthContext=createContext<Ctx|null>(null);
-export function AuthProvider({children}:{children:ReactNode}){const [user,setUser]=useState<User|null>(()=>{const id=localStorage.getItem('zawana-user');return users.find(u=>u.id===id)||null}); useEffect(()=>{if(user)localStorage.setItem('zawana-user',user.id);else localStorage.removeItem('zawana-user')},[user]); const login=async(email:string,password:string)=>{await new Promise(r=>setTimeout(r,500));if(password!=='password123')return false;const found=users.find(u=>u.email.toLowerCase()===email.toLowerCase());if(found)setUser(found);return !!found}; const signup=async(name:string,email:string)=>{await new Promise(r=>setTimeout(r,500));setUser({id:`new-${Date.now()}`,name,email,role:'member',membership:'Athlete'})}; return <AuthContext.Provider value={{user,login,logout:()=>setUser(null),signup}}>{children}</AuthContext.Provider>}; export const useAuth=()=>{const c=useContext(AuthContext);if(!c)throw Error('AuthProvider missing');return c};
+
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import type { User } from "../types";
+import { api, get, post, setToken, getToken, type AuthResponse } from "../api";
+
+type Ctx = {
+  user: User | null;
+  loading: boolean;
+  login:(email:string,password:string)=>Promise<boolean>;
+  logout:()=>void;
+  signup:(name:string,email:string,password:string)=>Promise<void>;
+};
+
+const C=createContext<Ctx|null>(null);
+
+export function AuthProvider({children}:{children:ReactNode}) {
+  const [user,setUser]=useState<User|null>(null);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    if(!getToken()){setLoading(false);return;}
+    get<User>("/auth/me").then(setUser).catch(()=>setToken(null)).finally(()=>setLoading(false));
+  },[]);
+
+  const login=async(email:string,password:string)=>{
+    try {
+      const result=await post<AuthResponse>("/auth/login",{email,password});
+      setToken(result.token); setUser(result.user); return true;
+    } catch { return false; }
+  };
+
+  const signup=async(name:string,email:string,password:string)=>{
+    const result=await post<AuthResponse>("/auth/register",{name,email,password});
+    setToken(result.token); setUser(result.user);
+  };
+
+  const logout=()=>{setToken(null);setUser(null)};
+
+  return <C.Provider value={{user,loading,login,logout,signup}}>{children}</C.Provider>;
+}
+export const useAuth=()=>{const c=useContext(C);if(!c)throw Error("AuthProvider missing");return c};

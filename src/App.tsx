@@ -7,6 +7,7 @@ import { AppLayout } from './layouts/Layouts';
 import { useAuth } from './context/AuthContext';
 import { Generic, Home, Login, Signup, CafeCustomer, Dashboard, Book, CourtBooking, CoachBooking, Bookings, Membership, Performance, Training, Revive, Classes, Community, Store, Notifications, Profile, Admin, AdminTable, GymCheckIn, ReviveClinicFO } from './pages';
 import OperationsPage from './pages/Operations';
+import { AdminManagement } from './pages/AdminManagement';
 import type { UserRole } from './types';
 import { classes, courts } from './data';
 
@@ -77,7 +78,10 @@ export default function App(){
   <Route path="/profile" element={<Guard role="member"><Profile/></Guard>}/><Route path="/settings" element={<Guard role="member"><Generic title="Settings" body="Manage preferences, notifications, security and demo-mode controls."/></Guard>}/>
 
   {/* Admin */}
-  {['/admin','/admin/notifications','/admin/badminton-packages','/admin/gym-packages','/admin/coaches','/admin/courts','/admin/students','/admin/finance','/admin/cms'].map(path=>operational('admin',path))}
+  {['/admin','/admin/notifications','/admin/badminton-packages','/admin/gym-packages','/admin/students','/admin/finance','/admin/cms'].map(path=>operational('admin',path))}
+  <Route path="/admin/courts" element={<Guard role="admin"><AdminManagement section="courts"/></Guard>}/>
+  <Route path="/admin/coaches" element={<Guard role="admin"><AdminManagement section="coaches"/></Guard>}/>
+  <Route path="/admin/schedules" element={<Guard role="admin"><AdminManagement section="schedules"/></Guard>}/>
   <Route path="/admin/members" element={<Guard role="admin"><AdminTable title="Members" items={['Sai Zay','Htet Aung','Su Myat Thiri']}/></Guard>}/>
   <Route path="/admin/bookings" element={<Guard role="admin"><AdminTable title="Bookings" items={courts.map(c=>c.name)}/></Guard>}/>
   <Route path="/admin/classes" element={<Guard role="admin"><AdminTable title="Classes" items={classes.map(c=>c.title)}/></Guard>}/>
