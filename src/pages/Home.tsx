@@ -6,6 +6,7 @@ import { Button, Card, Badge, Page, Stat, Logo, Empty } from '../components/UI';
 import { classes, courts, memberships, products, revenue, performance } from '../data';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useOperations } from '../context/OperationsContext';
 import {
   LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
   BarChart, Bar
@@ -13,6 +14,8 @@ import {
 import OptimizedImage from '../components/OptimizedImage';
 
 export function Home(){
+  const { content } = useOperations();
+  const publishedContent = content.filter(item => item.status === 'published').slice(0, 3);
   const facilities = [
   {
     name: 'Badminton Courts',
@@ -391,6 +394,19 @@ export function Home(){
       </section>
 
       <section id="community" className="mx-auto max-w-[1440px] px-5 py-24 md:px-10 md:py-32">
+        {publishedContent.length > 0 && (
+          <div className="mb-16">
+            <p className="eyebrow text-zawana-gold">Community · Latest</p>
+            <div className="mt-6 grid gap-5 md:grid-cols-3">
+              {publishedContent.map(item => (
+                <Card key={item.id} className="overflow-hidden">
+                  <OptimizedImage src={item.image} alt={item.title} className="h-40 w-full object-cover" />
+                  <div className="p-5"><h3 className="text-xl font-black">{item.title}</h3><p className="mt-2 text-sm leading-6 text-zawana-500">{item.description}</p></div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid gap-12 lg:grid-cols-[.85fr_1.15fr] lg:items-center">
           <div>
             <p className="eyebrow text-zawana-gold">04 · Brand belief</p>

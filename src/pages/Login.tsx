@@ -8,8 +8,12 @@ const demoRoutes: Record<string, string> = {
   'member@zawana.test': '/dashboard',
   'coach@zawana.test': '/coach',
   'admin@zawana.test': '/admin',
-  'gymfo@zawana.test': '/front-office/gym',
-  'clinicfo@zawana.test': '/front-office/revive-clinic',
+  'gymfo@zawana.test': '/gym-fo',
+  'clinicfo@zawana.test': '/clinic-fo',
+  'badminton@zawana.test': '/badminton-fo',
+  'store@zawana.test': '/store-fo',
+  'cafe@zawana.test': '/cafe',
+  'doctor@zawana.test': '/doctor',
 };
 
 export function Login() {
@@ -76,6 +80,10 @@ export function Login() {
           Admin · admin@zawana.test<br />
           Gym Front Office · gymfo@zawana.test<br />
           Revive Clinic FO · clinicfo@zawana.test<br />
+          Badminton FO · badminton@zawana.test<br />
+          Lining Store · store@zawana.test<br />
+          Cafe · cafe@zawana.test<br />
+          Doctor · doctor@zawana.test<br />
           Password · password123
         </div>
       </form>

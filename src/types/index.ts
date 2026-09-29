@@ -3,7 +3,11 @@ export type UserRole =
   | 'coach'
   | 'admin'
   | 'gym_fo'
-  | 'clinic_fo';
+  | 'clinic_fo'
+  | 'badminton_fo'
+  | 'store_fo'
+  | 'cafe_fo'
+  | 'doctor';
 
 export type User = {
   id: string;
@@ -128,4 +132,171 @@ export type ReviveBooking = {
   source: 'online' | 'front_desk';
   notes?: string;
   createdAt: string;
+};
+
+export type Status = 'active' | 'inactive' | 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'overdue' | 'paid' | 'partially_paid';
+
+export type Transaction = {
+  id: string;
+  date: string;
+  customer: string;
+  business: 'Gym' | 'Badminton' | 'Clinic' | 'Store' | 'Cafe' | 'Academy';
+  item: string;
+  amount: number;
+  discount: number;
+  tax: number;
+  finalAmount: number;
+  paymentMethod: 'Cash' | 'KPay' | 'Other';
+  staff: string;
+  status: 'paid' | 'pending' | 'refunded';
+};
+
+export type BadmintonPackage = {
+  id: string;
+  title: string;
+  price: number;
+  sessions: number;
+  validity: number;
+  description: string;
+  status: 'active' | 'inactive';
+};
+
+export type GymPackage = {
+  id: string;
+  title: string;
+  price: number;
+  duration: number;
+  description: string;
+  benefits: string[];
+  status: 'active' | 'inactive';
+};
+
+export type MembershipRecord = {
+  id: string;
+  customerId: string;
+  customer: string;
+  phone: string;
+  packageId: string;
+  package: string;
+  startDate: string;
+  expiryDate: string;
+  status: 'active' | 'expired' | 'pending';
+  lastCheckIn?: string;
+};
+
+export type CourtBooking = {
+  id: string;
+  customer: string;
+  court: string;
+  date: string;
+  time: string;
+  session: number;
+  price: number;
+  paymentStatus: 'paid' | 'pending';
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+};
+
+export type Appointment = {
+  id: string;
+  patient: string;
+  doctor: string;
+  date: string;
+  time: string;
+  type: string;
+  status: 'pending' | 'confirmed' | 'checked_in' | 'completed' | 'cancelled';
+  notes?: string;
+  paymentStatus: 'paid' | 'pending';
+};
+
+export type Schedule = {
+  id: string;
+  person: string;
+  role: 'coach' | 'doctor';
+  day: string;
+  start: string;
+  end: string;
+  service?: string;
+  active: boolean;
+};
+
+export type InventoryTransaction = {
+  id: string;
+  productId: string;
+  type: 'add' | 'remove' | 'adjust';
+  quantity: number;
+  note: string;
+  date: string;
+};
+
+export type StoreProduct = Product & {
+  sku: string;
+  barcode: string;
+  stock: number;
+  cost: number;
+  tax: number;
+  status: 'active' | 'inactive';
+};
+
+export type StoreOrder = {
+  id: string;
+  customer: string;
+  total: number;
+  paid: number;
+  dueDate?: string;
+  status: 'pending' | 'partially_paid' | 'paid' | 'overdue';
+  items: { productId: string; quantity: number }[];
+};
+
+export type CafeOrder = {
+  id: string;
+  customer: string;
+  items: { name: string; quantity: number; price: number }[];
+  floor: string;
+  orderTime: string;
+  paymentMethod: 'Cash' | 'KPay';
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+};
+
+export type ContentItem = {
+  id: string;
+  title: string;
+  image: string;
+  description: string;
+  googleFormLink: string;
+  status: 'draft' | 'published';
+  publishDate: string;
+};
+
+export type Student = {
+  id: string;
+  name: string;
+  phone: string;
+  className: string;
+  coach: string;
+  package: string;
+  paymentStatus: 'paid' | 'pending';
+  attendance: number;
+  expiryDate: string;
+  status: 'active' | 'inactive';
+};
+
+export type PatientRecord = {
+  id: string;
+  patient: string;
+  injury: string;
+  bodyPart: string;
+  description: string;
+  treatment: string;
+  doctor: string;
+  date: string;
+  status: 'active' | 'resolved';
+};
+
+export type PerformanceRecord = {
+  id: string;
+  customer: string;
+  metric: string;
+  value: string;
+  date: string;
+  coach: string;
 };

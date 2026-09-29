@@ -1,11 +1,13 @@
 export { Home } from './Home';
 export { Dashboard } from './Dashboard';
-export { Book } from './Book';
+export { CourtBooking } from './CourtBooking';
 export { Bookings } from './Bookings';
+export { Book } from "./Book"
+export {CoachBooking} from './CoachBooking'
 export { Membership } from './Membership';
 export { Performance } from './Performance';
 export { Training } from './Training';
-export { Recovery } from './Recovery';
+export { Revive } from './Revive';
 export { Classes } from './Classes';
 export { Notifications } from './Notifications';
 export { Profile } from './Profile';
@@ -19,3 +21,5 @@ export { Generic } from './Generic';
 
 export { ReviveClinicFO } from './ReviveClinicFO';
 export { GymCheckIn } from './GymCheckIn';
+
+export { CafeCustomer } from './CafeCustomer';

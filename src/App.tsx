@@ -1,290 +1,102 @@
-import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import type { ReactNode } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 // @ts-expect-error ScrollToTop is a JSX module without a TypeScript declaration.
-import ScrollToTop from "./components/ScrollToTop";
-import { useAuth } from "./context/AuthContext";
-import { AppLayout } from "./layouts/Layouts";
-import FrontOfficeLayout from "./components/FrontOfficeLayout";
+import ScrollToTop from './components/ScrollToTop';
+import RoleLayout from './components/RoleLayout';
+import { AppLayout } from './layouts/Layouts';
+import { useAuth } from './context/AuthContext';
+import { Generic, Home, Login, Signup, CafeCustomer, Dashboard, Book, CourtBooking, CoachBooking, Bookings, Membership, Performance, Training, Revive, Classes, Community, Store, Notifications, Profile, Admin, AdminTable, GymCheckIn, ReviveClinicFO } from './pages';
+import OperationsPage from './pages/Operations';
+import type { UserRole } from './types';
+import { classes, courts } from './data';
 
-import {
-  Admin,
-  AdminTable,
-  Book,
-  Bookings,
-  Classes,
-  Community,
-  Dashboard,
-  Generic,
-  GymCheckIn,
-  Home,
-  Login,
-  Membership,
-  Notifications,
-  Performance,
-  Profile,
-  Recovery,
-  ReviveClinicFO,
-  Signup,
-  Store,
-  Training,
-} from "./pages";
-
-import { classes, courts } from "./data/index";
-
-type UserRole =
-  | "member"
-  | "coach"
-  | "admin"
-  | "gym_fo"
-  | "clinic_fo";
-
-type GuardProps = {
-  role: UserRole;
-  children: ReactNode;
+const homeByRole: Record<UserRole,string> = {
+ member:'/dashboard', coach:'/coach', admin:'/admin', gym_fo:'/gym-fo', clinic_fo:'/clinic-fo',
+ badminton_fo:'/badminton-fo', store_fo:'/store-fo', cafe_fo:'/cafe', doctor:'/doctor',
 };
 
-const members = [
-  "Sai Zay",
-  "John Smith",
-  "David Lee",
-  "Aung Min",
-  "May Thu",
-  "Kyaw Zin",
-  "Su Hlaing",
-];
-
-const coachSchedule = [
-  "4:00 PM — John",
-  "5:00 PM — David",
-  "6:00 PM — Aung",
-  "7:00 PM — May",
-];
-
-const coaches = [
-  "Coach Sai",
-  "Coach Aung",
-  "Coach Min",
-  "Coach Thiri",
-];
-
-const paymentReferences = [
-  "ZW-PAY-00123",
-  "ZW-PAY-00124",
-  "ZW-PAY-00125",
-  "ZW-PAY-00126",
-];
-
-const adminBookings = [
-  "Court 03 — 6:30 PM",
-  "Court 01 — 7:00 PM",
-  "S&C — 6:00 PM",
-  "Recovery — 4:00 PM",
-];
-
-const homeByRole: Record<UserRole, string> = {
-  member: "/dashboard",
-  coach: "/coach",
-  admin: "/admin",
-  gym_fo: "/front-office/gym",
-  clinic_fo: "/front-office/revive-clinic",
-};
-
-function Guard({ role, children }: GuardProps) {
-  const { user } = useAuth();
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Keep this local role type ahead of the AuthContext update. The
-  // AuthContext must expose the same role strings for these staff accounts.
-  const currentRole = user.role as UserRole;
-
-  if (currentRole !== role) {
-    return <Navigate to={homeByRole[currentRole] ?? "/dashboard"} replace />;
-  }
-
-  if (role === "gym_fo") {
-    return <FrontOfficeLayout kind="gym">{children}</FrontOfficeLayout>;
-  }
-
-  if (role === "clinic_fo") {
-    return <FrontOfficeLayout kind="clinic">{children}</FrontOfficeLayout>;
-  }
-
-  return <AppLayout role={role}>{children}</AppLayout>;
+function Guard({role,children}:{role:UserRole;children:ReactNode}){
+ const {user}=useAuth();
+ if(!user) return <Navigate to="/login" replace/>;
+ if(user.role!==role) return <Navigate to={homeByRole[user.role]||'/dashboard'} replace/>;
+ if(role==='member') return <AppLayout role="member">{children}</AppLayout>;
+ return <RoleLayout role={role as Exclude<UserRole,'member'>}>{children}</RoleLayout>;
 }
+const operational=(role:UserRole,path:string)=> <Route path={path} element={<Guard role={role}><OperationsPage role={role}/></Guard>}/>;
 
-export default function App() {
-  return (
-    <>
-      <ScrollToTop />
-      <Routes>
-        <Route path="/" element={<Home />} />
+export default function App(){
+ return <><ScrollToTop/><Routes>
+  <Route path="/" element={<Home/>}/>
+  <Route path="/facilities" element={<Generic title="Facilities" body="Badminton courts, performance gym, training studio and recovery services in one arena."/>}/>
+  <Route path="/memberships" element={<Generic title="Memberships" body="Choose an access plan built around how you train."/>}/>
+  <Route path="/coaches" element={<Generic title="Coaches" body="Meet Zawana coaches across badminton, strength, conditioning and recovery."/>}/>
+  <Route path="/contact" element={<Generic title="Contact Zawana" body="Visit the arena or speak with the team about training."/>}/>
+  <Route path="/login" element={<Login/>}/><Route path="/signup" element={<Signup/>}/>
 
-        <Route
-          path="/facilities"
-          element={
-            <Generic
-              title="Facilities"
-              body="Badminton courts, performance gym, training studio and recovery services in one arena."
-            />
-          }
-        />
+  {/* Customer experience — existing screens preserved */}
+  <Route path="/dashboard" element={<Guard role="member"><Dashboard/></Guard>}/>
+    <Route
+    path="/book"
+    element={
+        <Guard role="member">
+        <Book />
+        </Guard>
+    }
+    />
 
-        <Route
-          path="/memberships"
-          element={
-            <Generic
-              title="Memberships"
-              body="Choose an access plan built around how you train. Compare Open Gym, Athlete and Premium memberships."
-            />
-          }
-        />
+    <Route
+    path="/book/court"
+    element={
+        <Guard role="member">
+        <CourtBooking />
+        </Guard>
+    }
+    />
 
-        <Route
-          path="/coaches"
-          element={
-            <Generic
-              title="Coaches"
-              body="Meet Zawana coaches across badminton, strength, conditioning and recovery."
-            />
-          }
-        />
+    <Route
+    path="/book/coach"
+    element={
+        <Guard role="member">
+        <CoachBooking />
+        </Guard>
+    }
+    />
 
-        <Route
-          path="/contact"
-          element={
-            <Generic
-              title="Contact Zawana"
-              body="Visit the arena, ask about memberships, or speak with the team about training."
-            />
-          }
-        />
+    <Route
+    path="/bookings"
+    element={
+        <Guard role="member">
+        <Bookings />
+        </Guard>
+    }
+    />
+  <Route path="/membership" element={<Guard role="member"><Membership/></Guard>}/><Route path="/performance" element={<Guard role="member"><Performance/></Guard>}/>
+  <Route path="/training" element={<Guard role="member"><Training/></Guard>}/><Route path="/revive" element={<Guard role="member"><Revive/></Guard>}/>
+  <Route path="/classes" element={<Guard role="member"><Classes/></Guard>}/><Route path="/community" element={<Guard role="member"><Community/></Guard>}/>
+  <Route path="/store" element={<Guard role="member"><Store/></Guard>}/><Route path="/cafe-order" element={<Guard role="member"><CafeCustomer/></Guard>}/><Route path="/notifications" element={<Guard role="member"><Notifications/></Guard>}/>
+  <Route path="/profile" element={<Guard role="member"><Profile/></Guard>}/><Route path="/settings" element={<Guard role="member"><Generic title="Settings" body="Manage preferences, notifications, security and demo-mode controls."/></Guard>}/>
 
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+  {/* Admin */}
+  {['/admin','/admin/notifications','/admin/badminton-packages','/admin/gym-packages','/admin/coaches','/admin/courts','/admin/students','/admin/finance','/admin/cms'].map(path=>operational('admin',path))}
+  <Route path="/admin/members" element={<Guard role="admin"><AdminTable title="Members" items={['Sai Zay','Htet Aung','Su Myat Thiri']}/></Guard>}/>
+  <Route path="/admin/bookings" element={<Guard role="admin"><AdminTable title="Bookings" items={courts.map(c=>c.name)}/></Guard>}/>
+  <Route path="/admin/classes" element={<Guard role="admin"><AdminTable title="Classes" items={classes.map(c=>c.title)}/></Guard>}/>
 
-        {/* MEMBER */}
-        <Route path="/dashboard" element={<Guard role="member"><Dashboard /></Guard>} />
-        <Route path="/book" element={<Guard role="member"><Book /></Guard>} />
-        <Route path="/bookings" element={<Guard role="member"><Bookings /></Guard>} />
-        <Route path="/membership" element={<Guard role="member"><Membership /></Guard>} />
-        <Route path="/performance" element={<Guard role="member"><Performance /></Guard>} />
-        <Route path="/training" element={<Guard role="member"><Training /></Guard>} />
-        <Route path="/recovery" element={<Guard role="member"><Recovery /></Guard>} />
-        <Route path="/classes" element={<Guard role="member"><Classes /></Guard>} />
-        <Route path="/community" element={<Guard role="member"><Community /></Guard>} />
-        <Route path="/store" element={<Guard role="member"><Store /></Guard>} />
-        <Route path="/notifications" element={<Guard role="member"><Notifications /></Guard>} />
-        <Route path="/profile" element={<Guard role="member"><Profile /></Guard>} />
-        <Route
-          path="/settings"
-          element={
-            <Guard role="member">
-              <Generic
-                title="Settings"
-                body="Manage preferences, notifications, security and demo-mode controls."
-              />
-            </Guard>
-          }
-        />
+  {/* Department workspaces */}
+  {['/badminton-fo','/badminton-fo/notifications','/badminton-fo/students','/badminton-fo/bookings','/badminton-fo/packages','/badminton-fo/pos','/badminton-fo/transactions'].map(path=>operational('badminton_fo',path))}
+  {['/gym-fo','/gym-fo/notifications','/gym-fo/check-in','/gym-fo/members','/gym-fo/memberships','/gym-fo/appointments','/gym-fo/coaches','/gym-fo/payments'].map(path=>operational('gym_fo',path))}
+  {['/clinic-fo','/clinic-fo/notifications','/clinic-fo/patients','/clinic-fo/appointments','/clinic-fo/doctors','/clinic-fo/schedule','/clinic-fo/records','/clinic-fo/payments'].map(path=>operational('clinic_fo',path))}
+  {['/store-fo','/store-fo/notifications','/store-fo/products','/store-fo/inventory','/store-fo/pos','/store-fo/orders','/store-fo/transactions'].map(path=>operational('store_fo',path))}
+  {['/cafe','/cafe/notifications','/cafe/orders','/cafe/menu','/cafe/pos','/cafe/transactions'].map(path=>operational('cafe_fo',path))}
 
-        {/* COACH */}
-        <Route
-          path="/coach"
-          element={
-            <Guard role="coach">
-              <Generic
-                title="Coach Overview"
-                body="Today: 4 sessions · 12 clients · 3 assessments. Use the sidebar to manage your coaching schedule and athletes."
-              />
-            </Guard>
-          }
-        />
-        <Route
-          path="/coach/schedule"
-          element={<Guard role="coach"><AdminTable title="Coach Schedule" items={coachSchedule} /></Guard>}
-        />
-        <Route
-          path="/coach/clients"
-          element={<Guard role="coach"><AdminTable title="Clients" items={members} /></Guard>}
-        />
-        <Route
-          path="/coach/programs"
-          element={
-            <Guard role="coach">
-              <Generic
-                title="Training Programs"
-                body="Create and assign weekly programs, workouts and exercise targets to clients."
-              />
-            </Guard>
-          }
-        />
-        <Route
-          path="/coach/assessments"
-          element={
-            <Guard role="coach">
-              <Generic
-                title="Assessments"
-                body="Record athlete performance tests, measurements and progress notes."
-              />
-            </Guard>
-          }
-        />
+  {/* Professional portals */}
+  {['/coach','/coach/notifications','/coach/schedule','/coach/bookings','/coach/clients','/coach/availability'].map(path=>operational('coach',path))}
+  {['/doctor','/doctor/notifications','/doctor/schedule','/doctor/appointments','/doctor/patients','/doctor/profile'].map(path=>operational('doctor',path))}
 
-        {/* ADMIN — no operational front-office access */}
-        <Route path="/admin" element={<Guard role="admin"><Admin /></Guard>} />
-        <Route path="/admin/members" element={<Guard role="admin"><AdminTable title="Members" items={members} /></Guard>} />
-        <Route
-          path="/admin/memberships"
-          element={
-            <Guard role="admin">
-              <AdminTable title="Memberships" items={["Open Gym", "Athlete", "Premium", "Frozen"]} />
-            </Guard>
-          }
-        />
-        <Route path="/admin/bookings" element={<Guard role="admin"><AdminTable title="Bookings" items={adminBookings} /></Guard>} />
-        <Route path="/admin/courts" element={<Guard role="admin"><AdminTable title="Courts" items={courts.map((court) => court.name)} /></Guard>} />
-        <Route path="/admin/classes" element={<Guard role="admin"><AdminTable title="Classes" items={classes.map((item) => item.title)} /></Guard>} />
-        <Route path="/admin/coaches" element={<Guard role="admin"><AdminTable title="Coaches" items={coaches} /></Guard>} />
-        <Route path="/admin/payments" element={<Guard role="admin"><AdminTable title="Payments" items={paymentReferences} /></Guard>} />
-        <Route path="/admin/analytics" element={<Guard role="admin"><Admin /></Guard>} />
-        <Route
-          path="/admin/settings"
-          element={
-            <Guard role="admin">
-              <Generic
-                title="Admin Settings"
-                body="Manage arena configuration, access controls, notifications and system preferences."
-              />
-            </Guard>
-          }
-        />
+  {/* Existing specialized screens remain available during migration */}
+  <Route path="/legacy/front-office/gym" element={<Guard role="gym_fo"><GymCheckIn/></Guard>}/>
+  <Route path="/legacy/front-office/revive-clinic" element={<Guard role="clinic_fo"><ReviveClinicFO/></Guard>}/>
 
-        {/* GYM FRONT OFFICE */}
-        <Route
-          path="/front-office/gym"
-          element={<Guard role="gym_fo"><GymCheckIn /></Guard>}
-        />
-
-        {/* REVIVE CLINIC FRONT OFFICE */}
-        <Route
-          path="/front-office/revive-clinic"
-          element={<Guard role="clinic_fo"><ReviveClinicFO /></Guard>}
-        />
-
-        <Route
-          path="/front-office/revive-clinic/notifications"
-          element={
-            <FrontOfficeLayout kind="clinic">
-              <Notifications />
-            </FrontOfficeLayout>
-          }
-        />
-
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </>
-  );
+  <Route path="*" element={<Navigate to="/" replace/>}/>
+ </Routes></>;
 }

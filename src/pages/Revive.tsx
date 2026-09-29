@@ -73,7 +73,7 @@ const timeSlots = [
   '6:00 PM',
 ];
 
-export function Recovery() {
+export function Revive() {
   const { addReviveBooking, reviveBookings } = useApp();
 
   const [selectedService, setSelectedService] =
@@ -117,7 +117,7 @@ export function Recovery() {
 
   return (
     <Page
-      title="Recovery Center"
+      title="Revive Clinic"
       eyebrow="Recover deliberately"
     >
       {submitted && (

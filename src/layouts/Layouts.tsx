@@ -5,7 +5,7 @@ import { Bell, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Home, LogOut, 
 import { Logo, Button } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 
-const member = [['/dashboard', 'Overview', Home], ['/book', 'Book', CalendarDays], ['/bookings', 'My Bookings', ClipboardList], ['/membership', 'Membership', Users], ['/performance', 'Performance', Activity], ['/training', 'Training', Dumbbell], ['/recovery', 'Recovery', HeartPulse], ['/community', 'Community', Users], ['/store', 'Store', ShoppingBag]] as const;
+const member = [['/dashboard', 'Overview', Home], ['/book', 'Book', CalendarDays], ['/bookings', 'My Bookings', ClipboardList], ['/membership', 'Membership', Users], ['/performance', 'Performance', Activity], ['/training', 'Training', Dumbbell], ['/revive', 'Revive', HeartPulse], ['/community', 'Community', Users], ['/store', 'Store', ShoppingBag], ['/cafe-order', 'Cafe', ShoppingBag]] as const;
 const coach = [['/coach', 'Overview', Home], ['/coach/schedule', 'Schedule', CalendarDays], ['/coach/clients', 'Clients', Users], ['/coach/programs', 'Programs', Dumbbell], ['/coach/assessments', 'Assessments', Activity]] as const;
 const admin = [['/admin', 'Overview', Home], ['/admin/members', 'Members', Users], ['/admin/bookings', 'Bookings', CalendarDays], ['/admin/courts', 'Courts', Building2], ['/admin/classes', 'Classes', Dumbbell], ['/admin/coaches', 'Coaches', Users], ['/admin/payments', 'Payments', ClipboardList], ['/admin/checkins', 'Check-ins', Activity], ['/admin/analytics', 'Analytics', BarChart3]] as const;
 

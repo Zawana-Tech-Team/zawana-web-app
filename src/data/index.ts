@@ -1,5 +1,15 @@
 import type {ClassItem,Court,Membership,Notification,Product,User,Booking,MetricPoint} from '../types';
-export const users:User[]=[{id:'u1',name:'Sai Zay',email:'member@zawana.test',role:'member',membership:'Athlete'},{id:'u2',name:'Coach Sai',email:'coach@zawana.test',role:'coach'},{id:'u3',name:'Zawana Admin',email:'admin@zawana.test',role:'admin'},{id:'u4',name:'Gym FO',email:'gymfo@zawana.test',role:'gym_fo'},{id:'u5',name:'Revive FO',email:'clinicfo@zawana.test',role:'clinic_fo'},];
+export const users:User[]=[
+{id:'u1',name:'Sai Zay',email:'member@zawana.test',role:'member',membership:'Athlete'},
+{id:'u2',name:'Coach Sai',email:'coach@zawana.test',role:'coach'},
+{id:'u3',name:'Zawana Admin',email:'admin@zawana.test',role:'admin'},
+{id:'u4',name:'Gym FO',email:'gymfo@zawana.test',role:'gym_fo'},
+{id:'u5',name:'Revive FO',email:'clinicfo@zawana.test',role:'clinic_fo'},
+{id:'u6',name:'Badminton FO',email:'badminton@zawana.test',role:'badminton_fo'},
+{id:'u7',name:'Lining Store',email:'store@zawana.test',role:'store_fo'},
+{id:'u8',name:'Zawana Cafe',email:'cafe@zawana.test',role:'cafe_fo'},
+{id:'u9',name:'Dr. Lin',email:'doctor@zawana.test',role:'doctor'},
+];
 export const courts:Court[]=Array.from({length:6},(_,i)=>({id:`c${i+1}`,name:`Court ${String(i+1).padStart(2,'0')}`,type:[1,2,5,6].includes(i+1)?'Premium':'Standard',price:[1,2,5,6].includes(i+1)?18000:15000,status:i===1?'maintenance':'available',features:['Indoor','LED lighting',i===0?'Tournament flooring':'Premium flooring']}));
 export const classes:ClassItem[]=[{id:'cl1',title:'Strength & Conditioning',coach:'Coach Sai',time:'6:00 PM',duration:60,capacity:15,booked:12,level:'Intermediate',location:'Performance Lab',price:20000},{id:'cl2',title:'HIIT',coach:'Coach Aung',time:'7:00 PM',duration:45,capacity:20,booked:10,level:'All levels',location:'Training Studio',price:15000},{id:'cl3',title:'Badminton Group Training',coach:'Coach Min',time:'5:00 PM',duration:60,capacity:12,booked:8,level:'Beginner',location:'Court 04',price:18000}];
 export const memberships:Membership[]=[{id:'open',name:'Open Gym',price:100000,period:'month',features:['Unlimited gym access','Locker access','Basic assessment']},{id:'athlete',name:'Athlete',price:250000,period:'month',features:['Gym access','Performance testing','Training program','Coach consultation']},{id:'premium',name:'Premium',price:350000,period:'month',features:['Everything in Athlete','PT sessions','Recovery access','Priority booking']}];
