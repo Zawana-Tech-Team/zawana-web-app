@@ -394,19 +394,188 @@ export function Home(){
       </section>
 
       <section id="community" className="mx-auto max-w-[1440px] px-5 py-24 md:px-10 md:py-32">
-        {publishedContent.length > 0 && (
-          <div className="mb-16">
-            <p className="eyebrow text-zawana-gold">Community · Latest</p>
-            <div className="mt-6 grid gap-5 md:grid-cols-3">
-              {publishedContent.map(item => (
-                <Card key={item.id} className="overflow-hidden">
-                  <OptimizedImage src={item.image} alt={item.title} className="h-40 w-full object-cover" />
-                  <div className="p-5"><h3 className="text-xl font-black">{item.title}</h3><p className="mt-2 text-sm leading-6 text-zawana-500">{item.description}</p></div>
-                </Card>
-              ))}
+{publishedContent.length > 0 && (
+  <section className="mb-24">
+    {/* Section Header */}
+    <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+      <div>
+        <p className="eyebrow text-zawana-gold">
+          Community · What's happening
+        </p>
+
+        <h2 className="mt-4 max-w-3xl text-4xl font-black tracking-[-.06em] md:text-6xl">
+          Train. Learn.
+          <br />
+          <span className="text-zawana-gold">Be part of it.</span>
+        </h2>
+
+        <p className="mt-5 max-w-2xl text-base leading-7 text-zawana-500 md:text-lg">
+          Discover the latest programs, events, workshops and opportunities
+          happening at Zawana.
+        </p>
+      </div>
+
+      <Link
+        to="/community"
+        className="group inline-flex items-center text-sm font-extrabold uppercase tracking-[.16em] text-zawana-950"
+      >
+        View all
+        <ArrowRight
+          className="ml-2 transition-transform duration-300 group-hover:translate-x-1"
+          size={16}
+        />
+      </Link>
+    </div>
+
+    {/* Featured CMS Grid */}
+    <div className="mt-12 grid gap-5 lg:grid-cols-[1.45fr_.55fr]">
+      {/* FEATURED ITEM */}
+      {publishedContent[0] && (
+        <Card className="group relative min-h-[520px] overflow-hidden rounded-[32px] border-0 bg-zawana-950 p-0">
+          <OptimizedImage
+            src={publishedContent[0].image}
+            alt={publishedContent[0].title}
+            loading="eager"
+            className="
+              absolute inset-0
+              h-full w-full
+              object-cover
+              transition-transform duration-700
+              group-hover:scale-[1.04]
+            "
+            />
+
+            {/* Image Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-zawana-950 via-zawana-950/55 to-transparent" />
+
+            {/* Top Badge */}
+            <div className="absolute left-6 top-6 md:left-8 md:top-8">
+              <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.16em] text-white backdrop-blur-md">
+                Featured
+              </span>
             </div>
-          </div>
+
+            {/* Content */}
+            <div className="relative flex h-full flex-col justify-end p-6 text-white md:p-8 lg:p-10">
+              <div className="max-w-2xl">
+                <p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-zawana-gold">
+                  Zawana Community
+                </p>
+
+                <h3 className="mt-3 text-3xl font-black leading-[1.05] tracking-[-.05em] md:text-5xl">
+                  {publishedContent[0].title}
+                </h3>
+
+                <p className="mt-4 max-w-xl text-sm leading-6 text-white/65 md:text-base">
+                  {publishedContent[0].description}
+                </p>
+
+                <div className="mt-7 flex flex-wrap gap-3">
+                  {publishedContent[0].googleFormLink && (
+                    <a
+                      href={publishedContent[0].googleFormLink}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Button>
+                        Register Now
+                        <ArrowRight className="ml-2" size={16} />
+                      </Button>
+                    </a>
+                  )}
+
+                  <Link to="/community">
+                    <Button
+                      variant="secondary"
+                      className="border-white/20 bg-white/10 text-white hover:bg-white hover:text-zawana-950"
+                    >
+                      Learn More
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </Card>
         )}
+
+        {/* SECONDARY ITEMS */}
+        <div className="grid gap-5">
+          {publishedContent.slice(1, 3).map((item) => (
+            <Card
+              key={item.id}
+              className="
+                group
+                relative
+                overflow-hidden
+                rounded-[32px]
+                border-0
+                bg-zawana-950
+                p-0
+                min-h-[250px]
+              "
+            >
+              <OptimizedImage
+                src={item.image}
+                alt={item.title}
+                loading="lazy"
+                className="
+                  absolute inset-0
+                  h-full w-full
+                  object-cover
+                  transition-transform duration-500
+                  group-hover:scale-[1.04]
+                "
+              />
+
+              <div className="absolute inset-0 bg-gradient-to-t from-zawana-950 via-zawana-950/65 to-transparent" />
+
+              <div className="relative flex h-full flex-col justify-end p-6 text-white md:p-7">
+                <p className="text-[9px] font-extrabold uppercase tracking-[.2em] text-zawana-gold">
+                  Zawana Community
+                </p>
+
+                <h3 className="mt-2 text-xl font-black leading-tight tracking-[-.03em] md:text-2xl">
+                  {item.title}
+                </h3>
+
+                <p className="mt-2 line-clamp-2 text-sm leading-5 text-white/60">
+                  {item.description}
+                </p>
+
+                {item.googleFormLink && (
+                  <a
+                    href={item.googleFormLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="
+                      group/link
+                      mt-5
+                      inline-flex
+                      w-fit
+                      items-center
+                      text-[10px]
+                      font-extrabold
+                      uppercase
+                      tracking-[.16em]
+                      text-white
+                    "
+                  >
+                    Register Now
+                    <ArrowRight
+                      size={14}
+                      className="ml-2 transition-transform duration-300 group-hover/link:translate-x-1"
+                    />
+                  </a>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+
+
         <div className="grid gap-12 lg:grid-cols-[.85fr_1.15fr] lg:items-center">
           <div>
             <p className="eyebrow text-zawana-gold">04 · Brand belief</p>
