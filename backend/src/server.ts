@@ -79,6 +79,22 @@ async function ensureBadmintonBookingTables() {
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
   await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "HolidayRate_date_key" ON "HolidayRate"("date")`);
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "BadmintonEnrollment" (
+    "id" TEXT NOT NULL PRIMARY KEY, "studentId" TEXT NOT NULL, "studentName" TEXT NOT NULL,
+    "phone" TEXT NOT NULL, "packageId" TEXT NOT NULL, "packageName" TEXT NOT NULL,
+    "sessionsTotal" INTEGER NOT NULL, "sessionsRemaining" INTEGER NOT NULL,
+    "startDate" TEXT NOT NULL, "expiryDate" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT 'active',
+    "renewalCount" INTEGER NOT NULL DEFAULT 0, "lastCheckIn" TEXT, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "BadmintonEnrollment_studentId_idx" ON "BadmintonEnrollment"("studentId")`);
+  try { await prisma.$executeRawUnsafe(`ALTER TABLE "BadmintonEnrollment" ADD COLUMN "lastCheckIn" TEXT`); } catch {}
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "BadmintonCheckIn" (
+    "id" TEXT NOT NULL PRIMARY KEY, "enrollmentId" TEXT NOT NULL, "date" TEXT NOT NULL,
+    "time" TEXT NOT NULL, "sessionsUsed" INTEGER NOT NULL DEFAULT 1, "staffId" TEXT, "note" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "BadmintonCheckIn_enrollmentId_fkey" FOREIGN KEY ("enrollmentId") REFERENCES "BadmintonEnrollment" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "BadmintonCheckIn_enrollmentId_date_idx" ON "BadmintonCheckIn"("enrollmentId","date")`);
 }
 
 async function courtBlocks(date?: string, courtId?: string) {
@@ -283,6 +299,57 @@ app.delete("/api/packages/gym/:id",auth,roles("admin","gym_fo"),asyncRoute(async
 app.get("/api/memberships",auth,asyncRoute(async(_req,res)=>res.json(await prisma.membership.findMany({orderBy:{expiryDate:"asc"}}))));
 app.post("/api/memberships",auth,roles("admin","gym_fo"),asyncRoute(async(req,res)=>res.status(201).json(await prisma.membership.create({data:req.body}))));
 
+// Badminton package ownership + check-in
+function addDaysIso(start:string, days:number){ const d=new Date(`${start}T00:00:00`); d.setDate(d.getDate()+Math.max(0,days-1)); return d.toISOString().slice(0,10); }
+async function refreshEnrollmentStatus(enrollment:any){
+  if(enrollment.status !== "expired" && enrollment.expiryDate < today()) {
+    await prisma.$executeRawUnsafe(`UPDATE "BadmintonEnrollment" SET status='expired' WHERE id=?`, enrollment.id);
+    enrollment.status='expired';
+  }
+  return enrollment;
+}
+app.get("/api/badminton/enrollments",auth,roles("admin","badminton_fo"),asyncRoute(async(_req,res)=>{
+  const rows=await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "BadmintonEnrollment" ORDER BY status ASC, expiryDate ASC, studentName ASC`);
+  for(const row of rows) await refreshEnrollmentStatus(row);
+  res.json(rows);
+}));
+app.post("/api/badminton/enrollments",auth,roles("admin","badminton_fo"),asyncRoute(async(req,res)=>{
+  const b=z.object({studentId:z.string().min(1),studentName:z.string().min(1),phone:z.string().default(""),packageId:z.string().min(1),startDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/,"startDate must be YYYY-MM-DD"),paymentMethod:z.string().min(1).default("Cash")}).parse(req.body);
+  const pkg=await prisma.badmintonPackage.findUnique({where:{id:b.packageId}});
+  if(!pkg || pkg.status!=="active") return res.status(400).json({message:"Active badminton package not found"});
+  const id=code("BM"); const expiry=addDaysIso(b.startDate,pkg.validity);
+  const row=(await prisma.$queryRawUnsafe<any[]>(`INSERT INTO "BadmintonEnrollment" (id,studentId,studentName,phone,packageId,packageName,sessionsTotal,sessionsRemaining,startDate,expiryDate,status,renewalCount) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *`,id,b.studentId,b.studentName,b.phone,pkg.id,pkg.title,pkg.sessions,pkg.sessions,b.startDate,expiry,"active",0))[0];
+  await prisma.transaction.create({data:{date:b.startDate,customer:b.studentName,business:"Badminton",item:`Package · ${pkg.title}`,amount:pkg.price,discount:0,tax:0,finalAmount:pkg.price,paymentMethod:b.paymentMethod,staff:(req as AuthRequest).user?.name||"Badminton FO",status:"paid"}});
+  res.status(201).json(row);
+}));
+app.post("/api/badminton/enrollments/:id/renew",auth,roles("admin","badminton_fo"),asyncRoute(async(req,res)=>{
+  const b=z.object({packageId:z.string().min(1),startDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/,"startDate must be YYYY-MM-DD").default(today()),paymentMethod:z.string().min(1).default("Cash")}).parse(req.body);
+  const current=(await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "BadmintonEnrollment" WHERE id=?`,req.params.id))[0];
+  if(!current) return res.status(404).json({message:"Package enrollment not found"});
+  const pkg=await prisma.badmintonPackage.findUnique({where:{id:b.packageId}});
+  if(!pkg || pkg.status!=="active") return res.status(400).json({message:"Active badminton package not found"});
+  const expiry=addDaysIso(b.startDate,pkg.validity);
+  const row=(await prisma.$queryRawUnsafe<any[]>(`UPDATE "BadmintonEnrollment" SET packageId=?,packageName=?,sessionsTotal=?,sessionsRemaining=?,startDate=?,expiryDate=?,status='active',renewalCount=renewalCount+1 WHERE id=? RETURNING *`,pkg.id,pkg.title,pkg.sessions,pkg.sessions,b.startDate,expiry,req.params.id))[0];
+  await prisma.transaction.create({data:{date:b.startDate,customer:current.studentName,business:"Badminton",item:`Package renewal · ${pkg.title}`,amount:pkg.price,discount:0,tax:0,finalAmount:pkg.price,paymentMethod:b.paymentMethod,staff:(req as AuthRequest).user?.name||"Badminton FO",status:"paid"}});
+  res.json(row);
+}));
+app.get("/api/badminton/enrollments/:id/check-ins",auth,roles("admin","badminton_fo"),asyncRoute(async(req,res)=>res.json(await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "BadmintonCheckIn" WHERE enrollmentId=? ORDER BY date DESC,time DESC`,req.params.id))));
+app.post("/api/badminton/check-ins",auth,roles("admin","badminton_fo"),asyncRoute(async(req,res)=>{
+  const b=z.object({enrollmentId:z.string().min(1),note:z.string().optional()}).parse(req.body);
+  const current=(await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "BadmintonEnrollment" WHERE id=?`,b.enrollmentId))[0];
+  if(!current) return res.status(404).json({message:"Student package not found"});
+  if(current.status !== "expired" && current.expiryDate < today()) { await prisma.$executeRawUnsafe(`UPDATE "BadmintonEnrollment" SET status='expired' WHERE id=?`,b.enrollmentId); current.status='expired'; }
+  if(current.status !== "active") return res.status(409).json({code:"PACKAGE_EXPIRED",message:"This student's package has expired. Renew the package before check-in."});
+  if(Number(current.sessionsRemaining)<=0) return res.status(409).json({code:"NO_SESSIONS",message:"This student has no sessions remaining. Renew the package before check-in."});
+  const now=new Date(); const time=now.toTimeString().slice(0,5); const id=code("CHK");
+  const result=await prisma.$transaction(async(tx)=>{
+    const updated=(await tx.$queryRawUnsafe<any[]>(`UPDATE "BadmintonEnrollment" SET sessionsRemaining=sessionsRemaining-1,lastCheckIn=? WHERE id=? AND status='active' AND sessionsRemaining>0 RETURNING *`,`${today()} ${time}`,b.enrollmentId))[0];
+    if(!updated) throw Object.assign(new Error("Package is no longer available"),{statusCode:409});
+    const check=(await tx.$queryRawUnsafe<any[]>(`INSERT INTO "BadmintonCheckIn" (id,enrollmentId,date,time,sessionsUsed,staffId,note) VALUES (?,?,?,?,?,?,?) RETURNING *`,id,b.enrollmentId,today(),time,1,(req as AuthRequest).user?.id||null,b.note||null))[0];
+    return {enrollment:updated,checkIn:check,warning:Number(updated.sessionsRemaining)<=2};
+  });
+  res.status(201).json(result);
+}));
 // Appointments
 app.get("/api/appointments",auth,asyncRoute(async(_req,res)=>res.json(await prisma.appointment.findMany({orderBy:[{date:"asc"},{time:"asc"}]}))));
 app.post("/api/appointments",auth,roles("admin","clinic_fo","doctor"),asyncRoute(async(req,res)=>res.status(201).json(await prisma.appointment.create({data:req.body}))));
@@ -352,9 +419,10 @@ app.get("/api/analytics/overview",auth,roles("admin"),asyncRoute(async(_req,res)
 app.use((_req,res)=>res.status(404).json({message:"Route not found"}));
 app.use((err:any,_req:Request,res:Response,_next:NextFunction)=>{
   console.error(err);
-  if(err?.name==="ZodError") return res.status(400).json({message:"Validation error",issues:err.issues});
+  if(err?.name==="ZodError") return res.status(400).json({message:err.issues?.map((i:any)=>`${i.path?.join(".")||"request"}: ${i.message}`).join("; ")||"Validation error",issues:err.issues});
   if(err?.code==="P2002") return res.status(409).json({message:"A record with that unique value already exists"});
   if(err?.code==="P2025") return res.status(404).json({message:"Record not found"});
+  if(err?.statusCode) return res.status(err.statusCode).json({message:err.message||"Request conflict"});
   res.status(500).json({message:"Internal server error"});
 });
 

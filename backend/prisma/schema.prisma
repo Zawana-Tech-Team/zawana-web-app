@@ -323,6 +323,42 @@ model BadmintonPackage {
   status      String @default("active")
 }
 
+
+model BadmintonEnrollment {
+  id                String   @id @default(cuid())
+  studentId         String
+  studentName       String
+  phone             String
+  packageId         String
+  packageName       String
+  sessionsTotal     Int
+  sessionsRemaining Int
+  startDate         String
+  expiryDate        String
+  status            String   @default("active")
+  renewalCount      Int      @default(0)
+  lastCheckIn       String?
+  createdAt         DateTime @default(now())
+  checkIns          BadmintonCheckIn[]
+
+  @@index([studentId])
+  @@index([expiryDate, status])
+}
+
+model BadmintonCheckIn {
+  id           String              @id @default(cuid())
+  enrollmentId String
+  enrollment   BadmintonEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  date         String
+  time         String
+  sessionsUsed Int                 @default(1)
+  staffId      String?
+  note         String?
+  createdAt    DateTime            @default(now())
+
+  @@index([enrollmentId, date])
+}
+
 model GymPackage {
   id          String @id @default(cuid())
   title       String

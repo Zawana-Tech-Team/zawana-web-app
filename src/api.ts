@@ -19,7 +19,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(`${API_BASE_URL}${path}`, {...options,headers});
   const data = await response.json().catch(()=>null);
-  if (!response.ok) throw new Error(data?.message || `Request failed (${response.status})`);
+  if (!response.ok) { const error = new Error(data?.message || `Request failed (${response.status})`) as Error & { status?: number; details?: unknown }; error.status=response.status; error.details=data?.issues; throw error; }
   return data as T;
 }
 
