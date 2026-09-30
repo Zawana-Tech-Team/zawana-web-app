@@ -20,7 +20,7 @@ const configs:Record<Exclude<UserRole,'member'>,{label:string;eyebrow:string;ite
   {to:'/clinic-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/clinic-fo/patients',label:'Patients',icon:Users},{to:'/clinic-fo/appointments',label:'Appointments',icon:CalendarDays},{to:'/clinic-fo/doctors',label:'Doctors',icon:Stethoscope},{to:'/clinic-fo/schedule',label:'Doctor Schedule',icon:CalendarDays},{to:'/clinic-fo/records',label:'Records',icon:HeartPulse},{to:'/clinic-fo/payments',label:'Payments',icon:CreditCard}
  ]},
  store_fo:{label:'Lining Store',eyebrow:'Retail Operations',items:[
-  {to:'/store-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/store-fo/products',label:'Products',icon:Package},{to:'/store-fo/inventory',label:'Inventory',icon:Boxes},{to:'/store-fo/pos',label:'POS / Barcode',icon:ShoppingBag},{to:'/store-fo/orders',label:'Orders & Pay Later',icon:ClipboardList},{to:'/store-fo/transactions',label:'Transactions',icon:CreditCard}
+  {to:'/store-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/store-fo/products',label:'Products',icon:Package},{to:'/store-fo/categories',label:'Categories',icon:Boxes},{to:'/store-fo/inventory',label:'Inventory',icon:Boxes},{to:'/store-fo/pos',label:'POS / Barcode',icon:ShoppingBag},{to:'/store-fo/orders',label:'Orders & Pay Later',icon:ClipboardList},{to:'/store-fo/transactions',label:'Transactions',icon:CreditCard}
  ]},
  cafe_fo:{label:'Zawana Cafe',eyebrow:'Cafe Operations',items:[
   {to:'/cafe',label:'Dashboard',icon:LayoutDashboard},{to:'/cafe/orders',label:'Orders',icon:ClipboardList},{to:'/cafe/menu',label:'Menu',icon:UtensilsCrossed},{to:'/cafe/pos',label:'POS',icon:ShoppingBag},{to:'/cafe/transactions',label:'Transactions',icon:CreditCard}

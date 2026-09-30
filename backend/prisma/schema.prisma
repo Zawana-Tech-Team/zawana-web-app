@@ -69,6 +69,24 @@ enum ProductStatus {
   inactive
 }
 
+model ProductCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model CafeMenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  description String   @default("")
+  price       Int
+  available   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
 enum TransactionBusiness {
   Gym
   Badminton
@@ -219,6 +237,8 @@ model Product {
   name                  String
   price                 Int
   category              String
+  categoryId            String?
+  categoryRef           ProductCategory?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   description           String
   sku                   String                  @unique
   barcode               String                  @unique

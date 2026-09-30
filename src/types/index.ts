@@ -146,7 +146,7 @@ export type Transaction = {
   discount: number;
   tax: number;
   finalAmount: number;
-  paymentMethod: 'Cash' | 'KPay' | 'Other';
+  paymentMethod: 'Cash' | 'KPay' | 'Pay Later' | 'Other';
   staff: string;
   status: 'paid' | 'pending' | 'refunded';
 };
@@ -249,6 +249,10 @@ export type InventoryTransaction = {
   date: string;
 };
 
+
+export type ProductCategory = { id: string; name: string; active: boolean };
+export type CafeMenuItem = { id: string; name: string; category: string; description: string; price: number; available: boolean };
+
 export type StoreProduct = Product & {
   sku: string;
   barcode: string;
@@ -266,6 +270,8 @@ export type StoreOrder = {
   dueDate?: string;
   status: 'pending' | 'partially_paid' | 'paid' | 'overdue';
   items: { productId: string; quantity: number }[];
+  paymentMethod?: 'Cash' | 'KPay' | 'Pay Later';
+  itemSummary?: string;
 };
 
 export type CafeOrder = {

@@ -4,8 +4,11 @@ import express, { type NextFunction, type Request, type Response } from "express
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 import { z } from "zod";
 import { PrismaClient, Role, BookingStatus, CourtStatus } from "@prisma/client";
+import storeRoutes from "./routes/store.js";
+import menuRoutes from "./routes/menu.js";
 
 const prisma = new PrismaClient();
 const app = express();
@@ -14,6 +17,11 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 
 app.use(cors({ origin: process.env.CLIENT_URL?.split(",") || ["http://localhost:5173"], credentials: true }));
 app.use(express.json());
+
+// Store/POS and Cafe menu routes. These must be registered on the actual server entrypoint
+// (src/server.ts); src/app.ts is not used by the dev/start scripts.
+app.use("/api/store", storeRoutes);
+app.use("/api/menu", menuRoutes);
 
 type AuthRequest = Request & { user?: { id: string; role: Role; email: string; name: string } };
 
@@ -53,6 +61,38 @@ const normalizeTime24 = (value:string) => {
 // yet been migrated to the new court-block / holiday-rate tables. The Prisma
 // migration remains the canonical deployment path; these IF NOT EXISTS guards
 // make local development upgrades safe.
+async function ensureStorePosTables() {
+  // Legacy Product tables can predate the Store/POS extensions. Inspect the
+  // actual SQLite columns and add only what is missing.
+  const cols = await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info("Product")`);
+  const names = new Set(cols.map(c => String(c.name)));
+  if (!names.has("categoryId")) await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN "categoryId" TEXT`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Product_categoryId_idx" ON "Product"("categoryId")`);
+
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "ProductCategory" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ProductCategory_name_key" ON "ProductCategory"("name")`);
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "CafeMenuItem" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "description" TEXT NOT NULL DEFAULT '',
+    "price" INTEGER NOT NULL,
+    "available" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await prisma.$executeRawUnsafe(`INSERT OR IGNORE INTO "ProductCategory" ("id","name","active") VALUES
+    ('seed-cat-apparel','Apparel',1),('seed-cat-equipment','Equipment',1),('seed-cat-accessories','Accessories',1)`);
+  await prisma.$executeRawUnsafe(`INSERT OR IGNORE INTO "CafeMenuItem" ("id","name","category","description","price","available") VALUES
+    ('seed-menu-americano','Iced Americano','Coffee','Cold brewed espresso over ice.',5000,1),
+    ('seed-menu-wrap','Chicken Wrap','Food','Chicken wrap for a quick post-training meal.',9000,1),
+    ('seed-menu-bowl','Protein Bowl','Healthy','Protein-focused bowl.',12000,1)`);
+}
+
 async function ensureBadmintonBookingTables() {
   await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "CourtBlock" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -359,19 +399,92 @@ app.patch("/api/appointments/:id/status",auth,roles("admin","clinic_fo","doctor"
 }));
 
 // Products / inventory / orders
-app.get("/api/products",asyncRoute(async(_req,res)=>res.json(await prisma.product.findMany({orderBy:{name:"asc"}}))));
-app.post("/api/products",auth,roles("admin","store_fo"),asyncRoute(async(req,res)=>res.status(201).json(await prisma.product.create({data:req.body}))));
-app.patch("/api/products/:id",auth,roles("admin","store_fo"),asyncRoute(async(req,res)=>res.json(await prisma.product.update({where:{id:req.params.id},data:req.body}))));
-app.post("/api/products/:id/stock",auth,roles("admin","store_fo"),asyncRoute(async(req,res)=>{
-  const b=z.object({quantity:z.number().int(),note:z.string().default("")}).parse(req.body);
-  const result=await prisma.$transaction(async(tx)=>{
-    const p=await tx.product.update({where:{id:req.params.id},data:{stock:{increment:b.quantity}}});
-    await tx.inventoryTransaction.create({data:{productId:p.id,type:b.quantity>=0?"add":"remove",quantity:Math.abs(b.quantity),note:b.note,date:today()}});
-    return p;
-  });
-  res.json(result);
+// Use explicit SQL for the legacy Product/Inventory tables. This keeps older
+// SQLite databases compatible while the Store/POS schema is being upgraded.
+const productInput = z.object({
+  name: z.string().min(1),
+  price: z.coerce.number().int().nonnegative(),
+  category: z.string().min(1),
+  categoryId: z.string().nullable().optional(),
+  description: z.string().default(""),
+  sku: z.string().min(1),
+  barcode: z.string().min(1),
+  stock: z.coerce.number().int().nonnegative().default(0),
+  cost: z.coerce.number().int().nonnegative().default(0),
+  tax: z.coerce.number().int().nonnegative().default(0),
+  status: z.enum(["active", "inactive"]).default("active")
+});
+
+async function productRows(where = "", ...params: any[]) {
+  return prisma.$queryRawUnsafe<any[]>(`SELECT p.id,p.name,p.price,p.category,p.description,p.sku,p.barcode,p.stock,p.cost,p.tax,p.status,
+    ${"categoryId"} AS categoryId
+    FROM "Product" p ${where} ORDER BY p.name ASC`, ...params);
+}
+
+app.get("/api/products", asyncRoute(async (_req, res) => {
+  res.json(await productRows());
 }));
-app.get("/api/inventory",auth,roles("admin","store_fo"),asyncRoute(async(_req,res)=>res.json(await prisma.inventoryTransaction.findMany({include:{product:true},orderBy:{date:"desc"}}))));
+
+app.post("/api/products", auth, roles("admin", "store_fo"), asyncRoute(async (req, res) => {
+  const b = productInput.parse(req.body);
+  const id = crypto.randomUUID();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "Product" (id,name,price,category,description,sku,barcode,stock,cost,tax,status,categoryId)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    id,b.name,b.price,b.category,b.description,b.sku,b.barcode,b.stock,b.cost,b.tax,b.status,b.categoryId ?? null
+  );
+  const rows = await productRows(`WHERE p.id = ?`, id);
+  res.status(201).json(rows[0]);
+}));
+
+app.patch("/api/products/:id", auth, roles("admin", "store_fo"), asyncRoute(async (req, res) => {
+  const b = productInput.partial().parse(req.body);
+  const id = String(req.params.id);
+  const fields: string[] = [];
+  const values: any[] = [];
+  const map: Record<string,string> = {name:"name",price:"price",category:"category",categoryId:"categoryId",description:"description",sku:"sku",barcode:"barcode",stock:"stock",cost:"cost",tax:"tax",status:"status"};
+  for (const [key,col] of Object.entries(map)) if (key in b) { fields.push(`"${col}" = ?`); values.push((b as any)[key] ?? null); }
+  if (!fields.length) return res.status(400).json({message:"No fields to update"});
+  values.push(id);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET ${fields.join(", ")} WHERE id = ?`, ...values);
+  const rows = await productRows(`WHERE p.id = ?`, id);
+  if (!rows[0]) return res.status(404).json({message:"Product not found"});
+  res.json(rows[0]);
+}));
+
+app.post("/api/products/:id/stock", auth, roles("admin", "store_fo"), asyncRoute(async (req, res) => {
+  const b = z.object({quantity:z.number().int(),note:z.string().default("")}).parse(req.body);
+  const id = String(req.params.id);
+  await prisma.$transaction(async tx => {
+    const rows = await tx.$queryRawUnsafe<any[]>(`SELECT id FROM "Product" WHERE id = ?`, id);
+    if (!rows[0]) throw Object.assign(new Error("Product not found"), { statusCode: 404 });
+    await tx.$executeRawUnsafe(`UPDATE "Product" SET stock = stock + ? WHERE id = ?`, b.quantity, id);
+    await tx.$executeRawUnsafe(`INSERT INTO "InventoryTransaction" (id,productId,type,quantity,note,date) VALUES (?,?,?,?,?,?)`,
+      crypto.randomUUID(), id, b.quantity >= 0 ? "add" : "remove", Math.abs(b.quantity), b.note, today());
+  });
+  const rows = await productRows(`WHERE p.id = ?`, id);
+  res.json(rows[0]);
+}));
+
+app.get("/api/inventory", auth, roles("admin", "store_fo"), asyncRoute(async (_req, res) => {
+  const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT i.id,i.productId,i.type,i.quantity,i.note,i.date,
+    p.id as product_id,p.name as product_name,p.price as product_price,p.category as product_category,
+    p.description as product_description,p.sku as product_sku,p.barcode as product_barcode,p.stock as product_stock,
+    p.cost as product_cost,p.tax as product_tax,p.status as product_status,
+    p.categoryId as product_categoryId
+    FROM "InventoryTransaction" i JOIN "Product" p ON p.id=i.productId ORDER BY i.date DESC`);
+  res.json(rows.map(r => ({
+    id:r.id, productId:r.productId, type:r.type, quantity:r.quantity, note:r.note, date:r.date,
+    product:{id:r.product_id,name:r.product_name,price:r.product_price,category:r.product_category,description:r.product_description,
+      sku:r.product_sku,barcode:r.product_barcode,stock:r.product_stock,cost:r.product_cost,tax:r.product_tax,status:r.product_status,categoryId:r.product_categoryId}
+  })));
+}));
+
+app.delete("/api/products/:id", auth, roles("admin", "store_fo"), asyncRoute(async (req,res) => {
+  const result = await prisma.$executeRawUnsafe(`DELETE FROM "Product" WHERE id = ?`, String(req.params.id));
+  if (!result) return res.status(404).json({message:"Product not found"});
+  res.status(204).end();
+}));
 
 // Cafe
 app.get("/api/cafe/orders",auth,asyncRoute(async(_req,res)=>res.json(await prisma.cafeOrder.findMany({orderBy:{id:"desc"}}))));
@@ -426,4 +539,4 @@ app.use((err:any,_req:Request,res:Response,_next:NextFunction)=>{
   res.status(500).json({message:"Internal server error"});
 });
 
-ensureBadmintonBookingTables().then(()=>app.listen(PORT,()=>console.log(`Zawana API running on http://localhost:${PORT}`))).catch((error)=>{console.error("Failed to prepare booking tables",error);process.exit(1)});
+ensureBadmintonBookingTables().then(()=>ensureStorePosTables()).then(()=>app.listen(PORT,()=>console.log(`Zawana API running on http://localhost:${PORT}`))).catch((error)=>{console.error("Failed to prepare database tables",error);process.exit(1)});

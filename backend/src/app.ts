@@ -20,6 +20,8 @@ import transactionRoutes from "./routes/transactions.js";
 import contentRoutes from "./routes/content.js";
 import notificationRoutes from "./routes/notifications.js";
 import analyticsRoutes from "./routes/analytics.js";
+import storeRoutes from "./routes/store.js";
+import menuRoutes from "./routes/menu.js";
 
 import {
   notFound,
@@ -49,6 +51,8 @@ app.use("/api/packages", packageRoutes);
 app.use("/api/memberships", membershipRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/store", storeRoutes);
+app.use("/api/menu", menuRoutes);
 app.use("/api/cafe", cafeRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/transactions", transactionRoutes);

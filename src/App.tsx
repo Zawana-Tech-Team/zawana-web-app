@@ -90,7 +90,7 @@ export default function App(){
   {['/badminton-fo','/badminton-fo/notifications','/badminton-fo/students','/badminton-fo/check-in','/badminton-fo/courts','/badminton-fo/bookings','/badminton-fo/packages','/badminton-fo/pos','/badminton-fo/transactions'].map(path=>operational('badminton_fo',path))}
   {['/gym-fo','/gym-fo/notifications','/gym-fo/check-in','/gym-fo/members','/gym-fo/memberships','/gym-fo/appointments','/gym-fo/coaches','/gym-fo/payments'].map(path=>operational('gym_fo',path))}
   {['/clinic-fo','/clinic-fo/notifications','/clinic-fo/patients','/clinic-fo/appointments','/clinic-fo/doctors','/clinic-fo/schedule','/clinic-fo/records','/clinic-fo/payments'].map(path=>operational('clinic_fo',path))}
-  {['/store-fo','/store-fo/notifications','/store-fo/products','/store-fo/inventory','/store-fo/pos','/store-fo/orders','/store-fo/transactions'].map(path=>operational('store_fo',path))}
+  {['/store-fo','/store-fo/notifications','/store-fo/products','/store-fo/categories','/store-fo/inventory','/store-fo/pos','/store-fo/orders','/store-fo/transactions'].map(path=>operational('store_fo',path))}
   {['/cafe','/cafe/notifications','/cafe/orders','/cafe/menu','/cafe/pos','/cafe/transactions'].map(path=>operational('cafe_fo',path))}
 
   {/* Professional portals */}

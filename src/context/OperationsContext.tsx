@@ -1,13 +1,13 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Appointment, BadmintonPackage, CafeOrder, ContentItem, CourtBooking, GymPackage, InventoryTransaction, MembershipRecord, Schedule, StoreOrder, StoreProduct, Student, Transaction, ManagedCourt, CoachProfile } from "../types";
+import type { Appointment, BadmintonPackage, CafeOrder, ContentItem, CourtBooking, GymPackage, InventoryTransaction, MembershipRecord, Schedule, StoreOrder, StoreProduct, Student, Transaction, ManagedCourt, CoachProfile, ProductCategory, CafeMenuItem } from "../types";
 import { get, post, patch, del } from "../api";
 import { useAuth } from "./AuthContext";
 
 type Ops={
  badmintonPackages:BadmintonPackage[]; gymPackages:GymPackage[]; memberships:MembershipRecord[];
  managedCourts:ManagedCourt[]; coaches:CoachProfile[]; courtBookings:CourtBooking[]; appointments:Appointment[]; schedules:Schedule[];
- products:StoreProduct[]; inventory:InventoryTransaction[]; storeOrders:StoreOrder[]; cafeOrders:CafeOrder[]; transactions:Transaction[]; content:ContentItem[]; students:Student[];
+ products:StoreProduct[]; categories:ProductCategory[]; inventory:InventoryTransaction[]; storeOrders:StoreOrder[]; cafeOrders:CafeOrder[]; menu:CafeMenuItem[]; transactions:Transaction[]; content:ContentItem[]; students:Student[];
  addBadmintonPackage:(p:Omit<BadmintonPackage,"id">)=>Promise<void>;
  updateBadmintonPackage:(id:string,p:Partial<BadmintonPackage>)=>Promise<void>;
  deleteBadmintonPackage:(id:string)=>Promise<void>;
@@ -22,6 +22,13 @@ type Ops={
  addProduct:(p:Omit<StoreProduct,"id">)=>Promise<void>;
  updateProduct:(id:string,p:Partial<StoreProduct>)=>Promise<void>;
  deleteProduct:(id:string)=>Promise<void>;
+ addCategory:(c:Omit<ProductCategory,"id">)=>Promise<void>;
+ updateCategory:(id:string,c:Partial<ProductCategory>)=>Promise<void>;
+ deleteCategory:(id:string)=>Promise<void>;
+ addMenuItem:(m:Omit<CafeMenuItem,"id">)=>Promise<void>;
+ updateMenuItem:(id:string,m:Partial<CafeMenuItem>)=>Promise<void>;
+ deleteMenuItem:(id:string)=>Promise<void>;
+ addStoreOrder:(o:Omit<StoreOrder,"id"> & {paymentMethod:"Cash"|"KPay"|"Pay Later"; itemSummary?:string})=>Promise<void>;
  adjustStock:(productId:string,quantity:number,note:string)=>Promise<void>;
  addContent:(c:Omit<ContentItem,"id">)=>Promise<void>;
  updateContent:(id:string,c:Partial<ContentItem>)=>Promise<void>;
@@ -43,7 +50,7 @@ const C=createContext<Ops|null>(null);
 
 export function OperationsProvider({children}:{children:ReactNode}){
  const {user}=useAuth();
- const [state,setState]=useState<any>({badmintonPackages:[],gymPackages:[],memberships:[],managedCourts:[],coaches:[],courtBookings:[],appointments:[],schedules:[],products:[],inventory:[],storeOrders:[],cafeOrders:[],transactions:[],content:[],students:[]});
+ const [state,setState]=useState<any>({badmintonPackages:[],gymPackages:[],memberships:[],managedCourts:[],coaches:[],courtBookings:[],appointments:[],schedules:[],products:[],categories:[],inventory:[],storeOrders:[],cafeOrders:[],menu:[],transactions:[],content:[],students:[]});
 
  const refresh=async()=>{
    if(!user)return;
@@ -53,7 +60,7 @@ export function OperationsProvider({children}:{children:ReactNode}){
    const results=await Promise.allSettled([
      get<any[]>("/packages/badminton"),get<any[]>("/packages/gym"),get<any[]>("/memberships"),
      get<any[]>("/courts"),get<any[]>("/coaches"),get<any[]>("/bookings"),get<any[]>("/appointments"),
-     get<any[]>("/schedules"),get<any[]>("/products"),canInventory?get<any[]>("/inventory"):Promise.resolve([]),get<any[]>("/cafe/orders"),
+     get<any[]>("/schedules"),get<any[]>("/products"),canInventory?get<any[]>("/inventory"):Promise.resolve([]),canInventory?get<any[]>("/store/categories"):Promise.resolve([]),canInventory?get<any[]>("/store/orders"):Promise.resolve([]),get<any[]>("/cafe/orders"),get<any[]>("/menu"),
      canTransactions?get<any[]>("/transactions"):Promise.resolve([]),get<any[]>("/content"),get<any[]>("/students")
    ]);
    const val=(i:number)=>results[i].status==="fulfilled"?results[i].value:[];
@@ -62,7 +69,7 @@ export function OperationsProvider({children}:{children:ReactNode}){
      badmintonPackages:val(0),gymPackages:val(1),memberships:val(2),managedCourts:val(3),coaches:val(4),
      courtBookings:bookings.filter((b:any)=>b.kind==="court").map((b:any)=>{let meta:any={};try{meta=b.meta?JSON.parse(b.meta):{}}catch{};return {id:b.id,customer:meta.customerName||b.user?.name||"Member",court:b.court?.name||b.title,date:b.date,time:b.time,session:60,price:b.price,paymentStatus:b.paymentStatus,status:b.status}}),
      appointments:val(6),schedules:val(7),
-     products:val(8),inventory:val(9),storeOrders:[],cafeOrders:val(10),transactions:val(11),content:val(12),students:val(13)
+     products:val(8),inventory:val(9),categories:val(10),storeOrders:val(11),cafeOrders:val(12),menu:val(13),transactions:val(14),content:val(15),students:val(16)
    });
  };
  useEffect(()=>{refresh().catch(console.error)},[user?.id]);
@@ -80,6 +87,13 @@ export function OperationsProvider({children}:{children:ReactNode}){
  const updateCafeOrder=(id:string,status:any)=>action(()=>patch(`/cafe/orders/${id}/status`,{status}).then(()=>undefined));
  const addTransaction=(t:any)=>action(()=>post("/transactions",t).then(()=>undefined));
  const addProduct=(p:any)=>action(()=>post("/products",p).then(()=>undefined));
+ const addCategory=(c:any)=>action(()=>post("/store/categories",c).then(()=>undefined));
+ const updateCategory=(id:string,c:any)=>action(()=>patch(`/store/categories/${id}`,c).then(()=>undefined));
+ const deleteCategory=(id:string)=>action(()=>del(`/store/categories/${id}`));
+ const addMenuItem=(m:any)=>action(()=>post("/menu",m).then(()=>undefined));
+ const updateMenuItem=(id:string,m:any)=>action(()=>patch(`/menu/${id}`,m).then(()=>undefined));
+ const deleteMenuItem=(id:string)=>action(()=>del(`/menu/${id}`));
+ const addStoreOrder=(o:any)=>action(()=>post("/store/orders",o).then(()=>undefined));
  const updateProduct=(id:string,p:any)=>action(()=>patch(`/products/${id}`,p).then(()=>undefined));
  const deleteProduct=(id:string)=>action(()=>del(`/products/${id}`));
  const adjustStock=(id:string,quantity:number,note:string)=>action(()=>post(`/products/${id}/stock`,{quantity,note}).then(()=>undefined));
@@ -105,6 +119,6 @@ export function OperationsProvider({children}:{children:ReactNode}){
    lowStock:state.products.filter((p:any)=>p.stock<=5&&p.status==="active").length
  }),[state]);
 
- return <C.Provider value={{...state,addBadmintonPackage,updateBadmintonPackage,deleteBadmintonPackage,addGymPackage,updateGymPackage,deleteGymPackage,addMembership,updateCourtBooking,updateAppointment,updateCafeOrder,addTransaction,addProduct,updateProduct,deleteProduct,adjustStock,addContent,updateContent,deleteContent,publishContent,addStudent,updateStudent,deleteStudent,addSchedule,updateSchedule,addCourt,updateCourt,addCoach,updateCoach,metrics,refresh}}>{children}</C.Provider>
+ return <C.Provider value={{...state,addBadmintonPackage,updateBadmintonPackage,deleteBadmintonPackage,addGymPackage,updateGymPackage,deleteGymPackage,addMembership,updateCourtBooking,updateAppointment,updateCafeOrder,addTransaction,addProduct,updateProduct,deleteProduct,addCategory,updateCategory,deleteCategory,addMenuItem,updateMenuItem,deleteMenuItem,addStoreOrder,adjustStock,addContent,updateContent,deleteContent,publishContent,addStudent,updateStudent,deleteStudent,addSchedule,updateSchedule,addCourt,updateCourt,addCoach,updateCoach,metrics,refresh}}>{children}</C.Provider>
 }
 export const useOperations=()=>{const c=useContext(C);if(!c)throw Error("OperationsProvider missing");return c};

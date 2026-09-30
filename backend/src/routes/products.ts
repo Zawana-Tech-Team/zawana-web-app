@@ -105,7 +105,7 @@ router.get(
 );
 
 
-router.delete("/:id", auth, roles("admin"), asyncRoute(async (req, res) => {
+router.delete("/:id", auth, roles("admin", "store_fo"), asyncRoute(async (req, res) => {
   await prisma.product.delete({ where: { id: String(req.params.id) } });
   res.status(204).end();
 }));
