@@ -88,3 +88,12 @@ Admin:
 - `/admin/courts` — add/edit courts
 - `/admin/coaches` — add/edit coaches
 - `/admin/schedules` — assign coach schedule blocks
+
+## Badminton court booking rules
+- Court rentals are fixed to 60-minute slots from 06:00 AM through 09:00 PM (15 slots).
+- Base court price applies from 06:00 AM–03:00 PM.
+- 03:00 PM–09:00 PM automatically adds 5,000 MMK.
+- A configured `HolidayRate` overrides the normal/peak price; the default holiday rate is 30,000 MMK.
+- `CourtBlock` records reserve a court for academy classes or other facility use and prevent customer bookings.
+- Front Office court desk supports walk-in bookings and class/facility reservations.
+- Booking, court block, holiday-rate, badminton-package, and gym-package records expose edit/delete APIs where applicable.

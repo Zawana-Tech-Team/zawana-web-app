@@ -102,6 +102,34 @@ model Court {
   features  Json
   createdAt DateTime    @default(now())
   bookings  Booking[]
+  blocks    CourtBlock[]
+}
+
+model CourtBlock {
+  id        String   @id @default(cuid())
+  courtId   String
+  court     Court    @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  date      String
+  dayOfWeek Int?
+  active    Boolean  @default(true)
+  start     String
+  end       String
+  title     String
+  type      String   @default("class")
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([courtId, date])
+  @@index([courtId, dayOfWeek])
+}
+
+model HolidayRate {
+  id        String   @id @default(cuid())
+  date      String   @unique
+  title     String
+  price     Int      @default(30000)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 model Coach {

@@ -31,6 +31,20 @@ router.post(
 );
 
 router.patch(
+  "/:id",
+  auth,
+  roles("admin"),
+  asyncRoute(async (req, res) => {
+    res.json(
+      await prisma.contentItem.update({
+        where: { id: String(req.params.id) },
+        data: req.body,
+      })
+    );
+  })
+);
+
+router.patch(
   "/:id/publish",
   auth,
   roles("admin"),

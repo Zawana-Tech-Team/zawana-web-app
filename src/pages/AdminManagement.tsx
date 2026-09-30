@@ -3,7 +3,7 @@ import {
   Plus, X, Pencil, Trash2, MapPinned, CalendarDays, UserRound,
   ShieldCheck, Wrench, Clock3, Sparkles, Search, Power, MoreHorizontal
 } from "lucide-react";
-import { Card, Page, Button, Badge } from "../components/UI";
+import { Card, Page, Button, Badge, Toast } from "../components/UI";
 import { get, post, patch, del } from "../api";
 
 type Section = "courts" | "coaches" | "schedules";
@@ -35,7 +35,8 @@ function ConfirmDelete({name,onCancel,onConfirm}:{name:string;onCancel:()=>void;
 export function AdminManagement({section}:{section:Section}){
  const [rows,setRows]=useState<any[]>([]); const [open,setOpen]=useState(false); const [editing,setEditing]=useState<any>(null);
  const [deleting,setDeleting]=useState<any>(null); const [query,setQuery]=useState(""); const [saving,setSaving]=useState(false);
- const [form,setForm]=useState<any>({});
+ const [form,setForm]=useState<any>({}); const [notice,setNotice]=useState("");
+ const notify=(m:string)=>{setNotice(m);setTimeout(()=>setNotice(""),2500)};
  const load=()=>get<any[]>(`/${section}`).then(setRows);
  useEffect(()=>{load()},[section]);
 
@@ -53,16 +54,19 @@ export function AdminManagement({section}:{section:Section}){
    const payload=section==="courts"
     ? {...form,price:Number(form.price),features:String(form.features||"").split(",").map((x:string)=>x.trim()).filter(Boolean)}
     : section==="coaches"?form:{...form,active:Boolean(form.active)};
-   if(editing) await patch(`/${section}/${editing.id}`,payload); else await post(`/${section}`,payload);
+   if(editing) { await patch(`/${section}/${editing.id}`,payload); notify(`${titleFor(section)} updated successfully.`); }
+   else { await post(`/${section}`,payload); notify(`${titleFor(section)} created successfully.`); }
    await load(); setOpen(false);
-  } finally {setSaving(false)}
+  } catch(e:any) { notify(e.message||"Could not save record."); } finally {setSaving(false)}
  };
- const remove=async()=>{if(!deleting)return;await del(`/${section}/${deleting.id}`);setDeleting(null);load()};
+ const remove=async()=>{if(!deleting)return;try{await del(`/${section}/${deleting.id}`);setDeleting(null);await load();notify(`${titleFor(section)} deleted successfully.`)}catch(e:any){notify(e.message||"Could not delete record.")}};
  const filtered=useMemo(()=>rows.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())),[rows,query]);
  const title=section==="courts"?"Courts":section==="coaches"?"Coaches":"Schedules";
+ const titleFor=(s:Section)=>s==="courts"?"Court":s==="coaches"?"Coach":"Schedule";
  const icon=section==="courts"?<MapPinned/>:section==="coaches"?<UserRound/>:<CalendarDays/>;
 
  return <Page title={`${title} management`} eyebrow="Administration" actions={<Button onClick={()=>start()}><Plus size={16}/> Add {title.slice(0,-1).toLowerCase()}</Button>}>
+  {notice&&<Toast message={notice} onClose={()=>setNotice("")}/>}
   <div className="mb-6 flex flex-col gap-3 md:flex-row">
    <div className="relative flex-1"><Search size={16} className="absolute left-4 top-3.5 text-zawana-500"/><input className="pl-10" placeholder={`Search ${title.toLowerCase()}…`} value={query} onChange={e=>setQuery(e.target.value)}/></div>
    <div className="flex items-center gap-2 rounded-2xl bg-zawana-900 px-4 text-xs font-bold text-zawana-500"><ShieldCheck size={15}/> Live operational controls</div>
