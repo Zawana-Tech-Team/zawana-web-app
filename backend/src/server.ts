@@ -48,6 +48,14 @@ function roles(...allowed: Role[]) {
 const asyncRoute = (fn: any) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(fn(req, res, next)).catch(next);
 const today = () => new Date().toISOString().slice(0, 10);
 const code = (prefix: string) => `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+async function expirePrivateCourseReservations(){
+  const now=new Date();
+  const expired=await prisma.booking.findMany({where:{kind:"private_course",status:{in:["PENDING_COACH_CONFIRMATION","AWAITING_PAYMENT"]},reservationExpiresAt:{lte:now}},select:{id:true,userId:true,title:true,date:true,time:true}});
+  for(const booking of expired){
+    const result=await prisma.booking.updateMany({where:{id:booking.id,status:{in:["PENDING_COACH_CONFIRMATION","AWAITING_PAYMENT"]},reservationExpiresAt:{lte:now}},data:{status:"EXPIRED"}});
+    if(result.count)await prisma.notification.create({data:{userId:booking.userId,title:"Private course request expired",body:`${booking.title} on ${booking.date} at ${booking.time} expired and the court reservation was released.`,link:"/bookings",audience:"member",type:"booking"}});
+  }
+}
 const normalizeTime24 = (value:string) => {
   const v=value.trim();
   if (/^\d{2}:\d{2}$/.test(v)) return v;
@@ -128,6 +136,8 @@ async function ensureBadmintonBookingTables() {
   )`);
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "BadmintonEnrollment_studentId_idx" ON "BadmintonEnrollment"("studentId")`);
   try { await prisma.$executeRawUnsafe(`ALTER TABLE "BadmintonEnrollment" ADD COLUMN "lastCheckIn" TEXT`); } catch {}
+  try { await prisma.$executeRawUnsafe(`ALTER TABLE "BadmintonEnrollment" ADD COLUMN "userId" TEXT REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`); } catch {}
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "BadmintonEnrollment_userId_idx" ON "BadmintonEnrollment"("userId")`);
   await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "BadmintonCheckIn" (
     "id" TEXT NOT NULL PRIMARY KEY, "enrollmentId" TEXT NOT NULL, "date" TEXT NOT NULL,
     "time" TEXT NOT NULL, "sessionsUsed" INTEGER NOT NULL DEFAULT 1, "staffId" TEXT, "note" TEXT,
@@ -135,6 +145,19 @@ async function ensureBadmintonBookingTables() {
     CONSTRAINT "BadmintonCheckIn_enrollmentId_fkey" FOREIGN KEY ("enrollmentId") REFERENCES "BadmintonEnrollment" ("id") ON DELETE CASCADE ON UPDATE CASCADE
   )`);
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "BadmintonCheckIn_enrollmentId_date_idx" ON "BadmintonCheckIn"("enrollmentId","date")`);
+}
+
+async function ensurePrivateCourseTables(){
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "PrivateCourse" (
+    "id" TEXT NOT NULL PRIMARY KEY,"title" TEXT NOT NULL,"description" TEXT NOT NULL DEFAULT '',
+    "duration" INTEGER NOT NULL DEFAULT 60,"price" INTEGER NOT NULL,"status" TEXT NOT NULL DEFAULT 'active',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PrivateCourse_status_title_idx" ON "PrivateCourse"("status","title")`);
+  try { await prisma.$executeRawUnsafe(`ALTER TABLE "Booking" ADD COLUMN "reservationExpiresAt" DATETIME`); } catch {}
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Booking_userId_createdAt_idx" ON "Booking"("userId","createdAt")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Booking_courtId_date_status_idx" ON "Booking"("courtId","date","status")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Booking_coachId_date_status_idx" ON "Booking"("coachId","date","status")`);
 }
 
 async function courtBlocks(date?: string, courtId?: string) {
@@ -214,12 +237,24 @@ app.patch("/api/coaches/:id",auth,roles("admin","gym_fo"),asyncRoute(async(req,r
 app.delete("/api/coaches/:id",auth,roles("admin","gym_fo"),asyncRoute(async(req,res)=>{await prisma.coach.delete({where:{id:req.params.id}});res.status(204).end()}));
 
 // Schedules / coach assignment
-app.get("/api/schedules",auth,asyncRoute(async(_req,res)=>res.json(await prisma.schedule.findMany({include:{coach:true},orderBy:[{day:"asc"},{start:"asc"}]}))));
-app.post("/api/schedules",auth,roles("admin","gym_fo","coach","doctor"),asyncRoute(async(req,res)=>{
+app.get("/api/schedules",auth,asyncRoute(async(req:AuthRequest,res)=>{
+  const coach=req.user!.role==="coach"?await prisma.coach.findFirst({where:{email:req.user!.email}}):null;
+  res.json(await prisma.schedule.findMany({where:req.user!.role==="coach"?{coachId:coach?.id||"__no_coach__"}:{},include:{coach:true},orderBy:[{day:"asc"},{start:"asc"}]}));
+}));
+app.post("/api/schedules",auth,roles("admin","gym_fo","coach","doctor"),asyncRoute(async(req:AuthRequest,res)=>{
   const b=z.object({person:z.string(),role:z.enum(["coach","doctor"]),day:z.string(),start:z.string(),end:z.string(),service:z.string().optional(),active:z.boolean().default(true),coachId:z.string().optional()}).parse(req.body);
+  if(req.user!.role==="coach"){
+    const coach=await prisma.coach.findFirst({where:{email:req.user!.email}});
+    if(!coach||b.role!=="coach"||b.coachId!==coach.id)return res.status(403).json({message:"Coaches can only add availability to their own schedule."});
+  }
   res.status(201).json(await prisma.schedule.create({data:b,include:{coach:true}}));
 }));
-app.patch("/api/schedules/:id",auth,roles("admin","gym_fo","coach","doctor"),asyncRoute(async(req,res)=>{
+app.patch("/api/schedules/:id",auth,roles("admin","gym_fo","coach","doctor"),asyncRoute(async(req:AuthRequest,res)=>{
+  if(req.user!.role==="coach"){
+    const coach=await prisma.coach.findFirst({where:{email:req.user!.email}}),schedule=await prisma.schedule.findUnique({where:{id:String(req.params.id)}});
+    if(!coach||!schedule||schedule.coachId!==coach.id)return res.status(403).json({message:"You can only update your own schedule."});
+    if((req.body as any).coachId&&((req.body as any).coachId!==coach.id))return res.status(403).json({message:"You cannot reassign another coach's schedule."});
+  }
   const b=z.object({person:z.string().optional(),day:z.string().optional(),start:z.string().optional(),end:z.string().optional(),service:z.string().optional(),active:z.boolean().optional(),coachId:z.string().nullable().optional()}).parse(req.body);
   res.json(await prisma.schedule.update({where:{id:req.params.id},data:b,include:{coach:true}}));
 }));
@@ -227,9 +262,10 @@ app.delete("/api/schedules/:id",auth,roles("admin","gym_fo"),asyncRoute(async(re
 
 // Public booking availability
 app.get("/api/bookings/availability",asyncRoute(async(req,res)=>{
+  await expirePrivateCourseReservations();
   const date=String(req.query.date||today()); const courtId=String(req.query.courtId||"");
   const [bookings,blocks,holiday]=await Promise.all([
-    prisma.booking.findMany({where:{date,status:{in:["pending","confirmed"]},...(courtId?{courtId}: {})},select:{id:true,date:true,time:true,courtId:true,coachId:true,status:true,price:true,title:true,meta:true,user:{select:{name:true}}}}),
+    prisma.booking.findMany({where:{date,status:{in:["pending","confirmed","CONFIRMED","PENDING_COACH_CONFIRMATION","AWAITING_PAYMENT"]},...(courtId?{courtId}: {})},select:{id:true,date:true,time:true,courtId:true,coachId:true,status:true}}),
     courtBlocks(date,courtId),
     holidayRate(date)
   ]);
@@ -238,12 +274,14 @@ app.get("/api/bookings/availability",asyncRoute(async(req,res)=>{
 
 // Bookings
 app.get("/api/bookings",auth,asyncRoute(async(req:AuthRequest,res)=>{
-  const isAdmin=["admin","gym_fo","badminton_fo","coach","clinic_fo"].includes(req.user!.role);
-  const where=isAdmin?{}:{userId:req.user!.id};
+  const isAdmin=["admin","gym_fo","badminton_fo","clinic_fo"].includes(req.user!.role);
+  const coach=req.user!.role==="coach"?await prisma.coach.findFirst({where:{email:req.user!.email}}):null;
+  const where=isAdmin?{}:req.user!.role==="coach"?{coachId:coach?.id||"__no_coach__"}:{userId:req.user!.id};
   res.json(await prisma.booking.findMany({where,include:{court:true,coach:true,user:{select:{id:true,name:true,email:true}}},orderBy:{createdAt:"desc"}}));
 }));
 
 app.post("/api/bookings",auth,asyncRoute(async(req:AuthRequest,res)=>{
+  await expirePrivateCourseReservations();
   const b=z.object({kind:z.enum(["court","class","pt","recovery"]),title:z.string(),date:z.string(),time:z.string(),location:z.string(),price:z.number().int().nonnegative().optional(),courtId:z.string().optional(),coachId:z.string().optional(),meta:z.string().optional(),paymentStatus:z.enum(["pending","paid","refunded"]).optional()}).parse(req.body);
   const toMin=(v:string)=>{const m=v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);if(!m)return NaN;let h=+m[1],mi=+m[2];if(h===12)h=0;if(m[3].toUpperCase()==="PM")h+=12;return h*60+mi};
   const range=(v:string)=>{const p=v.split(/\s*(?:—|–|-)\s*/);if(p.length!==2)return null;const a=toMin(p[0]),e=toMin(p[1]);return Number.isFinite(a)&&Number.isFinite(e)?{start:a,end:e}:null};
@@ -251,15 +289,20 @@ app.post("/api/bookings",auth,asyncRoute(async(req:AuthRequest,res)=>{
   if(b.kind==="court"){
     const r=range(b.time); if(!b.courtId||!r||r.end-r.start!==60||r.start<360||r.end>1260||r.start%60!==0)return res.status(400).json({message:"Court bookings must be one hour, starting on the hour, between 6:00 AM and 9:00 PM."});
     const court=await prisma.court.findUnique({where:{id:b.courtId}}); if(!court)return res.status(404).json({message:"Court not found"}); if(court.status!=="available")return res.status(409).json({message:`${court.name} is currently ${court.status}.`});
-    const [existing,blocks,holiday]=await Promise.all([prisma.booking.findMany({where:{date:b.date,courtId:b.courtId,status:{in:["pending","confirmed"]}},select:{time:true}}),courtBlocks(b.date,b.courtId),holidayRate(b.date)]);
-    if(existing.some(x=>overlaps(x.time,b.time)))return res.status(409).json({message:"That court/time is already booked."});
-    // A weekly class block is a hard availability rule. Check it on the requested
-    // date using dayOfWeek as well as an exact-date block, so members cannot
-    // bypass the visual grid and book a recurring class slot.
-    if(blocks.some(x=>Number(x.active)!==0 && overlaps(`${x.start} — ${x.end}`,b.time)))return res.status(409).json({message:"That court is RESERVED for a class or facility block during this time."});
+    const [blocks,holiday]=await Promise.all([courtBlocks(b.date,b.courtId),holidayRate(b.date)]);
+    // Lock the court row before checking and creating so concurrent writers on
+    // SQLite cannot both pass an availability read for the same court.
     const price=holiday?.active?holiday.price:court.price+(r.start>=900?5000:0);
-    const booking=await prisma.booking.create({data:{...b,price,code:code("ZW"),userId:req.user!.id,status:"confirmed",paymentStatus:b.paymentStatus||"pending"}});
-    await prisma.notification.create({data:{userId:req.user!.id,title:"Booking confirmed",body:`${b.title} is reserved for ${b.date} at ${b.time}.`,link:"/bookings",audience:"member",type:"booking"}});
+    const booking=await prisma.$transaction(async tx=>{
+      await tx.$executeRawUnsafe(`UPDATE "Court" SET status=status WHERE id=?`,b.courtId);
+      const existing=await tx.booking.findMany({where:{date:b.date,courtId:b.courtId,status:{in:occupyingStatuses}},select:{time:true}});
+      if(existing.some(x=>overlaps(x.time,b.time)))throw Object.assign(new Error("That court/time is already booked."),{statusCode:409});
+      // Weekly and exact date blocks are checked inside the same write transaction.
+      if(blocks.some(x=>Number(x.active)!==0&&overlaps(`${x.start} — ${x.end}`,b.time)))throw Object.assign(new Error("That court is RESERVED for a class or facility block during this time."),{statusCode:409});
+      const created=await tx.booking.create({data:{...b,price,code:code("ZW"),userId:req.user!.id,status:"confirmed",paymentStatus:b.paymentStatus||"pending"}});
+      await tx.notification.create({data:{userId:req.user!.id,title:"Booking confirmed",body:`${b.title} is reserved for ${b.date} at ${b.time}.`,link:"/bookings",audience:"member",type:"booking"}});
+      return created;
+    });
     return res.status(201).json(booking);
   }
   const overlap=await prisma.booking.findFirst({where:{date:b.date,time:b.time,status:{in:["pending","confirmed"]},OR:[...(b.courtId?[{courtId:b.courtId}]:[]),...(b.coachId?[{coachId:b.coachId}]:[])]}});
@@ -272,6 +315,8 @@ app.post("/api/bookings",auth,asyncRoute(async(req:AuthRequest,res)=>{
 app.patch("/api/bookings/:id",auth,asyncRoute(async(req:AuthRequest,res)=>{
   const existing=await prisma.booking.findUnique({where:{id:req.params.id}}); if(!existing)return res.status(404).json({message:"Booking not found"});
   const staff=["admin","gym_fo","badminton_fo","coach"].includes(req.user!.role); if(!staff&&existing.userId!==req.user!.id)return res.status(403).json({message:"Not allowed"});
+  if(existing.kind==="private_course")return res.status(403).json({message:"Private course status is managed through its booking workflow."});
+  if(req.user!.role==="member"&&("status" in (req.body||{})||"paymentStatus" in (req.body||{})))return res.status(403).json({message:"Members cannot change booking or payment status."});
   const b=z.object({title:z.string().optional(),date:z.string().optional(),time:z.string().optional(),location:z.string().optional(),price:z.number().int().nonnegative().optional(),paymentStatus:z.enum(["pending","paid","refunded"]).optional(),status:z.nativeEnum(BookingStatus).optional()}).parse(req.body);
   if(existing.kind==="court"){const time=b.time||existing.time; const date=b.date||existing.date; const p=time.split(/\s*(?:—|–|-)\s*/); const mins=(x:string)=>{const m=x.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);if(!m)return NaN;let h=+m[1];if(h===12)h=0;if(m[3].toUpperCase()==="PM")h+=12;return h*60+ +m[2]}; if(p.length!==2||mins(p[1])-mins(p[0])!==60||mins(p[0])<360||mins(p[1])>1260)return res.status(400).json({message:"Court bookings must be one hour between 6:00 AM and 9:00 PM."}); const conflicts=await prisma.booking.findMany({where:{id:{not:existing.id},date,courtId:existing.courtId!,status:{in:["pending","confirmed"]}},select:{time:true}}); const overlap=(a:string)=>{const x=a.split(/\s*(?:—|–|-)\s*/);return x.length===2&&mins(x[0])<mins(p[1])&&mins(p[0])<mins(x[1])}; if(conflicts.some(x=>overlap(x.time)))return res.status(409).json({message:"That court/time is already booked."}); const blocks=await courtBlocks(date,existing.courtId!); if(blocks.some(x=>overlap(`${x.start} — ${x.end}`)))return res.status(409).json({message:"That court/time is reserved for a class."});}
   res.json(await prisma.booking.update({where:{id:existing.id},data:b}));
@@ -282,7 +327,10 @@ app.patch("/api/bookings/:id/status",auth,asyncRoute(async(req:AuthRequest,res)=
   const b=z.object({status:z.nativeEnum(BookingStatus)}).parse(req.body);
   const existing=await prisma.booking.findUnique({where:{id:req.params.id}});
   if(!existing) return res.status(404).json({message:"Booking not found"});
-  if(!["admin","gym_fo","badminton_fo","coach"].includes(req.user!.role) && existing.userId!==req.user!.id) return res.status(403).json({message:"Not allowed"});
+  if(!["admin","gym_fo","badminton_fo"].includes(req.user!.role)) {
+    if(existing.userId!==req.user!.id||b.status!=="cancelled"||existing.kind==="private_course") return res.status(403).json({message:"Members may only cancel their own standard bookings."});
+  }
+  if(existing.kind==="private_course")return res.status(403).json({message:"Private course status is managed through its booking workflow."});
   res.json(await prisma.booking.update({where:{id:req.params.id},data:{status:b.status}}));
 }));
 
@@ -353,12 +401,14 @@ app.get("/api/badminton/enrollments",auth,roles("admin","badminton_fo"),asyncRou
   for(const row of rows) await refreshEnrollmentStatus(row);
   res.json(rows);
 }));
+app.get("/api/badminton/member-accounts",auth,roles("admin","badminton_fo"),asyncRoute(async(_req,res)=>res.json(await prisma.user.findMany({where:{role:"member"},select:{id:true,name:true,email:true,phone:true},orderBy:{name:"asc"}}))));
 app.post("/api/badminton/enrollments",auth,roles("admin","badminton_fo"),asyncRoute(async(req,res)=>{
-  const b=z.object({studentId:z.string().min(1),studentName:z.string().min(1),phone:z.string().default(""),packageId:z.string().min(1),startDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/,"startDate must be YYYY-MM-DD"),paymentMethod:z.string().min(1).default("Cash")}).parse(req.body);
+  const b=z.object({studentId:z.string().min(1),studentName:z.string().min(1),phone:z.string().default(""),userId:z.string().optional(),packageId:z.string().min(1),startDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/,"startDate must be YYYY-MM-DD"),paymentMethod:z.string().min(1).default("Cash")}).parse(req.body);
+  if(b.userId&&!(await prisma.user.findFirst({where:{id:b.userId,role:"member"}})))return res.status(400).json({message:"Selected member account was not found."});
   const pkg=await prisma.badmintonPackage.findUnique({where:{id:b.packageId}});
   if(!pkg || pkg.status!=="active") return res.status(400).json({message:"Active badminton package not found"});
   const id=code("BM"); const expiry=addDaysIso(b.startDate,pkg.validity);
-  const row=(await prisma.$queryRawUnsafe<any[]>(`INSERT INTO "BadmintonEnrollment" (id,studentId,studentName,phone,packageId,packageName,sessionsTotal,sessionsRemaining,startDate,expiryDate,status,renewalCount) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *`,id,b.studentId,b.studentName,b.phone,pkg.id,pkg.title,pkg.sessions,pkg.sessions,b.startDate,expiry,"active",0))[0];
+  const row=(await prisma.$queryRawUnsafe<any[]>(`INSERT INTO "BadmintonEnrollment" (id,studentId,userId,studentName,phone,packageId,packageName,sessionsTotal,sessionsRemaining,startDate,expiryDate,status,renewalCount) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *`,id,b.studentId,b.userId||null,b.studentName,b.phone,pkg.id,pkg.title,pkg.sessions,pkg.sessions,b.startDate,expiry,"active",0))[0];
   await prisma.transaction.create({data:{date:b.startDate,customer:b.studentName,business:"Badminton",item:`Package · ${pkg.title}`,amount:pkg.price,discount:0,tax:0,finalAmount:pkg.price,paymentMethod:b.paymentMethod,staff:(req as AuthRequest).user?.name||"Badminton FO",status:"paid"}});
   res.status(201).json(row);
 }));
@@ -508,12 +558,192 @@ app.patch("/api/content/:id",auth,roles("admin"),asyncRoute(async(req,res)=>res.
 app.delete("/api/content/:id",auth,roles("admin"),asyncRoute(async(req,res)=>{await prisma.contentItem.delete({where:{id:req.params.id}});res.status(204).end()}));
 app.patch("/api/content/:id/publish",auth,roles("admin"),asyncRoute(async(req,res)=>res.json(await prisma.contentItem.update({where:{id:req.params.id},data:{status:"published",publishDate:today()}}))));
 
+// Member badminton dashboard and private course workflow. Private-course requests
+// share Booking rows with court rentals so the same court calendar stays authoritative.
+const occupyingStatuses = ["pending", "confirmed", "CONFIRMED", "PENDING_COACH_CONFIRMATION", "AWAITING_PAYMENT"] as any;
+app.get("/api/member/dashboard",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>{
+  await expirePrivateCourseReservations();
+  const [bookings,packages,notifications,enrollments]=await Promise.all([
+    prisma.booking.findMany({where:{userId:req.user!.id},include:{court:true,coach:true},orderBy:{createdAt:"desc"}}),
+    prisma.badmintonPackage.findMany({where:{status:"active"},orderBy:{title:"asc"}}),
+    prisma.notification.findMany({where:{userId:req.user!.id,read:false},orderBy:{createdAt:"desc"},take:6}),
+    prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "BadmintonEnrollment" WHERE userId=? OR studentId=? ORDER BY createdAt DESC`,req.user!.id,req.user!.id)
+  ]);
+  const active=enrollments.find(e=>e.status==="active"&&e.expiryDate>=today()&&Number(e.sessionsRemaining)>0)||null;
+  const checkIns=active?await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "BadmintonCheckIn" WHERE enrollmentId=? ORDER BY date DESC,time DESC LIMIT 12`,active.id):[];
+  res.json({bookings,packages,notifications,enrollment:active,enrollmentHistory:enrollments,checkIns});
+}));
+app.post("/api/member/check-in",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>{
+  const current=(await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "BadmintonEnrollment" WHERE id=? AND (userId=? OR studentId=?)`,String(req.body.enrollmentId||""),req.user!.id,req.user!.id))[0];
+  if(!current)return res.status(404).json({message:"No badminton package was found for your account."});
+  if(current.expiryDate<today()||current.status!=="active")return res.status(409).json({message:"This badminton package has expired."});
+  if(Number(current.sessionsRemaining)<=0)return res.status(409).json({message:"No sessions remain on this package."});
+  const date=today(),time=new Date().toTimeString().slice(0,5),id=code("CHK");
+  try {
+    const result=await prisma.$transaction(async tx=>{
+      const updated=(await tx.$queryRawUnsafe<any[]>("UPDATE \"BadmintonEnrollment\" SET sessionsRemaining=sessionsRemaining-1,lastCheckIn=? WHERE id=? AND (userId=? OR studentId=?) AND status='active' AND expiryDate>=? AND sessionsRemaining>0 AND NOT EXISTS (SELECT 1 FROM \"BadmintonCheckIn\" WHERE enrollmentId=? AND date=?) RETURNING *",`${date} ${time}`,current.id,req.user!.id,req.user!.id,date,current.id,date))[0];
+      if(!updated){
+        const already=await tx.$queryRawUnsafe<any[]>(`SELECT id FROM "BadmintonCheckIn" WHERE enrollmentId=? AND date=? LIMIT 1`,current.id,date);
+        throw Object.assign(new Error(already.length?"You have already checked in today.":"This package can no longer be used."),{statusCode:409});
+      }
+      const checkIn=(await tx.$queryRawUnsafe<any[]>(`INSERT INTO "BadmintonCheckIn" (id,enrollmentId,date,time,sessionsUsed,note) VALUES (?,?,?,?,1,'Member self check-in') RETURNING *`,id,current.id,date,time))[0];
+      return {enrollment:updated,checkIn};
+    });
+    res.status(201).json(result);
+  } catch(error:any) { if(error.statusCode===409)return res.status(409).json({message:error.message}); throw error; }
+}));
+app.get("/api/private-courses",asyncRoute(async(_req,res)=>res.json(await prisma.privateCourse.findMany({where:{status:"active"},orderBy:{title:"asc"}}))));
+app.post("/api/private-courses",auth,roles("admin","badminton_fo"),asyncRoute(async(req,res)=>{
+  const b=z.object({title:z.string().min(3),description:z.string().default(""),duration:z.number().int().min(30).max(180).default(60),price:z.number().int().nonnegative(),status:z.enum(["active","inactive"]).default("active")}).parse(req.body);
+  res.status(201).json(await prisma.privateCourse.create({data:b}));
+}));
+app.get("/api/member/private-courses",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>res.json(await prisma.booking.findMany({where:{userId:req.user!.id,kind:"private_course"},include:{court:true,coach:true},orderBy:{createdAt:"desc"}}))));
+app.get("/api/member/private-course-coaches",auth,roles("member"),asyncRoute(async(_req,res)=>{
+  const coaches=await prisma.coach.findMany({where:{status:"active"},include:{schedules:{where:{active:true}}},orderBy:{name:"asc"}});
+  const users=await prisma.user.findMany({where:{role:"coach",email:{in:coaches.map(c=>c.email.toLowerCase())}},select:{email:true}});
+  const linked=new Set(users.map(u=>u.email.toLowerCase()));
+  res.json(coaches.filter(c=>linked.has(c.email.toLowerCase())));
+}));
+app.post("/api/member/private-courses",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>{
+  await expirePrivateCourseReservations();
+  const b=z.object({courseId:z.string(),courtId:z.string(),coachId:z.string(),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),time:z.string()}).parse(req.body);
+  if(b.date<today())return res.status(400).json({message:"Choose a future date."});
+  const course=await prisma.privateCourse.findFirst({where:{id:b.courseId,status:"active"}});
+  if(!course)return res.status(404).json({message:"That course is no longer available."});
+  const court=await prisma.court.findUnique({where:{id:b.courtId}}),coach=await prisma.coach.findUnique({where:{id:b.coachId, status:"active"},include:{schedules:true}});
+  if(!court||court.status!=="available")return res.status(409).json({message:"That court is unavailable."});
+  if(!coach)return res.status(409).json({message:"That coach is unavailable."});
+  const coachUser=await prisma.user.findFirst({where:{email:coach.email.toLowerCase(),role:"coach"}});
+  if(!coachUser)return res.status(409).json({message:"This coach account is not set up to receive booking requests yet."});
+  const timeRange=(value:string)=>{const p=value.split(/\s*(?:—|–|-)\s*/);const min=(v:string)=>{const m=v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);if(!m)return NaN;let h=+m[1];if(h===12)h=0;if(m[3].toUpperCase()==="PM")h+=12;return h*60+ +m[2]};const start=min(p[0]||""),end=min(p[1]||"");return p.length===2&&end>start?{start,end}:null};
+  const wanted=timeRange(b.time);if(!wanted||wanted.end-wanted.start!==course.duration)return res.status(400).json({message:`Choose a ${course.duration}-minute time slot.`});
+  if(wanted.start<360||wanted.end>1260||wanted.start%60!==0)return res.status(400).json({message:"Choose a start time between 6:00 AM and 8:00 PM."});
+  if(b.date===today()&&wanted.start<=new Date().getHours()*60+new Date().getMinutes())return res.status(400).json({message:"Choose a time that has not passed yet."});
+  const weekday=new Date(`${b.date}T00:00:00`).toLocaleDateString("en-US",{weekday:"long"});
+  const inSchedule=coach.schedules.some(s=>s.active&&s.day.toLowerCase()===weekday.toLowerCase()&&s.role==="coach"&&(s.service?.toLowerCase().includes("badminton")||coach.specialty.toLowerCase().includes("badminton"))&&(()=>{const start=+s.start.slice(0,2)*60+ +s.start.slice(3,5),end=+s.end.slice(0,2)*60+ +s.end.slice(3,5);return wanted.start>=start&&wanted.end<=end})());
+  if(!inSchedule)return res.status(409).json({message:"This coach has no badminton availability for that date and time."});
+  const other=await prisma.booking.findMany({where:{date:b.date,status:{in:occupyingStatuses},OR:[{courtId:b.courtId},{coachId:b.coachId}]},select:{time:true,courtId:true,coachId:true}});
+  const overlap=(x:string)=>{const r=timeRange(x);return !!r&&wanted.start<r.end&&r.start<wanted.end};
+  if(other.some(x=>overlap(x.time)&&(x.courtId===b.courtId||x.coachId===b.coachId)))return res.status(409).json({message:"The selected court or coach has just become unavailable."});
+  const blocks=await courtBlocks(b.date,b.courtId);
+  if(blocks.some(x=>Number(x.active)!==0&&overlap(`${x.start} — ${x.end}`)))return res.status(409).json({message:"The selected court is reserved during this time."});
+  const member=await prisma.user.findUnique({where:{id:req.user!.id},select:{name:true,email:true,phone:true}});
+  const meta=JSON.stringify({courseId:course.id,courseTitle:course.title,memberEmail:member?.email,memberPhone:member?.phone});
+  const booking=await prisma.$transaction(async tx=>{
+    await tx.$executeRawUnsafe(`UPDATE "Court" SET status=status WHERE id=?`,b.courtId);
+    await tx.$executeRawUnsafe(`UPDATE "Coach" SET status=status WHERE id=?`,b.coachId);
+    const conflicts=await tx.booking.findMany({where:{date:b.date,status:{in:occupyingStatuses},OR:[{courtId:b.courtId},{coachId:b.coachId}]},select:{time:true,courtId:true,coachId:true}});
+    if(conflicts.some(x=>(x.courtId===b.courtId||x.coachId===b.coachId)&&overlap(x.time)))throw Object.assign(new Error("The selected court or coach has just become unavailable."),{statusCode:409});
+    if(blocks.some(x=>Number(x.active)!==0&&overlap(`${x.start} — ${x.end}`)))throw Object.assign(new Error("The selected court is reserved during this time."),{statusCode:409});
+    const created=await tx.booking.create({data:{code:code("PC"),userId:req.user!.id,kind:"private_course",title:course.title,date:b.date,time:b.time,location:court.name,courtId:court.id,coachId:coach.id,price:course.price,meta,status:"PENDING_COACH_CONFIRMATION",paymentStatus:"pending",reservationExpiresAt:new Date(Date.now()+24*60*60*1000)}});
+    await tx.notification.create({data:{userId:req.user!.id,title:"Waiting for coach confirmation",body:`${course.title} · ${b.date} · ${b.time} · ${court.name}`,link:"/bookings",audience:"member",type:"booking"}});
+    const coachUser=await tx.user.findUnique({where:{email:coach.email.toLowerCase()}});
+    if(coachUser)await tx.notification.create({data:{userId:coachUser.id,title:"Private course request",body:`${member?.name||"A member"} requested ${course.title} · ${b.date} · ${b.time} · ${court.name} · Request ${created.code}`,link:"/coach/bookings",audience:"coach",type:"booking"}});
+    return created;
+  });
+  res.status(201).json(booking);
+}));
+app.post("/api/coach/private-courses/:id/decision",auth,roles("coach"),asyncRoute(async(req:AuthRequest,res)=>{
+  await expirePrivateCourseReservations();
+  const b=z.object({decision:z.enum(["confirm","decline"])}).parse(req.body);
+  const booking=await prisma.booking.findUnique({where:{id:String(req.params.id)},include:{coach:{include:{schedules:true}},user:true,court:true}});
+  if(!booking||booking.kind!=="private_course")return res.status(404).json({message:"Private course request not found."});
+  if(!booking.coach||booking.coach.email.toLowerCase()!==req.user!.email.toLowerCase())return res.status(403).json({message:"This request belongs to another coach."});
+  if(booking.status!=="PENDING_COACH_CONFIRMATION")return res.status(409).json({message:"This request is no longer waiting for a coach."});
+  if(booking.date<today())return res.status(409).json({message:"This course date has passed; the request cannot be confirmed."});
+  const updated=await prisma.$transaction(async tx=>{
+    if(b.decision==="confirm"){
+      await tx.$executeRawUnsafe(`UPDATE "Court" SET status=status WHERE id=?`,booking.courtId);
+      await tx.$executeRawUnsafe(`UPDATE "Coach" SET status=status WHERE id=?`,booking.coachId);
+      const range=(v:string)=>{const p=v.split(/\s*(?:—|–|-)\s*/);const min=(x:string)=>{const m=x.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);if(!m)return NaN;let h=+m[1];if(h===12)h=0;if(m[3].toUpperCase()==="PM")h+=12;return h*60+ +m[2]};return p.length===2?[min(p[0]),min(p[1])]:[NaN,NaN]};
+      const chosen=range(booking.time), weekday=new Date(`${booking.date}T00:00:00`).toLocaleDateString("en-US",{weekday:"long"});
+      const scheduled=booking.coach?.schedules.some(s=>s.active&&s.role==="coach"&&s.day.toLowerCase()===weekday.toLowerCase()&&(s.service?.toLowerCase().includes("badminton")||booking.coach!.specialty.toLowerCase().includes("badminton"))&&(()=>{const start=+s.start.slice(0,2)*60+ +s.start.slice(3,5),end=+s.end.slice(0,2)*60+ +s.end.slice(3,5);return chosen[0]>=start&&chosen[1]<=end})());
+      if(!scheduled)throw Object.assign(new Error("Coach availability has changed; this request cannot be confirmed."),{statusCode:409});
+      const conflicts=await tx.booking.findMany({where:{id:{not:booking.id},date:booking.date,status:{in:occupyingStatuses},OR:[{courtId:booking.courtId},{coachId:booking.coachId}]},select:{time:true,courtId:true,coachId:true}});
+      if(conflicts.some(x=>{const other=range(x.time);return (x.courtId===booking.courtId||x.coachId===booking.coachId)&&chosen[0]<other[1]&&other[0]<chosen[1]}))throw Object.assign(new Error("The court or coach is no longer available."),{statusCode:409});
+    }
+    const changed=await tx.booking.updateMany({where:{id:booking.id,status:"PENDING_COACH_CONFIRMATION"},data:{status:b.decision==="confirm"?"AWAITING_PAYMENT":"COACH_DECLINED",reservationExpiresAt:b.decision==="confirm"?new Date(Date.now()+24*60*60*1000):null}});
+    if(!changed.count)throw Object.assign(new Error("This request is no longer waiting for a coach."),{statusCode:409});
+    const updatedBooking=await tx.booking.findUniqueOrThrow({where:{id:booking.id}});
+    await tx.notification.create({data:{userId:booking.userId,title:b.decision==="confirm"?"Coach confirmed your private course":"Coach unavailable",body:b.decision==="confirm"?"Your coach confirmed. Payment is required to finalize your booking.":"Unfortunately, the selected coach is unavailable for this time. Choose another time or coach.",link:"/bookings",audience:"member",type:b.decision==="confirm"?"payment":"booking"}});
+    return updatedBooking;
+  });
+  res.json(updated);
+}));
+app.get("/api/coach/private-courses",auth,roles("coach"),asyncRoute(async(req:AuthRequest,res)=>{
+  await expirePrivateCourseReservations();
+  const coach=await prisma.coach.findFirst({where:{email:req.user!.email}});
+  if(!coach)return res.json([]);
+  res.json(await prisma.booking.findMany({where:{coachId:coach.id,kind:"private_course",status:"PENDING_COACH_CONFIRMATION"},include:{user:{select:{id:true,name:true,email:true,phone:true}},court:true},orderBy:[{date:"asc"},{time:"asc"}]}));
+}));
+app.post("/api/coach/private-courses/:id/complete",auth,roles("coach"),asyncRoute(async(req:AuthRequest,res)=>{
+  const booking=await prisma.booking.findUnique({where:{id:String(req.params.id)},include:{coach:true}});
+  if(!booking||booking.kind!=="private_course")return res.status(404).json({message:"Private course booking not found."});
+  if(!booking.coach||booking.coach.email.toLowerCase()!==req.user!.email.toLowerCase())return res.status(403).json({message:"This booking belongs to another coach."});
+  if(booking.status!=="CONFIRMED")return res.status(409).json({message:"Only paid and confirmed courses can be completed."});
+  if(booking.date>today())return res.status(409).json({message:"This course is scheduled for a future date."});
+  const updated=await prisma.booking.update({where:{id:booking.id},data:{status:"COMPLETED"}});
+  await prisma.notification.create({data:{userId:booking.userId,title:"Private course completed",body:`${booking.title} on ${booking.date} has been marked complete.`,link:"/bookings",audience:"member",type:"booking"}});
+  res.json(updated);
+}));
+app.get("/api/coach/calendar",auth,roles("coach"),asyncRoute(async(req:AuthRequest,res)=>{
+  await expirePrivateCourseReservations();
+  const coach=await prisma.coach.findFirst({where:{email:req.user!.email}});
+  if(!coach)return res.json({coach:null,bookings:[],schedules:[]});
+  const start=String(req.query.start||today()),end=String(req.query.end||start);
+  const bookings=await prisma.booking.findMany({where:{coachId:coach.id,date:{gte:start,lte:end},status:{notIn:["cancelled","CANCELLED","COACH_DECLINED","EXPIRED","COMPLETED"]}},include:{user:{select:{name:true}},court:true},orderBy:[{date:"asc"},{time:"asc"}]});
+  const weekdayNames=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const dayNames=new Set(Array.from({length:Math.min(31,Math.ceil((new Date(end).getTime()-new Date(start).getTime())/86400000)+1)},(_,i)=>weekdayNames[new Date(new Date(start).getTime()+i*86400000).getDay()]));
+  const schedules=await prisma.schedule.findMany({where:{coachId:coach.id,active:true,day:{in:[...dayNames]}}});
+  res.json({coach,bookings,schedules});
+}));
+app.post("/api/member/private-courses/:id/cancel",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>{
+  const booking=await prisma.booking.findUnique({where:{id:String(req.params.id)},include:{coach:true}});
+  if(!booking||booking.userId!==req.user!.id||booking.kind!=="private_course")return res.status(404).json({message:"Private course booking not found."});
+  if(!["PENDING_COACH_CONFIRMATION","AWAITING_PAYMENT"].includes(booking.status))return res.status(409).json({message:"This booking can no longer be cancelled online."});
+  const updated=await prisma.booking.update({where:{id:booking.id},data:{status:"CANCELLED",reservationExpiresAt:null}});
+  await prisma.notification.create({data:{userId:req.user!.id,title:"Private course cancelled",body:`${booking.title} on ${booking.date} at ${booking.time} was cancelled.`,link:"/bookings",audience:"member",type:"booking"}});
+  const coachUser=booking.coach?await prisma.user.findUnique({where:{email:booking.coach.email.toLowerCase()}}):null;
+  if(coachUser)await prisma.notification.create({data:{userId:coachUser.id,title:"Private course cancelled",body:`A member cancelled ${booking.title} · ${booking.date} · ${booking.time}.`,link:"/coach/schedule",audience:"coach",type:"booking"}});
+  res.json(updated);
+}));
+app.post("/api/member/private-courses/:id/pay",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>{
+  const booking=await prisma.booking.findUnique({where:{id:String(req.params.id)}});
+  if(!booking||booking.userId!==req.user!.id)return res.status(404).json({message:"Booking not found."});
+  if(booking.kind!=="private_course"||booking.status!=="AWAITING_PAYMENT")return res.status(409).json({message:"This booking is not awaiting payment."});
+  return res.status(501).json({message:"Online payment is not configured yet. Please contact the badminton front desk to pay and confirm this booking."});
+}));
+app.get("/api/badminton/private-course-payments",auth,roles("admin","badminton_fo"),asyncRoute(async(_req,res)=>res.json(await prisma.booking.findMany({where:{kind:"private_course",status:"AWAITING_PAYMENT"},include:{user:{select:{name:true,email:true}},coach:true,court:true},orderBy:[{date:"asc"},{time:"asc"}]}))));
+app.post("/api/badminton/private-courses/:id/payment",auth,roles("admin","badminton_fo"),asyncRoute(async(req:AuthRequest,res)=>{
+  await expirePrivateCourseReservations();
+  const b=z.object({paymentMethod:z.enum(["Cash","KPay","Bank Transfer"])}).parse(req.body);
+  const booking=await prisma.booking.findUnique({where:{id:String(req.params.id)},include:{user:true,coach:true}});
+  if(!booking||booking.kind!=="private_course")return res.status(404).json({message:"Private course booking not found."});
+  if(booking.status!=="AWAITING_PAYMENT")return res.status(409).json({message:"This booking is not awaiting payment."});
+  const result=await prisma.$transaction(async tx=>{
+    const changed=await tx.booking.updateMany({where:{id:booking.id,status:"AWAITING_PAYMENT"},data:{status:"CONFIRMED",paymentStatus:"paid",reservationExpiresAt:null}});
+    if(!changed.count)throw Object.assign(new Error("This booking is no longer awaiting payment."),{statusCode:409});
+    await tx.transaction.create({data:{date:booking.date,customer:booking.user.name,business:"Badminton",item:`Private course · ${booking.title}`,amount:booking.price,discount:0,tax:0,finalAmount:booking.price,paymentMethod:b.paymentMethod,staff:req.user!.name,status:"paid"}});
+    const confirmed=await tx.booking.findUniqueOrThrow({where:{id:booking.id}});
+    await tx.notification.create({data:{userId:booking.userId,title:"Private course confirmed",body:`Payment received. ${booking.title} on ${booking.date} at ${booking.time} is confirmed.`,link:"/bookings",audience:"member",type:"booking"}});
+    const coachUser=booking.coach?await tx.user.findFirst({where:{email:booking.coach.email.toLowerCase(),role:"coach"}}):null;
+    if(coachUser)await tx.notification.create({data:{userId:coachUser.id,title:"Private course booked",body:`${booking.user.name} paid for ${booking.title} · ${booking.date} · ${booking.time} · ${booking.location}.`,link:"/coach/schedule",audience:"coach",type:"booking"}});
+    return confirmed;
+  });
+  res.json(result);
+}));
+
 // Notifications
 app.get("/api/notifications",auth,asyncRoute(async(req:AuthRequest,res)=>{
   const list=await prisma.notification.findMany({where:{OR:[{userId:req.user!.id},{userId:null,audience:"all"},{userId:null,audience:req.user!.role}]},orderBy:{createdAt:"desc"}});
   res.json(list);
 }));
-app.patch("/api/notifications/:id/read",auth,asyncRoute(async(req,res)=>res.json(await prisma.notification.update({where:{id:req.params.id},data:{read:true}}))));
+app.patch("/api/notifications/:id/read",auth,asyncRoute(async(req:AuthRequest,res)=>{
+  const item=await prisma.notification.findUnique({where:{id:String(req.params.id)}});
+  if(!item)return res.status(404).json({message:"Notification not found"});
+  if(item.userId!==req.user!.id&&!(item.userId===null&&(item.audience==="all"||item.audience===req.user!.role)))return res.status(403).json({message:"Not allowed"});
+  res.json(await prisma.notification.update({where:{id:item.id},data:{read:true}}));
+}));
 
 // Analytics
 app.get("/api/analytics/overview",auth,roles("admin"),asyncRoute(async(_req,res)=>{
@@ -539,4 +769,4 @@ app.use((err:any,_req:Request,res:Response,_next:NextFunction)=>{
   res.status(500).json({message:"Internal server error"});
 });
 
-ensureBadmintonBookingTables().then(()=>ensureStorePosTables()).then(()=>app.listen(PORT,()=>console.log(`Zawana API running on http://localhost:${PORT}`))).catch((error)=>{console.error("Failed to prepare database tables",error);process.exit(1)});
+ensureBadmintonBookingTables().then(()=>ensurePrivateCourseTables()).then(()=>ensureStorePosTables()).then(()=>app.listen(PORT,()=>console.log(`Zawana API running on http://localhost:${PORT}`))).catch((error)=>{console.error("Failed to prepare database tables",error);process.exit(1)});

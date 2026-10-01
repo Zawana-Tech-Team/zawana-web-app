@@ -8,11 +8,14 @@ import { useAuth } from './context/AuthContext';
 import { Generic, Home, Login, Signup, CafeCustomer, Dashboard, Book, CourtBooking, CoachBooking, Bookings, Membership, Performance, Training, Revive, Classes, Community, Store, Notifications, Profile, Admin, AdminTable, GymCheckIn, ReviveClinicFO } from './pages';
 import OperationsPage from './pages/Operations';
 import { AdminManagement } from './pages/AdminManagement';
+import { PrivateCourse } from './pages/PrivateCourse';
+import { CoachCalendar } from './pages/CoachCalendar';
+import PrivateCourseAdmin from './pages/PrivateCourseAdmin';
 import type { UserRole } from './types';
 import { classes, courts } from './data';
 
 const homeByRole: Record<UserRole,string> = {
- member:'/dashboard', coach:'/coach', admin:'/admin', gym_fo:'/gym-fo', clinic_fo:'/clinic-fo',
+ member:'/member', coach:'/coach', admin:'/admin', gym_fo:'/gym-fo', clinic_fo:'/clinic-fo',
  badminton_fo:'/badminton-fo', store_fo:'/store-fo', cafe_fo:'/cafe', doctor:'/doctor',
 };
 
@@ -35,6 +38,7 @@ export default function App(){
   <Route path="/login" element={<Login/>}/><Route path="/signup" element={<Signup/>}/>
 
   {/* Customer experience — existing screens preserved */}
+  <Route path="/member" element={<Guard role="member"><Dashboard/></Guard>}/>
   <Route path="/dashboard" element={<Guard role="member"><Dashboard/></Guard>}/>
     <Route
     path="/book"
@@ -71,6 +75,7 @@ export default function App(){
         </Guard>
     }
     />
+  <Route path="/private-course" element={<Guard role="member"><PrivateCourse/></Guard>}/>
   <Route path="/membership" element={<Guard role="member"><Membership/></Guard>}/><Route path="/performance" element={<Guard role="member"><Performance/></Guard>}/>
   <Route path="/training" element={<Guard role="member"><Training/></Guard>}/><Route path="/revive" element={<Guard role="member"><Revive/></Guard>}/>
   <Route path="/classes" element={<Guard role="member"><Classes/></Guard>}/><Route path="/community" element={<Guard role="member"><Community/></Guard>}/>
@@ -88,12 +93,14 @@ export default function App(){
 
   {/* Department workspaces */}
   {['/badminton-fo','/badminton-fo/notifications','/badminton-fo/students','/badminton-fo/check-in','/badminton-fo/courts','/badminton-fo/bookings','/badminton-fo/packages','/badminton-fo/pos','/badminton-fo/transactions'].map(path=>operational('badminton_fo',path))}
+  <Route path="/badminton-fo/private-courses" element={<Guard role="badminton_fo"><PrivateCourseAdmin/></Guard>}/>
   {['/gym-fo','/gym-fo/notifications','/gym-fo/check-in','/gym-fo/members','/gym-fo/memberships','/gym-fo/appointments','/gym-fo/coaches','/gym-fo/payments'].map(path=>operational('gym_fo',path))}
   {['/clinic-fo','/clinic-fo/notifications','/clinic-fo/patients','/clinic-fo/appointments','/clinic-fo/doctors','/clinic-fo/schedule','/clinic-fo/records','/clinic-fo/payments'].map(path=>operational('clinic_fo',path))}
   {['/store-fo','/store-fo/notifications','/store-fo/products','/store-fo/categories','/store-fo/inventory','/store-fo/pos','/store-fo/orders','/store-fo/transactions'].map(path=>operational('store_fo',path))}
   {['/cafe','/cafe/notifications','/cafe/orders','/cafe/menu','/cafe/pos','/cafe/transactions'].map(path=>operational('cafe_fo',path))}
 
   {/* Professional portals */}
+  <Route path="/coach/schedule" element={<Guard role="coach"><CoachCalendar/></Guard>}/>
   {['/coach','/coach/notifications','/coach/schedule','/coach/bookings','/coach/clients','/coach/availability'].map(path=>operational('coach',path))}
   {['/doctor','/doctor/notifications','/doctor/schedule','/doctor/appointments','/doctor/patients','/doctor/profile'].map(path=>operational('doctor',path))}
 

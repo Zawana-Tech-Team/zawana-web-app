@@ -29,12 +29,13 @@ export type Court = {
 
 export type Booking = {
   id: string;
-  kind: 'court' | 'class' | 'pt' | 'recovery';
+  kind: 'court' | 'class' | 'pt' | 'recovery' | 'private_course';
   title: string;
   date: string;
   time: string;
   location: string;
-  status: 'confirmed' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'PENDING_COACH_CONFIRMATION' | 'AWAITING_PAYMENT' | 'CONFIRMED' | 'COACH_DECLINED' | 'CANCELLED' | 'COMPLETED' | 'EXPIRED';
+  paymentStatus?: 'pending' | 'paid' | 'refunded';
   price: number;
   meta?: string;
 };

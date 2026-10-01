@@ -5,8 +5,8 @@ import { Bell, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Home, LogOut, 
 import { Logo, Button } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 
-const member = [['/dashboard', 'Overview', Home], ['/book', 'Book', CalendarDays], ['/bookings', 'My Bookings', ClipboardList], ['/membership', 'Membership', Users], ['/performance', 'Performance', Activity], ['/training', 'Training', Dumbbell], ['/revive', 'Revive', HeartPulse], ['/community', 'Community', Users], ['/store', 'Store', ShoppingBag], ['/cafe-order', 'Cafe', ShoppingBag]] as const;
-const coach = [['/coach', 'Overview', Home], ['/coach/schedule', 'Schedule', CalendarDays], ['/coach/clients', 'Clients', Users], ['/coach/programs', 'Programs', Dumbbell], ['/coach/assessments', 'Assessments', Activity]] as const;
+const member = [['/member', 'Overview', Home], ['/book/court', 'Courts', CalendarDays], ['/private-course', 'Private Course', Dumbbell], ['/bookings', 'Bookings', ClipboardList], ['/membership', 'Packages', Users]] as const;
+const coach = [['/coach', 'Overview', Home], ['/coach/schedule', 'Schedule', CalendarDays], ['/coach/bookings', 'Requests', ClipboardList], ['/coach/clients', 'Clients', Users]] as const;
 const admin = [['/admin', 'Overview', Home], ['/admin/members', 'Members', Users], ['/admin/bookings', 'Bookings', CalendarDays], ['/admin/courts', 'Courts', Building2], ['/admin/classes', 'Classes', Dumbbell], ['/admin/coaches', 'Coaches', Users], ['/admin/payments', 'Payments', ClipboardList], ['/admin/checkins', 'Check-ins', Activity], ['/admin/analytics', 'Analytics', BarChart3]] as const;
 
 function Sidebar({ items, collapsed, onCollapse }: { items: readonly (readonly [string, string, typeof Home])[]; collapsed: boolean; onCollapse: () => void }) {
@@ -22,7 +22,7 @@ function Sidebar({ items, collapsed, onCollapse }: { items: readonly (readonly [
         </div>
         <nav className="mt-7 space-y-1">
           {items.map(([to, label, Icon]) => (
-            <NavLink key={to} to={to} end={to === '/dashboard' || to === '/coach' || to === '/admin'} className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${isActive ? 'bg-zawana-950 text-white' : 'text-zawana-500 hover:bg-zawana-950/5 hover:text-zawana-950'}`}>
+            <NavLink key={to} to={to} end={to === '/member' || to === '/coach' || to === '/admin'} className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${isActive ? 'bg-zawana-950 text-white' : 'text-zawana-500 hover:bg-zawana-950/5 hover:text-zawana-950'}`}>
               <Icon size={18} />
               {!collapsed && label}
             </NavLink>

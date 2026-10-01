@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -31,6 +30,7 @@ enum BookingKind {
   class
   pt
   recovery
+  private_course
 }
 
 enum BookingStatus {
@@ -38,6 +38,13 @@ enum BookingStatus {
   confirmed
   completed
   cancelled
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  PENDING_COACH_CONFIRMATION
+  AWAITING_PAYMENT
+  COACH_DECLINED
+  EXPIRED
 }
 
 enum PaymentStatus {
@@ -97,28 +104,29 @@ enum TransactionBusiness {
 }
 
 model User {
-  id           String       @id @default(cuid())
-  name         String
-  email        String       @unique
-  passwordHash String
-  role         Role         @default(member)
-  phone        String?
-  membership   String?
-  avatar       String?
-  createdAt    DateTime     @default(now())
-  bookings     Booking[]
-  notifications Notification[]
+  id                   String                @id @default(cuid())
+  name                 String
+  email                String                @unique
+  passwordHash         String
+  role                 Role                  @default(member)
+  phone                String?
+  membership           String?
+  avatar               String?
+  createdAt            DateTime              @default(now())
+  bookings             Booking[]
+  notifications        Notification[]
+  badmintonEnrollments BadmintonEnrollment[]
 }
 
 model Court {
-  id        String      @id @default(cuid())
-  name      String      @unique
+  id        String       @id @default(cuid())
+  name      String       @unique
   type      String
   surface   String
   price     Int
-  status    CourtStatus @default(available)
+  status    CourtStatus  @default(available)
   features  Json
-  createdAt DateTime    @default(now())
+  createdAt DateTime     @default(now())
   bookings  Booking[]
   blocks    CourtBlock[]
 }
@@ -163,104 +171,121 @@ model Coach {
 }
 
 model Schedule {
-  id        String       @id @default(cuid())
-  person    String
-  role      ScheduleRole
-  day       String
-  start     String
-  end       String
-  service   String?
-  active    Boolean      @default(true)
-  coachId   String?
-  coach     Coach?       @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  id      String       @id @default(cuid())
+  person  String
+  role    ScheduleRole
+  day     String
+  start   String
+  end     String
+  service String?
+  active  Boolean      @default(true)
+  coachId String?
+  coach   Coach?       @relation(fields: [coachId], references: [id], onDelete: SetNull)
 }
 
 model Booking {
-  id            String        @id @default(cuid())
-  code          String        @unique
-  userId        String
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kind          BookingKind
-  title         String
-  date          String
-  time          String
-  location      String
-  status        BookingStatus @default(pending)
-  price         Int
-  courtId       String?
-  court         Court?        @relation(fields: [courtId], references: [id], onDelete: SetNull)
-  coachId       String?
-  coach         Coach?        @relation(fields: [coachId], references: [id], onDelete: SetNull)
-  meta          String?
-  paymentStatus PaymentStatus @default(pending)
-  createdAt     DateTime      @default(now())
+  id                   String        @id @default(cuid())
+  code                 String        @unique
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind                 BookingKind
+  title                String
+  date                 String
+  time                 String
+  location             String
+  status               BookingStatus @default(pending)
+  price                Int
+  courtId              String?
+  court                Court?        @relation(fields: [courtId], references: [id], onDelete: SetNull)
+  coachId              String?
+  coach                Coach?        @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  meta                 String?
+  paymentStatus        PaymentStatus @default(pending)
+  reservationExpiresAt DateTime?
+  createdAt            DateTime      @default(now())
+
+  @@index([userId, createdAt])
+  @@index([courtId, date, status])
+  @@index([coachId, date, status])
+}
+
+model PrivateCourse {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  duration    Int      @default(60)
+  price       Int
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+
+  @@index([status, title])
 }
 
 model Class {
-  id          String  @id @default(cuid())
-  title       String
-  coach       String
-  time        String
-  duration    Int
-  capacity    Int
-  booked      Int     @default(0)
-  level       String
-  location    String
-  price       Int
+  id       String @id @default(cuid())
+  title    String
+  coach    String
+  time     String
+  duration Int
+  capacity Int
+  booked   Int    @default(0)
+  level    String
+  location String
+  price    Int
 }
 
 model MembershipPlan {
-  id       String   @id @default(cuid())
+  id       String @id @default(cuid())
   title    String
   price    Int
   duration Int
   kind     String
   features Json
-  status   String   @default("active")
+  status   String @default("active")
 }
 
 model Membership {
-  id         String @id @default(cuid())
-  customerId String
-  customer   String
-  phone      String
-  packageId  String
-  package    String
-  startDate  String
-  expiryDate String
-  status     String
+  id          String  @id @default(cuid())
+  customerId  String
+  customer    String
+  phone       String
+  packageId   String
+  package     String
+  startDate   String
+  expiryDate  String
+  status      String
   lastCheckIn String?
 }
 
 model Product {
-  id                    String                  @id @default(cuid())
+  id                    String                 @id @default(cuid())
   name                  String
   price                 Int
   category              String
   categoryId            String?
-  categoryRef           ProductCategory?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryRef           ProductCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   description           String
-  sku                   String                  @unique
-  barcode               String                  @unique
-  stock                 Int                     @default(0)
-  cost                  Int                     @default(0)
-  tax                   Int                     @default(0)
-  status                ProductStatus           @default(active)
+  sku                   String                 @unique
+  barcode               String                 @unique
+  stock                 Int                    @default(0)
+  cost                  Int                    @default(0)
+  tax                   Int                    @default(0)
+  status                ProductStatus          @default(active)
   inventoryTransactions InventoryTransaction[]
 }
 
 model InventoryTransaction {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   productId String
   type      String
   quantity  Int
   note      String
   date      String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model StoreOrder {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   customer String
   total    Int
   paid     Int
@@ -343,10 +368,11 @@ model BadmintonPackage {
   status      String @default("active")
 }
 
-
 model BadmintonEnrollment {
-  id                String   @id @default(cuid())
+  id                String             @id @default(cuid())
   studentId         String
+  userId            String?
+  user              User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
   studentName       String
   phone             String
   packageId         String
@@ -355,13 +381,14 @@ model BadmintonEnrollment {
   sessionsRemaining Int
   startDate         String
   expiryDate        String
-  status            String   @default("active")
-  renewalCount      Int      @default(0)
+  status            String             @default("active")
+  renewalCount      Int                @default(0)
   lastCheckIn       String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime           @default(now())
   checkIns          BadmintonCheckIn[]
 
   @@index([studentId])
+  @@index([userId])
   @@index([expiryDate, status])
 }
 

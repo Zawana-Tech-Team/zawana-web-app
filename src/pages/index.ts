@@ -18,6 +18,8 @@ export { AdminTable } from './AdminTable';
 export { Login } from './Login';
 export { Signup } from './Signup';
 export { Generic } from './Generic';
+export { PrivateCourse } from './PrivateCourse';
+export { CoachCalendar } from './CoachCalendar';
 
 export { ReviveClinicFO } from './ReviveClinicFO';
 export { GymCheckIn } from './GymCheckIn';
