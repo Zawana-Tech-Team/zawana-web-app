@@ -33,7 +33,7 @@ export function Bookings() {
                       {String(booking.status).replaceAll("_", " ")}
                     </Badge>
                     {booking.kind === "private_course" ? (
-                      <Badge>{booking.paymentStatus === "paid" ? "Paid" : booking.status === "AWAITING_PAYMENT" ? "Payment required" : "Coach confirmation"}</Badge>
+                      <Badge>{booking.paymentStatus === "paid" ? "Paid" : booking.status === "AWAITING_PAYMENT" ? "Payment required" : booking.status === "COACH_DECLINED" ? "Declined" : booking.status === "EXPIRED" ? "Expired" : "Coach review"}</Badge>
                     ) : null}
                   </div>
                   <p className="mt-2 text-sm text-zawana-500">
@@ -44,15 +44,20 @@ export function Bookings() {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  {booking.status === "PENDING_COACH_CONFIRMATION" ? (
+                    <span className="inline-flex items-center rounded-xl bg-amber-50 px-3 py-2 text-xs font-black text-amber-800">Court reserved · awaiting coach</span>
+                  ) : null}
                   {booking.status === "AWAITING_PAYMENT" ? (
                     <Button onClick={async () => {
                       try {
-                        await post(`/member/private-courses/${booking.id}/pay`, {});
-                        load();
+                        const result = await post<any>(`/member/private-courses/${booking.id}/pay`, {});
+                        if (result.payment?.checkoutUrl) window.location.assign(result.payment.checkoutUrl);
+                        else if (result.payment?.qrCode) window.location.assign(`/payment/${result.payment.id}`);
+                        else throw new Error("KPay did not return a checkout link.");
                       } catch (error: any) {
                         window.dispatchEvent(new CustomEvent("zawana-toast", { detail: error.message }));
                       }
-                    }}>Payment instructions</Button>
+                    }}>Pay now</Button>
                   ) : null}
                   {["confirmed", "CONFIRMED", "pending", "PENDING_COACH_CONFIRMATION", "AWAITING_PAYMENT"].includes(booking.status) ? (
                     <Button variant="danger" onClick={() => cancel(booking)}>Cancel</Button>

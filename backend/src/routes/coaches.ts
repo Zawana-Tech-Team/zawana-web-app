@@ -1,81 +1,16 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { auth, roles } from "../middleware/auth.js";
 import { asyncRoute } from "../utils/asyncRoute.js";
-import { $Enums } from "@prisma/client";
 
-const router = Router();
-
-router.get(
-  "/",
-  asyncRoute(async (_req: any, res: { json: (arg0: ({ schedules: { coachId: string | null; id: string; end: string; active: boolean; role: $Enums.ScheduleRole; day: string; person: string; start: string; service: string | null; }[]; } & { id: string; status: $Enums.CoachStatus; name: string; email: string; phone: string; specialty: string; color: string; })[]) => void; }) => {
-    res.json(
-      await prisma.coach.findMany({
-        include: { schedules: true },
-        orderBy: { name: "asc" },
-      })
-    );
-  })
-);
-
-router.post(
-  "/",
-  auth,
-  roles("admin", "gym_fo"),
-  asyncRoute(async (req: { body: unknown; }, res: { status: (arg0: number) => { (): any; new(): any; json: { (arg0: { name: string; id: string; specialty: string; phone: string; email: string; status: $Enums.CoachStatus; color: string; }): void; new(): any; }; }; }) => {
-    const b = z
-      .object({
-        name: z.string(),
-        specialty: z.string(),
-        phone: z.string(),
-        email: z.string().email(),
-        status: z.enum(["active", "inactive"]).optional(),
-        color: z.string().optional(),
-      })
-      .parse(req.body);
-
-    res.status(201).json(
-      await prisma.coach.create({
-        data: {
-          ...b,
-          status: b.status || "active",
-          color: b.color || "#D6FF3F",
-        },
-      })
-    );
-  })
-);
-
-router.patch(
-  "/:id",
-  auth,
-  roles("admin", "gym_fo"),
-  asyncRoute(async (req: { body: unknown; params: { id: any; }; }, res: { json: (arg0: { name: string; id: string; specialty: string; phone: string; email: string; status: $Enums.CoachStatus; color: string; }) => void; }) => {
-    const b = z
-      .object({
-        name: z.string().optional(),
-        specialty: z.string().optional(),
-        phone: z.string().optional(),
-        email: z.string().email().optional(),
-        status: z.enum(["active", "inactive"]).optional(),
-        color: z.string().optional(),
-      })
-      .parse(req.body);
-
-    res.json(
-      await prisma.coach.update({
-        where: { id: req.params.id },
-        data: b,
-      })
-    );
-  })
-);
-
-
-router.delete("/:id", auth, roles("admin"), asyncRoute(async (req, res) => {
-  await prisma.coach.delete({ where: { id: String(req.params.id) } });
-  res.status(204).end();
+const router=Router();
+router.get("/",auth,asyncRoute(async(req:Request&{user?:{role:string}},res:Response)=>res.json(await prisma.coach.findMany({where:req.user?.role==="admin"?{}:{status:"active",user:{is:{active:true,role:"coach"}}},include:{user:{select:{id:true,name:true,avatar:true,active:true}}},orderBy:{name:"asc"}}))));
+router.post("/",auth,roles("admin"),asyncRoute(async(req:Request,res:Response)=>{
+ const b=z.object({name:z.string(),specialty:z.string(),phone:z.string(),email:z.string().email(),status:z.enum(["active","inactive"]).optional(),color:z.string().optional()}).parse(req.body);
+ const user=await prisma.user.findFirst({where:{email:b.email.toLowerCase(),role:"coach",active:true}});if(!user)return res.status(400).json({message:"Link an active Coach account first."});
+ res.status(201).json(await prisma.coach.create({data:{...b,email:user.email,userId:user.id,status:b.status||"active",color:b.color||"#D6FF3F"}}));
 }));
-
+router.patch("/:id",auth,roles("admin"),asyncRoute(async(req:Request,res:Response)=>res.json(await prisma.coach.update({where:{id:String(req.params.id)},data:z.object({name:z.string().optional(),specialty:z.string().optional(),phone:z.string().optional(),status:z.enum(["active","inactive"]).optional(),color:z.string().optional(),imageUrl:z.string().nullable().optional()}).parse(req.body)}))));
+router.delete("/:id",auth,roles("admin"),asyncRoute(async(req:Request,res:Response)=>{await prisma.coach.update({where:{id:String(req.params.id)},data:{status:"inactive"}});res.status(204).end()}));
 export default router;

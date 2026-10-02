@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Bell, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Home, LogOut, Menu, ShoppingBag, UserRound, Users, BarChart3, Activity, HeartPulse, Settings, ClipboardList, Building2, X } from 'lucide-react';
+import { Bell, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Home, LogOut, Menu, ShoppingBag, UserRound, Users, BarChart3, Activity, HeartPulse, Settings, ClipboardList, Building2, X, CreditCard } from 'lucide-react';
 import { Logo, Button } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
+import { NotificationBell } from '../components/NotificationBell';
 
-const member = [['/member', 'Overview', Home], ['/book/court', 'Courts', CalendarDays], ['/private-course', 'Private Course', Dumbbell], ['/bookings', 'Bookings', ClipboardList], ['/membership', 'Packages', Users]] as const;
+const member = [['/member', 'Overview', Home], ['/book/court', 'Courts', CalendarDays], ['/private-course', 'Private Course', Dumbbell], ['/bookings', 'Bookings', ClipboardList], ['/membership', 'Packages', Users], ['/payments', 'Payments', CreditCard]] as const;
 const coach = [['/coach', 'Overview', Home], ['/coach/schedule', 'Schedule', CalendarDays], ['/coach/bookings', 'Requests', ClipboardList], ['/coach/clients', 'Clients', Users]] as const;
-const admin = [['/admin', 'Overview', Home], ['/admin/members', 'Members', Users], ['/admin/bookings', 'Bookings', CalendarDays], ['/admin/courts', 'Courts', Building2], ['/admin/classes', 'Classes', Dumbbell], ['/admin/coaches', 'Coaches', Users], ['/admin/payments', 'Payments', ClipboardList], ['/admin/checkins', 'Check-ins', Activity], ['/admin/analytics', 'Analytics', BarChart3]] as const;
+const admin = [['/admin', 'Overview', Home], ['/admin/users', 'Users', Users], ['/admin/bookings', 'Bookings', CalendarDays], ['/admin/courts', 'Courts', Building2], ['/admin/classes', 'Classes', Dumbbell], ['/admin/coaches', 'Coaches', Users], ['/admin/payments', 'Payments', ClipboardList], ['/admin/checkins', 'Check-ins', Activity], ['/admin/analytics', 'Analytics', BarChart3]] as const;
 
 function Sidebar({ items, collapsed, onCollapse }: { items: readonly (readonly [string, string, typeof Home])[]; collapsed: boolean; onCollapse: () => void }) {
   const { logout } = useAuth();
@@ -84,14 +85,14 @@ export function AppLayout({ children, role }: { children: ReactNode; role: 'memb
           <div className="lg:hidden"><Logo compact /></div>
           <div className="ml-auto flex items-center gap-3">
             <span className="hidden text-sm font-semibold text-zawana-500 md:block">{user?.name}</span>
-            <NavLink to="/notifications" className="rounded-full p-2.5 hover:bg-zawana-950/5"><Bell size={19} /></NavLink>
+            <NotificationBell />
             <NavLink to="/profile" className="grid h-9 w-9 place-items-center rounded-full bg-zawana-gold text-xs font-black text-zawana-950">{user?.name?.slice(0, 2).toUpperCase()}</NavLink>
           </div>
         </header>
         {children}
       </div>
-      <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 border-t border-zawana-950/10 bg-white/95 p-2 backdrop-blur lg:hidden">
-        {member.slice(0, 5).map(([to, label, Icon]) => <NavLink key={to} to={to} className={({ isActive }) => `flex flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-bold ${isActive ? 'text-zawana-950' : 'text-zawana-500'}`}><Icon size={18} />{label}</NavLink>)}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-6 border-t border-zawana-950/10 bg-white/95 p-2 backdrop-blur lg:hidden">
+        {member.map(([to, label, Icon]) => <NavLink key={to} to={to} className={({ isActive }) => `flex flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-bold ${isActive ? 'text-zawana-950' : 'text-zawana-500'}`}><Icon size={18} />{label}</NavLink>)}
       </nav>
     </div>
   );

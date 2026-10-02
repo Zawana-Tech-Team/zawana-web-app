@@ -57,11 +57,12 @@ export function OperationsProvider({children}:{children:ReactNode}){
    const role=user.role;
    const canInventory=role==='admin'||role==='store_fo';
    const canTransactions=['admin','gym_fo','badminton_fo','clinic_fo','store_fo','cafe_fo'].includes(role);
+   const canSchedules=['admin','clinic_fo','doctor'].includes(role);
    const results=await Promise.allSettled([
      get<any[]>("/packages/badminton"),get<any[]>("/packages/gym"),get<any[]>("/memberships"),
      get<any[]>("/courts"),get<any[]>("/coaches"),get<any[]>("/bookings"),get<any[]>("/appointments"),
-     get<any[]>("/schedules"),get<any[]>("/products"),canInventory?get<any[]>("/inventory"):Promise.resolve([]),canInventory?get<any[]>("/store/categories"):Promise.resolve([]),canInventory?get<any[]>("/store/orders"):Promise.resolve([]),get<any[]>("/cafe/orders"),get<any[]>("/menu"),
-     canTransactions?get<any[]>("/transactions"):Promise.resolve([]),get<any[]>("/content"),get<any[]>("/students")
+     canSchedules?get<any[]>("/schedules"):Promise.resolve([]),get<any[]>("/products"),canInventory?get<any[]>("/inventory"):Promise.resolve([]),canInventory?get<any[]>("/store/categories"):Promise.resolve([]),canInventory?get<any[]>("/store/orders"):Promise.resolve([]),get<any[]>("/cafe/orders"),get<any[]>("/menu"),
+     canTransactions?get<any[]>("/transactions"):Promise.resolve([]),get<any[]>("/content")
    ]);
    const val=(i:number)=>results[i].status==="fulfilled"?results[i].value:[];
    const bookings=val(5);
@@ -69,7 +70,7 @@ export function OperationsProvider({children}:{children:ReactNode}){
      badmintonPackages:val(0),gymPackages:val(1),memberships:val(2),managedCourts:val(3),coaches:val(4),
      courtBookings:bookings.filter((b:any)=>b.kind==="court").map((b:any)=>{let meta:any={};try{meta=b.meta?JSON.parse(b.meta):{}}catch{};return {id:b.id,customer:meta.customerName||b.user?.name||"Member",court:b.court?.name||b.title,date:b.date,time:b.time,session:60,price:b.price,paymentStatus:b.paymentStatus,status:b.status}}),
      appointments:val(6),schedules:val(7),
-     products:val(8),inventory:val(9),categories:val(10),storeOrders:val(11),cafeOrders:val(12),menu:val(13),transactions:val(14),content:val(15),students:val(16)
+     products:val(8),inventory:val(9),categories:val(10),storeOrders:val(11),cafeOrders:val(12),menu:val(13),transactions:val(14),content:val(15),students:[]
    });
  };
  useEffect(()=>{refresh().catch(console.error)},[user?.id]);

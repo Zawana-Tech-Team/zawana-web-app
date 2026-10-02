@@ -40,7 +40,7 @@ export function Button({ children, variant = 'primary', className = '', ...p }: 
   );
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function Card({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return <div className={`rounded-[24px] border border-zawana-950/8 bg-white ${className}`}>{children}</div>;
 }
 

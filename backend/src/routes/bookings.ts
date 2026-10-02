@@ -51,7 +51,7 @@ const calculateCourtPrice = async (courtId: string, date: string, start: number)
 
 router.get(
   "/availability",
-  asyncRoute(async (req: { query: { date: any; courtId: any; coachId: any; }; }, res: { json: (arg0: { id: string; status: $Enums.BookingStatus; date: string; time: string; courtId: string | null; coachId: string | null; }[]) => void; }) => {
+  asyncRoute(async (req: { query: { date: any; courtId: any; coachId: any; }; }, res: any) => {
     const date = String(req.query.date || today());
     const courtId = String(req.query.courtId || "");
     const coachId = String(req.query.coachId || "");

@@ -117,7 +117,7 @@ export function Home(){
             <div className="mt-5 grid grid-cols-3 gap-3 text-center">
 
               <div>
-                <p className="text-xl font-black">6</p>
+                <p className="text-xl font-black">8</p>
                 <p className="mt-1 text-[9px] uppercase tracking-[.15em] text-white/50">
                   Courts
                 </p>

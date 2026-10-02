@@ -5,6 +5,6 @@ import type {
 } from "express";
 
 export const asyncRoute =
-  (fn: any) =>
+  (fn: (...args: any[]) => any) =>
   (req: Request, res: Response, next: NextFunction) =>
     Promise.resolve(fn(req, res, next)).catch(next);

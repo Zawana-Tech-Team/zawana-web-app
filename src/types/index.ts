@@ -160,6 +160,14 @@ export type BadmintonPackage = {
   validity: number;
   description: string;
   status: 'active' | 'inactive';
+  categoryId?: string | null;
+  imageUrl?: string | null;
+  availableDays?: string[] | null;
+  availableFrom?: string | null;
+  availableUntil?: string | null;
+  scheduleNotes?: string | null;
+  courtRules?: string | null;
+  category?: { id: string; name: string } | null;
 };
 
 export type GymPackage = {
@@ -228,12 +236,13 @@ export type CoachProfile = {
   email: string;
   status: 'active' | 'inactive';
   color: string;
+  imageUrl?: string | null;
 };
 
 export type Schedule = {
   id: string;
   person: string;
-  role: 'coach' | 'doctor';
+  role: 'doctor';
   day: string;
   start: string;
   end: string;

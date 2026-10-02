@@ -22,6 +22,10 @@ const roleConfig: Record<UserRole, { title: string; description: string; emptyTi
   admin: { title: 'Admin Notifications', description: 'Important updates from across Zawana operations.', emptyTitle: 'No operational alerts', emptyBody: 'There are no new administrative notifications right now.' },
   gym_fo: { title: 'Notifications', description: 'Check-ins, memberships, attendance and desk tasks.', emptyTitle: 'Gym desk is clear', emptyBody: 'There are no new gym front-office notifications.' },
   clinic_fo: { title: 'Notifications', description: 'Appointments, treatment requests and clinic tasks.', emptyTitle: 'Clinic desk is clear', emptyBody: 'There are no new Revive Clinic notifications.' },
+  badminton_fo: { title: 'Notifications', description: 'Badminton bookings, packages and court activity.', emptyTitle: 'Badminton desk is clear', emptyBody: 'There are no new badminton operations notifications.' },
+  store_fo: { title: 'Notifications', description: 'Store orders, payment and inventory updates.', emptyTitle: 'Store desk is clear', emptyBody: 'There are no new store notifications.' },
+  cafe_fo: { title: 'Notifications', description: 'Paid orders and cafe service updates.', emptyTitle: 'Cafe desk is clear', emptyBody: 'There are no new cafe notifications.' },
+  doctor: { title: 'Notifications', description: 'Clinic appointments and patient updates.', emptyTitle: 'No doctor notifications', emptyBody: 'There are no new clinical updates.' },
 };
 
 function getNotificationIcon(notification: Notification, role: UserRole) {

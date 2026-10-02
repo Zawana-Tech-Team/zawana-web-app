@@ -52,27 +52,8 @@ router.get("/orders", auth, storeRoles, asyncRoute(async (_req, res) => {
   res.json(await prisma.storeOrder.findMany({ orderBy: { id: "desc" } }));
 }));
 
-router.post("/orders", auth, storeRoles, asyncRoute(async (req: any, res) => {
-  const body = z.object({
-    customer: z.string().default("Walk-in Customer"), itemSummary: z.string().default("Store sale"), total: z.number().int().nonnegative(), paid: z.number().int().nonnegative(), paymentMethod: z.enum(["Cash", "KPay", "Pay Later"]),
-    dueDate: z.string().optional(), status: z.enum(["pending", "partially_paid", "paid", "overdue"]), items: z.array(z.object({ productId: z.string(), quantity: z.number().int().positive() }))
-  }).parse(req.body);
-  const order = await prisma.$transaction(async tx => {
-    for (const item of body.items) {
-      const p = await tx.product.findUnique({ where: { id: item.productId } });
-      if (!p || p.stock < item.quantity) throw new Error(`${p?.name || "Product"} has insufficient stock.`);
-      await tx.product.update({ where: { id: p.id }, data: { stock: { decrement: item.quantity } } });
-      await tx.inventoryTransaction.create({ data: { productId: p.id, type: "remove", quantity: item.quantity, note: `POS sale ${body.status === "pending" || body.status === "partially_paid" ? "pay later" : "sale"}`, date: today() } });
-    }
-    const order = await tx.storeOrder.create({ data: { customer: body.customer, total: body.total, paid: body.paid, dueDate: body.dueDate, status: body.status, items: body.items } });
-    await tx.transaction.create({ data: {
-      date: today(), customer: body.customer, business: "Store", item: body.itemSummary,
-      amount: body.total, discount: 0, tax: 0, finalAmount: body.total, paymentMethod: body.paymentMethod,
-      staff: req.user?.name || "Store FO", status: body.paymentMethod === "Pay Later" ? "pending" : "paid"
-    }});
-    return order;
-  });
-  res.status(201).json(order);
+router.post("/orders", auth, storeRoles, asyncRoute(async (_req, res) => {
+  return res.status(410).json({ message: "Store POS sales must use the verified KPay checkout flow. Direct cash, pay-later, and client-reported KPay transactions are disabled." });
 }));
 
 export default router;

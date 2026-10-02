@@ -11,6 +11,9 @@ import { AdminManagement } from './pages/AdminManagement';
 import { PrivateCourse } from './pages/PrivateCourse';
 import { CoachCalendar } from './pages/CoachCalendar';
 import PrivateCourseAdmin from './pages/PrivateCourseAdmin';
+import UserManagement from './pages/UserManagement';
+import PaymentHistory from './pages/PaymentHistory';
+import { PaymentStatus } from './pages/PaymentStatus';
 import type { UserRole } from './types';
 import { classes, courts } from './data';
 
@@ -75,6 +78,8 @@ export default function App(){
         </Guard>
     }
     />
+  <Route path="/payments" element={<Guard role="member"><PaymentHistory/></Guard>}/>
+  <Route path="/payment/:id" element={<Guard role="member"><PaymentStatus/></Guard>}/>
   <Route path="/private-course" element={<Guard role="member"><PrivateCourse/></Guard>}/>
   <Route path="/membership" element={<Guard role="member"><Membership/></Guard>}/><Route path="/performance" element={<Guard role="member"><Performance/></Guard>}/>
   <Route path="/training" element={<Guard role="member"><Training/></Guard>}/><Route path="/revive" element={<Guard role="member"><Revive/></Guard>}/>
@@ -83,17 +88,21 @@ export default function App(){
   <Route path="/profile" element={<Guard role="member"><Profile/></Guard>}/><Route path="/settings" element={<Guard role="member"><Generic title="Settings" body="Manage preferences, notifications, security and demo-mode controls."/></Guard>}/>
 
   {/* Admin */}
-  {['/admin','/admin/notifications','/admin/badminton-packages','/admin/gym-packages','/admin/students','/admin/finance','/admin/cms'].map(path=>operational('admin',path))}
+  {['/admin','/admin/notifications','/admin/badminton-packages','/admin/gym-packages','/admin/finance','/admin/cms'].map(path=>operational('admin',path))}
+  <Route path="/admin/users" element={<Guard role="admin"><UserManagement/></Guard>}/>
+  <Route path="/admin/students" element={<Guard role="admin"><Navigate to="/admin/users" replace/></Guard>}/>
   <Route path="/admin/courts" element={<Guard role="admin"><AdminManagement section="courts"/></Guard>}/>
   <Route path="/admin/coaches" element={<Guard role="admin"><AdminManagement section="coaches"/></Guard>}/>
-  <Route path="/admin/schedules" element={<Guard role="admin"><AdminManagement section="schedules"/></Guard>}/>
-  <Route path="/admin/members" element={<Guard role="admin"><AdminTable title="Members" items={['Sai Zay','Htet Aung','Su Myat Thiri']}/></Guard>}/>
+  <Route path="/admin/private-courses" element={<Guard role="admin"><PrivateCourseAdmin/></Guard>}/>
+  <Route path="/admin/schedules" element={<Guard role="admin"><Navigate to="/admin/coaches" replace/></Guard>}/>
+  <Route path="/admin/members" element={<Guard role="admin"><Navigate to="/admin/users" replace/></Guard>}/>
   <Route path="/admin/bookings" element={<Guard role="admin"><AdminTable title="Bookings" items={courts.map(c=>c.name)}/></Guard>}/>
   <Route path="/admin/classes" element={<Guard role="admin"><AdminTable title="Classes" items={classes.map(c=>c.title)}/></Guard>}/>
 
   {/* Department workspaces */}
-  {['/badminton-fo','/badminton-fo/notifications','/badminton-fo/students','/badminton-fo/check-in','/badminton-fo/courts','/badminton-fo/bookings','/badminton-fo/packages','/badminton-fo/pos','/badminton-fo/transactions'].map(path=>operational('badminton_fo',path))}
-  <Route path="/badminton-fo/private-courses" element={<Guard role="badminton_fo"><PrivateCourseAdmin/></Guard>}/>
+  {['/badminton-fo','/badminton-fo/notifications','/badminton-fo/check-in','/badminton-fo/courts','/badminton-fo/bookings','/badminton-fo/packages','/badminton-fo/pos','/badminton-fo/transactions'].map(path=>operational('badminton_fo',path))}
+  <Route path="/badminton-fo/students" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/check-in" replace/></Guard>}/>
+  <Route path="/badminton-fo/private-courses" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/bookings" replace/></Guard>}/>
   {['/gym-fo','/gym-fo/notifications','/gym-fo/check-in','/gym-fo/members','/gym-fo/memberships','/gym-fo/appointments','/gym-fo/coaches','/gym-fo/payments'].map(path=>operational('gym_fo',path))}
   {['/clinic-fo','/clinic-fo/notifications','/clinic-fo/patients','/clinic-fo/appointments','/clinic-fo/doctors','/clinic-fo/schedule','/clinic-fo/records','/clinic-fo/payments'].map(path=>operational('clinic_fo',path))}
   {['/store-fo','/store-fo/notifications','/store-fo/products','/store-fo/categories','/store-fo/inventory','/store-fo/pos','/store-fo/orders','/store-fo/transactions'].map(path=>operational('store_fo',path))}
@@ -101,7 +110,8 @@ export default function App(){
 
   {/* Professional portals */}
   <Route path="/coach/schedule" element={<Guard role="coach"><CoachCalendar/></Guard>}/>
-  {['/coach','/coach/notifications','/coach/schedule','/coach/bookings','/coach/clients','/coach/availability'].map(path=>operational('coach',path))}
+  {['/coach','/coach/notifications','/coach/bookings','/coach/clients'].map(path=>operational('coach',path))}
+  <Route path="/coach/availability" element={<Guard role="coach"><Navigate to="/coach/schedule" replace/></Guard>}/>
   {['/doctor','/doctor/notifications','/doctor/schedule','/doctor/appointments','/doctor/patients','/doctor/profile'].map(path=>operational('doctor',path))}
 
   {/* Existing specialized screens remain available during migration */}
