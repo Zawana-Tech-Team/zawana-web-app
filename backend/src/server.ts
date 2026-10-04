@@ -1217,14 +1217,13 @@ app.get("/api/coach/calendar",auth,roles("coach"),asyncRoute(async(req:AuthReque
   if(!coach)return res.json({coach:null,bookings:[]});
   const start=String(req.query.start||today()),end=String(req.query.end||start);
   if(!isDateKey(start)||!isDateKey(end)||end<start)return res.status(400).json({message:"Choose a valid calendar date range."});
-   await expirePrivateCourseReservations();
-  const booking=await prisma.booking.findUnique({where:{id:String(req.params.id)},include:{coach:true,court:true}});
-  if(!booking||booking.userId!==req.user!.id||booking.kind!=="private_course")return res.status(404).json({message:"Private course booking not found."});
-  if(booking.status!=="AWAITING_PAYMENT")return res.status(409).json({message:booking.status==="EXPIRED"?"The payment window expired and this reservation has been released.":"This private course is not awaiting payment."});
-  const expiresAt=booking.reservationExpiresAt||(booking.coachAcceptedAt?new Date(booking.coachAcceptedAt.getTime()+24*60*60*1000):null);
-  if(!expiresAt||expiresAt<=new Date())return res.status(409).json({message:"This booking has no active payment window. Refresh your bookings or contact support."});
-  const attempt=await startKPayAttempt(req.user!.id,"private_course",booking.id,booking.price,`Private course · ${booking.title}`,expiresAt);
-  res.status(201).json({attempt});
+  await expirePrivateCourseReservations();
+  const bookings=await prisma.booking.findMany({
+    where:{coachId:coach.id,kind:"private_course",date:{gte:start,lte:end},status:{in:["PENDING_COACH_CONFIRMATION","AWAITING_PAYMENT","CONFIRMED","COMPLETED"]}},
+    include:{user:{select:{id:true,name:true,email:true,phone:true}},court:true,coach:true},
+    orderBy:[{date:"asc"},{time:"asc"}],take:300
+  });
+  res.json({coach:{id:coach.id,name:coach.name,imageUrl:coach.imageUrl},bookings});
 }));
 app.post("/api/member/private-courses/:id/cancel",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>{
   await expirePrivateCourseReservations();
