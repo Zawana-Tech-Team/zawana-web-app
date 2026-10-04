@@ -1221,7 +1221,7 @@ app.get("/api/coach/calendar",auth,roles("coach"),asyncRoute(async(req:AuthReque
   const booking=await prisma.booking.findUnique({where:{id:String(req.params.id)},include:{coach:true,court:true}});
   if(!booking||booking.userId!==req.user!.id||booking.kind!=="private_course")return res.status(404).json({message:"Private course booking not found."});
   if(booking.status!=="AWAITING_PAYMENT")return res.status(409).json({message:booking.status==="EXPIRED"?"The payment window expired and this reservation has been released.":"This private course is not awaiting payment."});
-  const expiresAt=booking.paymentExpiresAt||booking.reservationExpiresAt||(booking.coachAcceptedAt?new Date(booking.coachAcceptedAt.getTime()+24*60*60*1000):null);
+  const expiresAt=booking.reservationExpiresAt||(booking.coachAcceptedAt?new Date(booking.coachAcceptedAt.getTime()+24*60*60*1000):null);
   if(!expiresAt||expiresAt<=new Date())return res.status(409).json({message:"This booking has no active payment window. Refresh your bookings or contact support."});
   const attempt=await startKPayAttempt(req.user!.id,"private_course",booking.id,booking.price,`Private course · ${booking.title}`,expiresAt);
   res.status(201).json({attempt});
