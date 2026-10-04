@@ -7,7 +7,8 @@ export type UserRole =
   | 'badminton_fo'
   | 'store_fo'
   | 'cafe_fo'
-  | 'doctor';
+  | 'doctor'
+  | 'owner';
 
 export type User = {
   id: string;
@@ -90,6 +91,9 @@ export type Notification = {
   link?: string;
   audience?: NotificationAudience;
   type?: NotificationType;
+  entityType?: string | null;
+  entityId?: string | null;
+  actionLabel?: string | null;
 };
 
 export type Product = {
@@ -137,6 +141,12 @@ export type ReviveBooking = {
 
 export type Status = 'active' | 'inactive' | 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'overdue' | 'paid' | 'partially_paid';
 
+export type BookingStatus =
+  | 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
+  | 'PENDING_COACH_CONFIRMATION' | 'AWAITING_PAYMENT'
+  | 'COACH_DECLINED' | 'EXPIRED';
+
 export type Transaction = {
   id: string;
   date: string;
@@ -150,6 +160,13 @@ export type Transaction = {
   paymentMethod: 'Cash' | 'KPay' | 'Pay Later' | 'Other';
   staff: string;
   status: 'paid' | 'pending' | 'refunded';
+};
+export type CafeCashTransactionInput = {
+  date: string;
+  customer: string;
+  business: 'Cafe';
+  items: { id: string; quantity: number }[];
+  paymentMethod: 'Cash';
 };
 
 export type BadmintonPackage = {
@@ -201,8 +218,11 @@ export type CourtBooking = {
   time: string;
   session: number;
   price: number;
-  paymentStatus: 'paid' | 'pending';
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  paymentStatus: 'paid' | 'pending' | 'refunded';
+  status: BookingStatus;
+  coachAcceptedAt?: string | null;
+  paymentExpiresAt?: string | null;
+  reservationExpiresAt?: string | null;
 };
 
 export type Appointment = {
@@ -232,6 +252,7 @@ export type CoachProfile = {
   id: string;
   name: string;
   specialty: string;
+  department?: 'Badminton' | 'Gym';
   phone: string;
   email: string;
   status: 'active' | 'inactive';

@@ -11,8 +11,11 @@ const configs:Record<Exclude<UserRole,'member'>,{label:string;eyebrow:string;ite
  admin:{label:'Zawana Admin',eyebrow:'Central Management',items:[
   {to:'/admin',label:'Dashboard',icon:LayoutDashboard},{to:'/admin/users',label:'Users',icon:Users},{to:'/admin/badminton-packages',label:'Badminton Packages',icon:Package},{to:'/admin/gym-packages',label:'Gym Packages',icon:Dumbbell},{to:'/admin/coaches',label:'Coach Management',icon:UserRound},{to:'/admin/private-courses',label:'Private Courses',icon:CalendarDays},{to:'/admin/courts',label:'Court Rentals',icon:CalendarDays},{to:'/admin/finance',label:'Finance',icon:BarChart3},{to:'/admin/cms',label:'Content / Community',icon:FileText}
  ]},
+ owner:{label:'Zawana Owner',eyebrow:'All Business Overview',items:[
+  {to:'/owner',label:'Overview',icon:LayoutDashboard},{to:'/owner/finance',label:'Finance',icon:BarChart3}
+ ]},
  badminton_fo:{label:'Badminton Front Office',eyebrow:'Court Operations',items:[
-  {to:'/badminton-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/badminton-fo/check-in',label:'Package Check-In',icon:ClipboardList},{to:'/badminton-fo/courts',label:'Court Rental Desk',icon:CalendarDays},{to:'/badminton-fo/bookings',label:'Court Bookings',icon:CalendarDays},{to:'/badminton-fo/private-courses',label:'Private Courses',icon:Dumbbell},{to:'/badminton-fo/packages',label:'Packages',icon:Package},{to:'/badminton-fo/pos',label:'POS',icon:ShoppingBag},{to:'/badminton-fo/transactions',label:'Transactions',icon:CreditCard}
+  {to:'/badminton-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/badminton-fo/check-in',label:'Package Check-In & Sales',icon:ClipboardList},{to:'/badminton-fo/courts',label:'Court Rental Desk',icon:CalendarDays},{to:'/badminton-fo/bookings',label:'Court Bookings',icon:CalendarDays},{to:'/badminton-fo/pos',label:'POS',icon:ShoppingBag},{to:'/badminton-fo/transactions',label:'Transactions',icon:CreditCard}
  ]},
  gym_fo:{label:'HPC Gym Front Office',eyebrow:'Membership Operations',items:[
   {to:'/gym-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/gym-fo/check-in',label:'Check-In',icon:ClipboardList},{to:'/gym-fo/members',label:'Members',icon:Users},{to:'/gym-fo/memberships',label:'Memberships',icon:Package},{to:'/gym-fo/appointments',label:'Appointments',icon:CalendarDays},{to:'/gym-fo/coaches',label:'Coaches',icon:Dumbbell},{to:'/gym-fo/payments',label:'Payments',icon:CreditCard}

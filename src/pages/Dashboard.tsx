@@ -8,15 +8,17 @@ import { useAuth } from '../context/AuthContext';
 type DashboardData={bookings:any[];packages:any[];notifications:any[];enrollment:any;checkIns:any[]};
 const dateLabel=(value:string)=>new Date(`${value}T00:00:00`).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 const statusLabel=(s:string)=>s?.replaceAll('_',' ').toLowerCase().replace(/^./,x=>x.toUpperCase());
+const todayKey=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 
 export function Dashboard(){
  const {user}=useAuth(); const [data,setData]=useState<DashboardData|null>(null); const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [busy,setBusy]=useState(false); const [message,setMessage]=useState('');
  const load=()=>get<DashboardData>('/member/dashboard').then(setData).catch((e:any)=>setError(e.message||'Could not load your badminton dashboard.')).finally(()=>setLoading(false));
  useEffect(()=>{load()},[]);
  const checkIn=async()=>{if(!data?.enrollment)return;setBusy(true);setMessage('');try{await post('/member/check-in',{enrollmentId:data.enrollment.id});setMessage('Checked in. One session was used from your package.');await load()}catch(e:any){setMessage(e.message||'Check-in could not be completed.')}finally{setBusy(false)}};
- const upcoming=(data?.bookings||[]).filter(b=>b.date>=new Date().toISOString().slice(0,10)&&!['cancelled','CANCELLED','COACH_DECLINED','EXPIRED','completed','COMPLETED'].includes(b.status)).sort((a,b)=>a.date.localeCompare(b.date));
+ const today=todayKey();
+ const upcoming=(data?.bookings||[]).filter(b=>b.date>=today&&!['cancelled','CANCELLED','COACH_DECLINED','EXPIRED','completed','COMPLETED'].includes(b.status)).sort((a,b)=>a.date.localeCompare(b.date));
  const nextCourt=upcoming.find(b=>b.kind==='court'); const nextCourse=upcoming.find(b=>b.kind==='private_course');
- const checkedToday=Boolean(data?.checkIns?.some((c:any)=>c.date===new Date().toISOString().slice(0,10)));
+ const checkedToday=Boolean(data?.checkIns?.some((c:any)=>c.date===today));
  if(loading)return <Page title="Your badminton" eyebrow="Member dashboard"><div className="grid animate-pulse gap-4 md:grid-cols-3"><Card className="h-28 bg-zawana-950/5"/><Card className="h-28 bg-zawana-950/5"/><Card className="h-28 bg-zawana-950/5"/></div><Card className="mt-5 h-64 animate-pulse bg-zawana-950/5"/></Page>;
  return <Page title={`Welcome back, ${user?.name?.split(' ')[0]||'Athlete'}`} eyebrow="Zawana Badminton" actions={<Link to="/book/court"><Button><CalendarDays size={16}/> Book a court</Button></Link>}>
   {error&&<div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
@@ -34,6 +36,6 @@ export function Dashboard(){
     <Card className="p-5"><p className="text-xs font-black uppercase tracking-widest text-zawana-accent">BADMINTON SERVICES</p><div className="mt-4 space-y-2">{[['/book/court','Court booking',Trophy],['/private-course','Private course',Dumbbell],['/membership','Packages & sessions',Clock3],['/bookings','Booking history',MapPin]].map(([to,label,Icon]:any)=><Link key={to} to={to} className="flex items-center justify-between rounded-xl bg-zawana-950/[.035] p-3 text-sm font-bold transition hover:bg-zawana-accent/15"> <span className="flex items-center gap-3"><Icon size={16}/>{label}</span><ArrowRight size={15}/></Link>)}</div></Card>
    </div>
   </div>
-  <Card className="mt-6 p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-zawana-500">RECENT ACTIVITY</p><h2 className="mt-1 text-xl font-black">Booking history</h2></div><Link to="/bookings" className="text-sm font-bold">See all</Link></div>{data?.bookings?.length?<div className="mt-4 divide-y divide-zawana-950/8">{data.bookings.slice(0,4).map(b=><div key={b.id} className="flex items-center justify-between gap-3 py-3"><div><b className="text-sm">{b.title}</b><p className="mt-1 text-xs text-zawana-500">{dateLabel(b.date)} · {b.time}</p></div><Badge good={b.status==='confirmed'}>{statusLabel(b.status)}</Badge></div>)}</div>:<p className="mt-4 text-sm text-zawana-500">Your completed and past sessions will appear here.</p>}</Card>
+  <Card className="mt-6 p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-zawana-500">RECENT ACTIVITY</p><h2 className="mt-1 text-xl font-black">Booking history</h2></div><Link to="/bookings" className="text-sm font-bold">See all</Link></div>{data?.bookings?.length?<div className="mt-4 divide-y divide-zawana-950/8">{data.bookings.slice(0,4).map(b=><div key={b.id} className="flex items-center justify-between gap-3 py-3"><div><b className="text-sm">{b.title}</b><p className="mt-1 text-xs text-zawana-500">{dateLabel(b.date)} · {b.time}</p></div><Badge good={b.status==='confirmed'||b.status==='CONFIRMED'}>{statusLabel(b.status)}</Badge></div>)}</div>:<p className="mt-4 text-sm text-zawana-500">Your completed and past sessions will appear here.</p>}</Card>
  </Page>
 }

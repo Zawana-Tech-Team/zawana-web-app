@@ -53,7 +53,7 @@ function Sidebar({ items, collapsed, onCollapse }: { items: readonly (readonly [
 export function AppLayout({ children, role }: { children: ReactNode; role: 'member' | 'coach' | 'admin' }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const items = role === 'admin' ? admin : role === 'coach' ? coach : member;
 
   return (
@@ -73,6 +73,10 @@ export function AppLayout({ children, role }: { children: ReactNode; role: 'memb
                 </NavLink>
               ))}
             </nav>
+            <nav aria-label="Account" className="mt-6 space-y-1 border-t border-zawana-950/10 pt-4">
+              {([['/profile','Profile',UserRound],['/notifications','Notifications',Bell],['/settings','Settings',Settings]] as const).map(([to,label,Icon])=><NavLink onClick={()=>setMobile(false)} key={to} to={to} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-zawana-500 hover:bg-zawana-950/5"><Icon size={18}/>{label}</NavLink>)}
+              <button onClick={()=>{setMobile(false);logout()}} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-zawana-500 hover:bg-zawana-950/5"><LogOut size={18}/>Logout</button>
+            </nav>
             <div className="mt-8">
               <Button variant="secondary" className="w-full" onClick={() => setMobile(false)}>Close menu</Button>
             </div>
@@ -91,9 +95,6 @@ export function AppLayout({ children, role }: { children: ReactNode; role: 'memb
         </header>
         {children}
       </div>
-      <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-6 border-t border-zawana-950/10 bg-white/95 p-2 backdrop-blur lg:hidden">
-        {member.map(([to, label, Icon]) => <NavLink key={to} to={to} className={({ isActive }) => `flex flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-bold ${isActive ? 'text-zawana-950' : 'text-zawana-500'}`}><Icon size={18} />{label}</NavLink>)}
-      </nav>
     </div>
   );
 }

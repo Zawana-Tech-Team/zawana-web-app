@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { motion } from 'framer-motion';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
@@ -60,6 +61,12 @@ export function Stat({ label, value, sub }: { label: string; value: string | num
       {sub && <p className="mt-1 text-sm text-zawana-500">{sub}</p>}
     </Card>
   );
+}
+
+export function Pagination({page,totalPages,total,onPage}:{page:number;totalPages:number;total:number;onPage:(page:number)=>void}){
+  if(totalPages<=1)return <p className="mt-3 text-xs text-zawana-500">{total} record{total===1?'':'s'}</p>;
+  const pages=Array.from(new Set([1,page-1,page,page+1,totalPages].filter(n=>n>=1&&n<=totalPages))).sort((a,b)=>a-b);
+  return <nav aria-label="Pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3"><span className="text-xs font-semibold text-zawana-500">{total} records · Page {page} of {totalPages}</span><div className="flex flex-wrap items-center gap-1"><button disabled={page<=1} onClick={()=>onPage(page-1)} className="inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-xs font-bold disabled:opacity-40"><ChevronLeft size={14}/> Previous</button>{pages.map((n,i)=><span key={n} className="contents">{i>0&&n-pages[i-1]>1&&<span className="px-1 text-zawana-400">…</span>}<button aria-current={page===n?'page':undefined} onClick={()=>onPage(n)} className={`h-10 min-w-10 rounded-lg border px-3 text-xs font-bold ${page===n?'border-zawana-950 bg-zawana-950 text-white':'bg-white'}`}>{n}</button></span>)}<button disabled={page>=totalPages} onClick={()=>onPage(page+1)} className="inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-xs font-bold disabled:opacity-40">Next <ChevronRight size={14}/></button></div></nav>;
 }
 
 export function Page({ title, eyebrow, children, actions }: { title: string; eyebrow?: string; children: ReactNode; actions?: ReactNode }) {

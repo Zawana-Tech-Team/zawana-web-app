@@ -1,12 +1,12 @@
 import type { ReactNode, FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, ShoppingBag, Search } from 'lucide-react';
 import { Button, Card, Badge, Page, Stat, Logo, Empty } from '../components/UI';
 import { classes, courts, memberships, products, revenue, performance } from '../data';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { useOperations } from '../context/OperationsContext';
+import { get } from '../api';
 import {
   LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
   BarChart, Bar
@@ -14,8 +14,9 @@ import {
 import OptimizedImage from '../components/OptimizedImage';
 
 export function Home(){
-  const { content } = useOperations();
-  const publishedContent = content.filter(item => item.status === 'published').slice(0, 3);
+  const [publishedContent,setPublishedContent]=useState<any[]>([]);
+  const [contentError,setContentError]=useState(false);
+  useEffect(()=>{let active=true;get<any[]>('/content').then(items=>{if(active)setPublishedContent(items.slice(0,3))}).catch(()=>{if(active)setContentError(true)});return()=>{active=false}},[]);
   const facilities = [
   {
     name: 'Badminton Courts',
@@ -394,6 +395,7 @@ export function Home(){
       </section>
 
       <section id="community" className="mx-auto max-w-[1440px] px-5 py-24 md:px-10 md:py-32">
+{contentError&&<p role="status" className="mb-5 rounded-2xl bg-zawana-900 p-4 text-sm text-zawana-500">Community updates are temporarily unavailable.</p>}
 {publishedContent.length > 0 && (
   <section className="mb-24">
     {/* Section Header */}

@@ -1,82 +1,118 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Check, ChevronRight, Clock3, LockKeyhole, MapPin, Sparkles, Trophy, X } from "lucide-react";
-import { Button, Card, Page, Badge, Toast } from "../components/UI";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, MapPin, ShoppingCart, Trophy, X } from "lucide-react";
+import { Badge, Button, Card, Empty, Page, Toast } from "../components/UI";
 import { get, post } from "../api";
 
-const days=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return d});
-const fmt=(d:Date)=>d.toISOString().slice(0,10);
-const label=(d:Date)=>d.toLocaleDateString("en-GB",{day:"2-digit",month:"short"});
-const slots=Array.from({length:15},(_,i)=>{const h=6+i; const fmt=(x:number)=>{const ap=x>=12?"PM":"AM"; const hh=x%12||12; return `${hh}:00 ${ap}`}; return `${fmt(h)} — ${fmt(h+1)}`;});
+type SlotPick={date:string;courtId:string;courtName:string;time:string;price:number};
+type Conflict={date?:string;courtId?:string;courtName?:string;time?:string;reason?:string};
+const key=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const parseDate=(value:string)=>new Date(`${value}T00:00:00`);
+const todayKey=()=>key(new Date());
+const times=Array.from({length:15},(_,i)=>{const hour=6+i,fmt=(n:number)=>`${n%12||12}:00 ${n>=12?"PM":"AM"}`;return `${fmt(hour)} — ${fmt(hour+1)}`;});
+const minute=(value:string)=>{const m=String(value||"").trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);if(!m)return NaN;let h=Number(m[1]),min=Number(m[2]);if(m[3]){if(h===12)h=0;if(m[3].toUpperCase()==="PM")h+=12;}return h*60+min;};
+const span=(value:string)=>{const p=String(value||"").split(/\s*(?:—|–|-)\s*/);if(p.length!==2)return null;const start=minute(p[0]),end=minute(p[1]);return Number.isFinite(start)&&Number.isFinite(end)?{start,end}:null;};
+const overlaps=(a:string,b:string)=>{const x=span(a),y=span(b);return !!x&&!!y&&x.start<y.end&&y.start<x.end;};
+const dateLabel=(value:string)=>parseDate(value).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
+const pickKey=(p:Pick<SlotPick,"date"|"courtId"|"time">)=>`${p.date}|${p.courtId}|${p.time}`;
 
 export function CourtBooking(){
- const [date,setDate]=useState(fmt(days[0])); const [courts,setCourts]=useState<any[]>([]);
- const [selected,setSelected]=useState<any>(null); const [time,setTime]=useState(""); const [availabilityOpen,setAvailabilityOpen]=useState(false);
- const [busy,setBusy]=useState<any[]>([]); const [blocks,setBlocks]=useState<any[]>([]); const [holiday,setHoliday]=useState<any>(null); const [done,setDone]=useState<any>(null); const [error,setError]=useState(""); const [loading,setLoading]=useState(false);
- const [toast,setToast]=useState<string|null>(null);
+ const [month,setMonth]=useState(()=>{const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1)});
+ const [date,setDate]=useState(todayKey());
+ const [monthData,setMonthData]=useState<any>(null);
+ const [loadingMonth,setLoadingMonth]=useState(true);
+ const [selected,setSelected]=useState<SlotPick[]>([]);
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+ const [conflicts,setConflicts]=useState<Conflict[]>([]);
+ const [toast,setToast]=useState("");
+ const [done,setDone]=useState<any[]|null>(null);
+ const [checkoutOpen,setCheckoutOpen]=useState(false);
+ const monthKey=`${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,"0")}`;
 
- const load=async()=>{const [c,a]=await Promise.all([get<any[]>("/courts"),get<any>(`/bookings/availability?date=${date}`)]);setCourts(c);setBusy(a.bookings||[]);setBlocks(a.blocks||[]);setHoliday(a.holiday||null);setSelected((prev: { id: any; })=>prev&&c.find(x=>x.id===prev.id)||null)};
- useEffect(()=>{load().catch(e=>setError(e.message))},[date]);
+ const loadMonth=async()=>{
+   setLoadingMonth(true);
+   try{setMonthData(await get<any>(`/bookings/month-availability?month=${monthKey}`));}
+   catch(e:any){setError(e.message||"Could not load court availability.");setMonthData(null);}
+   finally{setLoadingMonth(false);}
+ };
+ useEffect(()=>{void loadMonth();},[monthKey]);
 
- // Normalize both frontend slots ("6:00 AM — 7:00 AM") and backend
- // reservations ("06:00 — 07:00") before checking overlap. Weekly class
- // blocks are therefore visibly and functionally unavailable.
- const toMinutes=(value:string)=>{
-   const v=String(value||"").trim();
-   const m=v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-   if(!m)return NaN;
-   let h=Number(m[1]); const min=Number(m[2]);
-   if(m[3]){if(h===12)h=0;if(m[3].toUpperCase()==="PM")h+=12;}
-   return h*60+min;
+ const courts=monthData?.courts||[];
+ const pickedDate=parseDate(date);
+ const dateOverride=(monthData?.overrides||[]).find((x:any)=>x.date===date);
+ const holiday=(monthData?.holidays||[]).find((x:any)=>x.date===date);
+ const dayBookings=(monthData?.bookings||[]).filter((x:any)=>x.date===date);
+ const dayBlocks=(monthData?.blocks||[]).filter((x:any)=>x.date===date||x.dayOfWeek===pickedDate.getDay());
+ const blocksForDate=dateOverride?.type==="open"?dayBlocks.filter((x:any)=>x.date===date):dayBlocks;
+ const courtOf=(id:string)=>courts.find((c:any)=>c.id===id);
+ const dayBlocksFor=(courtId:string)=>blocksForDate.filter((b:any)=>b.courtId===courtId&&b.active!==false);
+ const stateFor=(court:any,time:string)=>{
+   if(dateOverride?.type==="closed")return "Closed";
+   if(court.status!=="available")return "Unavailable";
+   if(dayBlocksFor(court.id).some((b:any)=>overlaps(`${b.start} — ${b.end}`,time)))return "Reserved";
+   const booking=dayBookings.find((b:any)=>b.courtId===court.id&&overlaps(b.time,time));
+   if(booking)return ["PENDING_COACH_CONFIRMATION","AWAITING_PAYMENT"].includes(booking.status)?"Reserved":"Booked";
+   return "Available";
  };
- const range=(value:string)=>{
-   const p=String(value||"").split(/\s*(?:—|–|-)\s*/);
-   if(p.length!==2)return null;
-   const start=toMinutes(p[0]),end=toMinutes(p[1]);
-   return Number.isFinite(start)&&Number.isFinite(end)?{start,end}:null;
+ const priceFor=(court:any,time:string)=>{const start=span(time)?.start??0;return holiday?.active?Number(holiday.price):Number(court.price)+(start>=900?5000:0);};
+ const toggle=(court:any,time:string,price:number)=>{
+   const candidate={date,courtId:court.id,courtName:court.name,time,price};
+   setSelected(prev=>prev.some(x=>pickKey(x)===pickKey(candidate))?prev.filter(x=>pickKey(x)!==pickKey(candidate)):[...prev,candidate]);
+   setConflicts(prev=>prev.filter(x=>!(x.date===date&&x.courtId===court.id&&x.time===time)));
  };
- const overlaps=(a:string,b:string)=>{const x=range(a),y=range(b);return !!x&&!!y&&x.start<y.end&&y.start<x.end;};
- const blockFor=(c:any,t:string)=>blocks.find(b=>b.courtId===c.id&&b.active!==false&&overlaps(`${b.start} — ${b.end}`,t));
- const bookingFor=(c:any,t:string)=>busy.find(b=>b.courtId===c.id&&overlaps(b.time,t));
- const privateReserved=(c:any,t:string)=>busy.some(b=>b.courtId===c.id&&["PENDING_COACH_CONFIRMATION","AWAITING_PAYMENT"].includes(b.status)&&overlaps(b.time,t));
- const available=(c:any,t:string)=>c.status==="available"&&!bookingFor(c,t)&&!blockFor(c,t);
- const bookedCount=(c:any)=>busy.filter(b=>b.courtId===c.id).length;
+
+ const firstOffset=new Date(month.getFullYear(),month.getMonth(),1).getDay();
+ const mondayOffset=(firstOffset+6)%7;
+ const daysInMonth=new Date(month.getFullYear(),month.getMonth()+1,0).getDate();
+ const calendarCells=Array.from({length:Math.ceil((mondayOffset+daysInMonth)/7)*7},(_,i)=>{
+   const day=i-mondayOffset+1;
+   if(day<1||day>daysInMonth)return null;
+   const d=new Date(month.getFullYear(),month.getMonth(),day),value=key(d),override=(monthData?.overrides||[]).find((x:any)=>x.date===value);
+   const isPast=value<todayKey(),closed=override?.type==="closed";
+   const blocks=(monthData?.blocks||[]).filter((x:any)=>x.date===value||x.dayOfWeek===d.getDay());
+   const effectiveBlocks=override?.type==="open"?blocks.filter((x:any)=>x.date===value):blocks;
+   const bookings=(monthData?.bookings||[]).filter((x:any)=>x.date===value);
+   const hasCourt=courts.some((c:any)=>c.status==="available"&&times.some(time=>!effectiveBlocks.some((b:any)=>b.courtId===c.id&&b.active!==false&&overlaps(`${b.start} — ${b.end}`,time))&&!bookings.some((b:any)=>b.courtId===c.id&&overlaps(b.time,time))));
+   const anyBooked=courts.length>0&&courts.every((c:any)=>c.status!=="available"||times.every((time:string)=>effectiveBlocks.some((b:any)=>b.courtId===c.id&&b.active!==false&&overlaps(`${b.start} — ${b.end}`,time))||bookings.some((b:any)=>b.courtId===c.id&&overlaps(b.time,time))));
+   return {value,day,isPast,closed,hasCourt,anyBooked,today:value===todayKey(),override};
+ });
+ const total=selected.reduce((sum,s)=>sum+s.price,0);
+ const grouped=useMemo(()=>{
+   const byDate=new Map<string,Map<string,SlotPick[]>>();
+   for(const pick of selected){if(!byDate.has(pick.date))byDate.set(pick.date,new Map());const byCourt=byDate.get(pick.date)!;if(!byCourt.has(pick.courtName))byCourt.set(pick.courtName,[]);byCourt.get(pick.courtName)!.push(pick);}
+   return [...byDate.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([day,courts])=>({date:day,courts:[...courts.entries()]}));
+ },[selected]);
 
  const confirm=async()=>{
-   if(!selected||!available(selected,time))return;
-   setError("");setLoading(true);
+   if(!selected.length||busy)return;
+   setBusy(true);setError("");setConflicts([]);
    try{
-    const b=await post<any>("/bookings",{kind:"court",title:selected.name,date,time,location:"Zawana Badminton Arena",price:selected.price,courtId:selected.id});
-    if(b.payment?.checkoutUrl){window.location.assign(b.payment.checkoutUrl);return;}
-    if(b.payment?.qrCode){setError("KPay returned a QR checkout. Please scan it in your KPay app, then return to verify payment.");return;}
-    throw new Error("KPay did not return a checkout link.");
-   } catch(e:any){setError(e.message);setToast(e.message||"That slot is no longer available.");await load()}
-   finally{setLoading(false)}
+     const result=await post<any>("/bookings",{kind:"court",date:selected[0].date,bookings:selected.map(({date,courtId,time})=>({date,courtId,time}))});
+     const bookings=result.bookings||[result.booking];
+     setDone(bookings);setToast(`${bookings.length} court session${bookings.length===1?"":"s"} confirmed.`);setSelected([]);await loadMonth();
+   }catch(e:any){setError(e.message||"Your booking could not be confirmed. Refresh availability and try again.");setConflicts(Array.isArray(e.details)?e.details:[]);setToast(e.message||"Some selected slots are no longer available.");await loadMonth();}
+   finally{setBusy(false);}
  };
- const availableCourts=useMemo(()=>courts.filter(c=>c.status==="available"),[courts]);
 
- if(done)return <Page title="Court secured" eyebrow="Booking confirmed">
-  <Card className="mx-auto max-w-2xl overflow-hidden p-0 shadow-[0_30px_90px_rgba(29,27,71,.14)]">
-   <div className="court-lines relative overflow-hidden bg-zawana-950 p-8 text-white md:p-10"><div className="absolute -right-10 -top-10 h-48 w-48 rounded-full border border-zawana-gold/30"/><div className="relative flex items-center gap-3"><span className="grid h-12 w-12 place-items-center rounded-2xl bg-zawana-gold text-zawana-950"><Check/></span><div><p className="eyebrow text-zawana-gold">RESERVED</p><h2 className="text-3xl font-black">{selected?.name}</h2></div></div><div className="relative mt-8 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-white/8 p-4"><p className="text-[10px] uppercase tracking-widest text-white/45">Date</p><b className="mt-1 block">{date}</b></div><div className="rounded-2xl bg-white/8 p-4"><p className="text-[10px] uppercase tracking-widest text-white/45">Session</p><b className="mt-1 block">{time}</b></div></div></div>
-   <div className="p-7"><div className="flex items-center justify-between border-b pb-5"><span className="text-sm text-zawana-500">Court rental</span><b>{done?.price?.toLocaleString()||((holiday?.active?Number(holiday.price):Number(selected?.price||0)+(slots.indexOf(time)>=9?5000:0)).toLocaleString())} MMK</b></div><p className="mt-5 text-xs uppercase tracking-widest text-zawana-500">Booking reference</p><p className="mt-1 font-black">{done.code}</p><div className="mt-7 flex gap-2"><Link to="/bookings"><Button>My bookings <ChevronRight size={15}/></Button></Link><Link to="/dashboard"><Button variant="secondary">Dashboard</Button></Link></div></div>
-  </Card>{toast&&<Toast message={toast} onClose={()=>setToast(null)}/>}</Page>;
+ if(done)return <Page title="Court booking confirmed" eyebrow="Zawana Badminton Arena"><Card className="mx-auto max-w-3xl overflow-hidden p-0"><div className="bg-zawana-950 p-7 text-white md:p-9"><div className="flex items-center gap-3"><span className="grid h-12 w-12 place-items-center rounded-2xl bg-zawana-gold text-zawana-950"><Check/></span><div><p className="eyebrow text-zawana-gold">CONFIRMED</p><h2 className="text-2xl font-black">Your court time is secured</h2></div></div><p className="mt-5 text-sm text-white/65">{done.length} session{done.length===1?"":"s"} across {[...new Set(done.map((b:any)=>b.date))].length} date{new Set(done.map((b:any)=>b.date)).size===1?"":"s"}</p></div><div className="p-6"><div className="divide-y">{done.map((b:any)=><div key={b.id} className="flex flex-wrap justify-between gap-3 py-3"><div><b>{b.title}</b><p className="text-sm text-zawana-500">{dateLabel(b.date)} · {b.time} · Ref {b.code}</p></div><b>{Number(b.price).toLocaleString()} MMK</b></div>)}</div><p className="mt-4 flex justify-between border-t pt-4 font-black"><span>Total</span><span>{done.reduce((sum:number,b:any)=>sum+Number(b.price),0).toLocaleString()} MMK</span></p><p className="mt-3 text-xs text-zawana-500">Your court sessions are confirmed. Payment checkout is currently unavailable.</p><div className="mt-6 flex flex-wrap gap-2"><Button onClick={()=>setDone(null)}>Book more court time</Button><Link to="/bookings"><Button variant="secondary">My bookings <ChevronRight size={15}/></Button></Link></div></div></Card>{toast&&<Toast message={toast} onClose={()=>setToast("")}/>}</Page>;
 
- return <Page title="Book a court" eyebrow="Zawana Badminton Arena" actions={<div className="hidden items-center gap-2 rounded-full bg-zawana-900 px-4 py-2 text-xs font-black md:flex"><LockKeyhole size={14}/> Live availability</div>}>
-  <div className="grid gap-7 xl:grid-cols-[1fr_390px]">
-   <div className="space-y-6">
-    <Card className="overflow-hidden p-0"><div className="flex items-end justify-between bg-zawana-950 p-6 text-white"><div><p className="eyebrow text-zawana-gold">STEP 01</p><h2 className="mt-1 text-xl font-black">Choose a court</h2><p className="mt-1 text-xs text-white/55">Select a court to see its live dates and time slots.</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-wider text-white/45">Live</p><b>{availableCourts.length} bookable</b></div></div>
-      <div className="grid gap-4 p-5 md:grid-cols-2">{courts.map(c=>{const courtAvailable=c.status==="available";return <button key={c.id} disabled={!courtAvailable} onClick={()=>{setSelected(c);setTime("");setAvailabilityOpen(true)}} className={`group relative overflow-hidden rounded-[24px] border text-left transition duration-300 ${selected?.id===c.id?"border-zawana-gold bg-zawana-gold/8 shadow-[0_16px_40px_rgba(196,175,73,.15)]":"border-zawana-950/8 hover:-translate-y-1 hover:shadow-xl"} ${!courtAvailable?"cursor-not-allowed opacity-70":""}`}>
-        <div className="court-lines relative h-32 overflow-hidden bg-zawana-950 p-4 text-white"><div className="absolute left-1/2 top-0 h-full w-px bg-white/15"/><div className="absolute inset-x-[20%] top-1/2 h-px bg-white/15"/><div className="absolute right-3 top-3"><Badge good={courtAvailable}>{courtAvailable?"OPEN":"MAINTENANCE"}</Badge></div><div className="absolute bottom-3 left-4"><p className="text-[10px] font-black uppercase tracking-widest text-zawana-gold">{c.type}</p><h3 className="text-xl font-black">{c.name}</h3></div></div>
-        <div className="p-4"><div className="flex justify-between gap-3"><span className="text-xs text-zawana-500">{(c.features||[]).slice(0,2).join(" · ")||"Premium indoor facility"}</span><b className="whitespace-nowrap text-sm">{Number(c.price).toLocaleString()} MMK / hour</b></div><div className="mt-3 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zawana-500"><MapPin size={12}/> {c.surface} · {bookedCount(c)} booked today</div><p className="mt-3 text-xs font-black text-zawana-950">{courtAvailable?"Choose date & time →":c.status}</p></div>
-      </button>})}</div>
-      {!courts.length&&<div className="p-10 text-center text-sm text-zawana-500">No courts configured yet. Please check back soon.</div>}
-    </Card>
-    {error&&<div className="flex items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-700"><X size={17}/>{error}</div>}
-   </div>
+ return <Page title="Book a court" eyebrow="Zawana Badminton Arena" actions={<div className="flex items-center gap-2"><div className="hidden items-center gap-2 rounded-full bg-zawana-900 px-4 py-2 text-xs font-black sm:flex"><CalendarDays size={14}/> Live availability</div><button type="button" onClick={()=>setCheckoutOpen(true)} aria-label={`Open checkout, ${selected.length} selected sessions`} className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-zawana-950 text-white shadow-lg transition hover:bg-zawana-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zawana-gold"><ShoppingCart size={19}/>{selected.length>0&&<span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-zawana-gold px-1 text-[10px] font-black text-zawana-950">{selected.length}</span>}</button></div>}>
+   <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_370px]">
+    <div className="space-y-5">
+      {error&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p className="font-bold">{error}</p>{conflicts.length>0&&<ul className="mt-2 space-y-1">{conflicts.map((c,i)=><li key={`${c.date}-${c.courtId}-${c.time}-${i}`}><b>{c.courtName||courtOf(c.courtId||"")?.name||"Court"}</b> · {c.date?dateLabel(c.date):""} · {c.time} — {c.reason||"No longer available."}</li>)}</ul>}</div>}
+      <Card className="overflow-hidden p-0"><div className="flex flex-wrap items-center justify-between gap-4 bg-zawana-950 p-5 text-white sm:p-6"><div><p className="eyebrow text-zawana-gold">COURT RENTAL</p><h2 className="mt-1 text-xl font-black">Choose your dates</h2><p className="mt-1 text-xs text-white/55">Build one booking from different courts and times across multiple dates.</p></div><div className="flex items-center gap-2"><button aria-label="Previous month" onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()-1,1))} className="rounded-xl border border-white/20 p-2 hover:bg-white/10"><ChevronLeft size={18}/></button><b className="min-w-32 text-center">{month.toLocaleDateString("en-US",{month:"long",year:"numeric"})}</b><button aria-label="Next month" onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()+1,1))} className="rounded-xl border border-white/20 p-2 hover:bg-white/10"><ChevronRight size={18}/></button></div></div>
+       <div className="p-3 sm:p-6"><div className="grid grid-cols-7 gap-1 sm:gap-2">{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(x=><div key={x} className="py-2 text-center text-[9px] font-black uppercase tracking-wider text-zawana-500 sm:text-[11px]">{x}</div>)}
+        {calendarCells.map((cell:any,i)=><div key={cell?.value||`blank-${i}`} className="min-w-0">{cell&&(()=>{const hasPicks=selected.some(x=>x.date===cell.value);return <button disabled={cell.isPast||cell.closed||!cell.hasCourt||loadingMonth} aria-pressed={date===cell.value||hasPicks} onClick={()=>{setDate(cell.value);setError("");setConflicts([])}} className={`flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-xl border text-xs transition sm:min-h-[62px] sm:text-sm ${date===cell.value?"border-zawana-gold bg-zawana-gold/15 font-black text-zawana-950":hasPicks?"border-zawana-accent/50 bg-zawana-accent/5 font-bold":"border-transparent hover:border-zawana-950/10"} ${cell.today?"ring-1 ring-zawana-gold":""} ${cell.isPast||cell.closed||!cell.hasCourt?"cursor-not-allowed text-zawana-400 opacity-45":""}`}><span>{cell.day}</span><span className={`h-1.5 w-1.5 rounded-full ${cell.closed?"bg-red-500":hasPicks?"bg-zawana-accent":cell.hasCourt?"bg-emerald-500":cell.anyBooked?"bg-zawana-950/30":"bg-transparent"}`}/></button>})()}</div>)}
+       </div><div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-bold text-zawana-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-zawana-gold"/>Today / selected</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500"/>Available</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-red-500"/>Closed</span><span className="opacity-60">Faded dates are past or fully booked</span></div>
+       </div></Card>
 
-   <Card className="h-fit overflow-hidden p-0 shadow-[0_24px_70px_rgba(29,27,71,.10)] xl:sticky xl:top-24"><div className="court-lines bg-zawana-950 p-6 text-white"><div className="flex items-center justify-between"><div><p className="eyebrow text-zawana-gold">YOUR SESSION</p><h2 className="mt-1 text-2xl font-black">{selected?.name||"Choose a court"}</h2></div><Trophy className="text-zawana-gold"/></div></div><div className="p-6"><div className="space-y-4 text-sm"><div className="flex justify-between"><span className="text-zawana-500">Date</span><b>{date}</b></div><div className="flex justify-between"><span className="text-zawana-500">Time</span><b>{time}</b></div><div className="flex justify-between"><span className="text-zawana-500">Session</span><b>60 minutes</b></div><div className="border-t pt-4 flex justify-between text-base"><span className="font-black">Total</span><b>{selected?(holiday?.active?Number(holiday.price):Number(selected.price)+(slots.indexOf(time)>=9?5000:0)).toLocaleString():"—"} MMK</b></div></div><Button disabled={!selected||!available(selected,time)||loading} onClick={confirm} className="mt-6 w-full">{loading?"Opening KPay…":"Continue to KPay"} <ChevronRight size={16}/></Button><div className="mt-4 flex gap-2 rounded-2xl bg-zawana-900 p-3 text-[11px] text-zawana-500"><Sparkles size={14} className="shrink-0 text-zawana-gold"/><span>The slot is held briefly during checkout and confirmed after KPay verifies payment.</span></div></div></Card>
-  </div>
-  {availabilityOpen&&selected&&<div className="fixed inset-0 z-50 flex items-end justify-center bg-zawana-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={e=>{if(e.target===e.currentTarget)setAvailabilityOpen(false)}}><div role="dialog" aria-modal="true" aria-labelledby="court-availability-title" className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="eyebrow text-zawana-accent">LIVE AVAILABILITY · {selected.name}</p><h2 id="court-availability-title" className="mt-1 text-2xl font-black">Choose date & time</h2><p className="mt-1 text-sm text-zawana-500">Available slots are selectable. Booked and reserved slots are shown clearly.</p></div><button aria-label="Close availability" onClick={()=>setAvailabilityOpen(false)} className="rounded-full border p-2"><X size={18}/></button></div><div className="mt-5 grid grid-cols-4 gap-2 sm:grid-cols-7">{days.map(d=><button key={fmt(d)} onClick={()=>{setDate(fmt(d));setTime("")}} className={`rounded-xl border p-2 text-left ${date===fmt(d)?"border-zawana-gold bg-zawana-gold/15":"border-zawana-950/10"}`}><span className="block text-[10px] font-bold uppercase text-zawana-500">{d.toLocaleDateString("en-US",{weekday:"short"})}</span><b className="text-sm">{label(d)}</b></button>)}</div><div className="mt-5 flex flex-wrap gap-3 text-[10px] font-black uppercase text-zawana-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500"/>Available</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-zawana-950"/>Booked</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-red-500"/>Reserved</span></div><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{slots.map(t=>{const free=available(selected,t),reserved=!!blockFor(selected,t),held=privateReserved(selected,t);return <button key={t} disabled={!free} onClick={()=>{setTime(t);setAvailabilityOpen(false)}} className={`relative rounded-xl border p-3 text-left text-sm font-bold ${free?"border-emerald-200 bg-emerald-50 hover:border-emerald-500":"border-zawana-950/10 bg-zawana-900 text-zawana-500 opacity-75"}`}><Clock3 size={14} className="mb-1 inline"/> {t}<span className={`mt-1 block text-[10px] font-black uppercase ${free?"text-emerald-700":reserved?"text-red-600":"text-zawana-500"}`}>{free?"Available":reserved?"Reserved":held?"Court reserved":"Booked"}</span></button>})}</div><p className="mt-4 text-xs text-zawana-500">Rental rates: 6:00 AM–3:00 PM standard · 3:00 PM–9:00 PM +5,000 MMK · holidays use the configured rate.</p></div></div>}
-  {toast&&<Toast message={toast} type={error?"error":"success"} onClose={()=>setToast(null)}/>}
- </Page>
+      <Card className="p-4 sm:p-6"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="eyebrow text-zawana-accent">SELECT COURT & TIME</p><h2 className="mt-1 text-xl font-black">{dateLabel(date)}</h2>{dateOverride?.type==="open"&&<p className="mt-1 text-sm font-bold text-emerald-700">{dateOverride.title} · recurring weekday blocks are overridden for this date only.</p>}{holiday?.active&&<p className="mt-1 text-sm text-zawana-500">Holiday rate · {Number(holiday.price).toLocaleString()} MMK / session</p>}</div><span className="text-xs font-bold text-zawana-500">{selected.filter(x=>x.date===date).length} selected for this date</span></div>
+       {loadingMonth?<div className="mt-5 grid animate-pulse gap-3">{[1,2].map(n=><div key={n} className="h-32 rounded-2xl bg-zawana-950/5"/>)}</div>:date.slice(0,7)!==monthKey?<div className="mt-5 rounded-2xl bg-zawana-900 p-5 text-sm text-zawana-500">Choose a date in {month.toLocaleDateString("en-US",{month:"long",year:"numeric"})} to see court availability. Your selections from other months remain in the booking summary.</div>:dateOverride?.type==="closed"?<div className="mt-5 rounded-2xl bg-red-50 p-5 text-sm text-red-800">Courts are unavailable on this date: {dateOverride.reason||dateOverride.title}.</div>:courts.length?<div className="mt-5 space-y-4">{courts.map((court:any)=>{const slots=times.map(time=>({time,state:stateFor(court,time),price:priceFor(court,time)})),open=slots.filter(s=>s.state==="Available").length;return <section key={court.id} className="rounded-2xl border border-zawana-950/8 p-3 sm:p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-zawana-950 text-zawana-gold"><Trophy size={18}/></span><div><h3 className="font-black">{court.name}</h3><p className="text-xs text-zawana-500">{court.surface} · {Number(court.price).toLocaleString()} MMK base</p></div></div><Badge good={open>0}>{open?`${open} available`:court.status==="available"?"Fully booked":court.status}</Badge></div><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">{slots.map(({time,state,price}:any)=>{const isSelected=selected.some(x=>x.date===date&&x.courtId===court.id&&x.time===time),enabled=state==="Available"||isSelected;return <button type="button" key={time} disabled={!enabled} onClick={()=>toggle(court,time,price)} aria-pressed={isSelected} className={`min-w-0 rounded-xl border px-2.5 py-3 text-left transition sm:px-3 ${isSelected?"border-zawana-gold bg-zawana-gold/20 ring-1 ring-zawana-gold":"border-zawana-950/8"} ${state==="Available"&&!isSelected?"hover:border-emerald-400 hover:bg-emerald-50":""} ${!enabled?"cursor-not-allowed bg-zawana-900 opacity-65":""}`}><span className="flex items-center justify-between gap-1"><span className="text-xs font-black sm:text-sm">{time.split(" — ")[0]}</span>{isSelected?<Check size={14}/>:state==="Available"?<Clock3 size={14} className="text-emerald-600"/>:null}</span><span className={`mt-1 block text-[9px] font-black uppercase tracking-wide ${isSelected?"text-zawana-950":state==="Available"?"text-emerald-700":state==="Reserved"||state==="Closed"?"text-red-700":"text-zawana-500"}`}>{isSelected?"Selected":state}</span>{state==="Available"&&<span className="mt-1 block text-[10px] text-zawana-500">{price.toLocaleString()} MMK</span>}</button>})}</div></section>})}</div>:<Empty title="No courts configured" body="Court availability will appear here once the badminton courts are set up."/>}
+      </Card>
+    </div>
+
+    <div id="booking-summary"><Card className="h-fit overflow-hidden p-0 xl:sticky xl:top-24"><div className="bg-zawana-950 p-5 text-white"><p className="eyebrow text-zawana-gold">BOOKING SUMMARY</p><h2 className="mt-1 text-xl font-black">Review your sessions</h2></div><div className="p-5">{selected.length?<><div className="my-4 space-y-4">{grouped.map(day=><div key={day.date} className="rounded-xl bg-zawana-900 p-3"><div className="mb-3 flex items-center gap-2 text-sm font-black"><MapPin size={14} className="text-zawana-gold"/>{dateLabel(day.date)}</div>{day.courts.map(([courtName,picks])=><div key={courtName} className="mb-2 border-t border-zawana-950/8 pt-2 last:mb-0"><div className="mb-1 text-xs font-black">{courtName}</div>{picks.map(p=><div key={pickKey(p)} className="flex items-center justify-between gap-2 py-1 text-xs"><span>{p.time}</span><span className="flex items-center gap-2"><b>{p.price.toLocaleString()} MMK</b><button aria-label={`Remove ${courtName} ${p.time} on ${p.date}`} onClick={()=>setSelected(prev=>prev.filter(x=>pickKey(x)!==pickKey(p)))} className="rounded p-1 hover:bg-red-50 hover:text-red-600"><X size={13}/></button></span></div>)}</div>)}</div>)}</div><div className="flex justify-between border-t pt-4 text-sm"><span>{selected.length} session{selected.length===1?"":"s"}</span><b>{total.toLocaleString()} MMK</b></div><Button disabled={busy||loadingMonth} onClick={confirm} className="mt-5 w-full">{busy?"Confirming bookings…":"Confirm all bookings"} <ChevronRight size={16}/></Button><p className="mt-3 text-center text-[11px] leading-5 text-zawana-500">The server rechecks every date, court and time. All sessions confirm together, or none are saved.</p></>:<div className="py-7 text-center"><div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-zawana-900"><CalendarDays className="text-zawana-500" size={19}/></div><p className="mt-3 text-sm font-bold">No sessions selected</p><p className="mt-1 text-xs leading-5 text-zawana-500">Choose available times across any date in this month.</p></div>}<Link to="/bookings" className="mt-5 block border-t pt-4 text-center text-xs font-bold text-zawana-500">View booking history <ChevronRight className="inline" size={13}/></Link></div></Card></div>
+   </div>{checkoutOpen&&<div className="fixed inset-0 z-[110] flex justify-end bg-zawana-950/45 backdrop-blur-[2px]" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setCheckoutOpen(false)}}><motion.section initial={{x:'100%'}} animate={{x:0}} transition={{type:'spring',damping:30,stiffness:280}} role="dialog" aria-modal="true" aria-labelledby="mobile-checkout-title" className="flex h-full w-full max-w-md flex-col bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl"><header className="flex items-center justify-between border-b p-5"><div><p className="eyebrow text-zawana-accent">COURT RENTAL</p><h2 id="mobile-checkout-title" className="mt-1 text-xl font-black">Review checkout</h2><p className="mt-1 text-xs text-zawana-500">{selected.length} selected session{selected.length===1?"":"s"}</p></div><button onClick={()=>setCheckoutOpen(false)} aria-label="Close checkout" className="grid h-11 w-11 place-items-center rounded-full bg-zawana-950/5"><X size={19}/></button></header><div className="min-h-0 flex-1 overflow-y-auto p-5">{selected.length?grouped.map(day=><div key={day.date} className="mb-4 rounded-2xl border p-4"><h3 className="font-black">{dateLabel(day.date)}</h3>{day.courts.map(([courtName,picks])=><div key={courtName} className="mt-3 border-t pt-3"><b className="text-sm">{courtName}</b>{picks.map(p=><div key={pickKey(p)} className="flex items-center justify-between gap-3 py-2 text-sm"><span className="min-w-0">{p.time}</span><span className="flex shrink-0 items-center gap-2"><b>{p.price.toLocaleString()} MMK</b><button aria-label={`Remove ${courtName} ${p.time} on ${p.date}`} onClick={()=>setSelected(prev=>prev.filter(x=>pickKey(x)!==pickKey(p)))} className="grid h-9 w-9 place-items-center rounded-full text-zawana-500 hover:bg-red-50 hover:text-red-700"><X size={15}/></button></span></div>)}</div>)}</div>):<div className="py-14 text-center"><ShoppingCart size={28} className="mx-auto text-zawana-400"/><p className="mt-3 font-black">No sessions selected</p><p className="mt-1 text-sm text-zawana-500">Choose an available court and time to add it here.</p></div>}{error&&<p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}</div><footer className="border-t bg-white p-5"><div className="mb-4 flex items-center justify-between"><span className="text-sm text-zawana-500">Total</span><b className="text-xl">{total.toLocaleString()} MMK</b></div><Button disabled={!selected.length||busy||loadingMonth} onClick={confirm} className="w-full">{busy?"Confirming bookings…":"Confirm all bookings"}<ChevronRight size={16}/></Button><p className="mt-3 text-center text-[11px] leading-5 text-zawana-500">Availability is rechecked before the existing booking confirmation runs.</p></footer></motion.section></div>}{toast&&<Toast message={toast} type={error?"error":"success"} onClose={()=>setToast("")}/>}</Page>;
 }

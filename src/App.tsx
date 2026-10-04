@@ -18,7 +18,7 @@ import type { UserRole } from './types';
 import { classes, courts } from './data';
 
 const homeByRole: Record<UserRole,string> = {
- member:'/member', coach:'/coach', admin:'/admin', gym_fo:'/gym-fo', clinic_fo:'/clinic-fo',
+ member:'/member', coach:'/coach', admin:'/admin', owner:'/owner', gym_fo:'/gym-fo', clinic_fo:'/clinic-fo',
  badminton_fo:'/badminton-fo', store_fo:'/store-fo', cafe_fo:'/cafe', doctor:'/doctor',
 };
 
@@ -89,6 +89,7 @@ export default function App(){
 
   {/* Admin */}
   {['/admin','/admin/notifications','/admin/badminton-packages','/admin/gym-packages','/admin/finance','/admin/cms'].map(path=>operational('admin',path))}
+  {['/owner','/owner/notifications','/owner/finance'].map(path=>operational('owner',path))}
   <Route path="/admin/users" element={<Guard role="admin"><UserManagement/></Guard>}/>
   <Route path="/admin/students" element={<Guard role="admin"><Navigate to="/admin/users" replace/></Guard>}/>
   <Route path="/admin/courts" element={<Guard role="admin"><AdminManagement section="courts"/></Guard>}/>
@@ -100,7 +101,8 @@ export default function App(){
   <Route path="/admin/classes" element={<Guard role="admin"><AdminTable title="Classes" items={classes.map(c=>c.title)}/></Guard>}/>
 
   {/* Department workspaces */}
-  {['/badminton-fo','/badminton-fo/notifications','/badminton-fo/check-in','/badminton-fo/courts','/badminton-fo/bookings','/badminton-fo/packages','/badminton-fo/pos','/badminton-fo/transactions'].map(path=>operational('badminton_fo',path))}
+  {['/badminton-fo','/badminton-fo/notifications','/badminton-fo/check-in','/badminton-fo/courts','/badminton-fo/bookings','/badminton-fo/pos','/badminton-fo/transactions'].map(path=>operational('badminton_fo',path))}
+  <Route path="/badminton-fo/packages" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/check-in" replace/></Guard>}/>
   <Route path="/badminton-fo/students" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/check-in" replace/></Guard>}/>
   <Route path="/badminton-fo/private-courses" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/bookings" replace/></Guard>}/>
   {['/gym-fo','/gym-fo/notifications','/gym-fo/check-in','/gym-fo/members','/gym-fo/memberships','/gym-fo/appointments','/gym-fo/coaches','/gym-fo/payments'].map(path=>operational('gym_fo',path))}

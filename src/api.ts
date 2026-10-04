@@ -19,13 +19,14 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(`${API_BASE_URL}${path}`, {...options,headers});
   const data = await response.json().catch(()=>null);
-  if (!response.ok) { const error = new Error(data?.message || `Request failed (${response.status})`) as Error & { status?: number; details?: unknown }; error.status=response.status; error.details=data?.issues; throw error; }
+  if (!response.ok) { const error = new Error(data?.message || `Request failed (${response.status})`) as Error & { status?: number; details?: unknown }; error.status=response.status; error.details=data?.conflicts??data?.issues; throw error; }
   return data as T;
 }
 
 export const get = <T,>(path:string)=>api<T>(path);
 export const post = <T,>(path:string, body:unknown)=>api<T>(path,{method:"POST",body:JSON.stringify(body)});
 export const patch = <T,>(path:string, body:unknown)=>api<T>(path,{method:"PATCH",body:JSON.stringify(body)});
+export const put = <T,>(path:string, body:unknown)=>api<T>(path,{method:"PUT",body:JSON.stringify(body)});
 export const del = (path:string)=>api<void>(path,{method:"DELETE"});
 
 export type AuthResponse = { user: User; token: string };

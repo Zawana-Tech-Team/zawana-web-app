@@ -1,0 +1,2 @@
+-- Role values are stored as strings in SQLite; no table rebuild is needed.
+-- Existing accounts and role data remain unchanged.

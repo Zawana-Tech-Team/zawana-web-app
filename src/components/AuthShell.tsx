@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Logo } from './UI';
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -31,6 +33,7 @@ export function AuthShell({ title, children }: { title: string; children: ReactN
       <div className="flex items-center justify-center p-6 md:p-10">
         <div className="w-full max-w-md">
           <div className="mb-8 lg:hidden"><Logo /></div>
+          <Link to="/" className="mb-6 inline-flex min-h-10 items-center gap-2 rounded-full border border-zawana-950/10 px-4 text-sm font-bold text-zawana-500 transition hover:border-zawana-gold hover:text-zawana-950"><ArrowLeft size={15}/> Back to Zawana</Link>
           <p className="eyebrow text-zawana-gold">The Zawana</p>
           <h1 className="mt-3 text-4xl font-black tracking-[-.05em]">{title}</h1>
           <div className="mt-8">{children}</div>
