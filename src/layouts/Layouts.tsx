@@ -6,7 +6,7 @@ import { Logo, Button } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from '../components/NotificationBell';
 
-const member = [['/member', 'Overview', Home], ['/book/court', 'Courts', CalendarDays], ['/private-course', 'Private Course', Dumbbell], ['/bookings', 'Bookings', ClipboardList], ['/membership', 'Packages', Users], ['/payments', 'Payments', CreditCard]] as const;
+const member = [['/member', 'Overview', Home], ['/book/court', 'Courts', CalendarDays], ['/private-course', 'Private Course', Dumbbell], ['/member/training', 'My Gym Training', Dumbbell], ['/bookings', 'Bookings', ClipboardList], ['/membership', 'Packages', Users], ['/payments', 'Payments', CreditCard]] as const;
 const coach = [['/coach', 'Overview', Home], ['/coach/schedule', 'Schedule', CalendarDays], ['/coach/bookings', 'Requests', ClipboardList], ['/coach/clients', 'Clients', Users]] as const;
 const admin = [['/admin', 'Overview', Home], ['/admin/users', 'Users', Users], ['/admin/bookings', 'Bookings', CalendarDays], ['/admin/courts', 'Courts', Building2], ['/admin/classes', 'Classes', Dumbbell], ['/admin/coaches', 'Coaches', Users], ['/admin/payments', 'Payments', ClipboardList], ['/admin/checkins', 'Check-ins', Activity], ['/admin/analytics', 'Analytics', BarChart3]] as const;
 

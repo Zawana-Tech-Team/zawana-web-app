@@ -18,6 +18,7 @@ type Ops={
  updateCourtBooking:(id:string,status:CourtBooking["status"])=>Promise<void>;
  updateAppointment:(id:string,status:Appointment["status"])=>Promise<void>;
  updateCafeOrder:(id:string,status:CafeOrder["status"])=>Promise<void>;
+ addCafeOrder:(order:{location:string;courtId?:string|null;customer?:string;items:{id:string;quantity:number;notes?:string}[];discount?:number;paymentMethod:"CASH"|"ONLINE"|"PAY_LATER"})=>Promise<unknown>;
  addTransaction:(t:Omit<Transaction,"id">|CafeCashTransactionInput)=>Promise<void>;
  addProduct:(p:Omit<StoreProduct,"id">)=>Promise<void>;
  updateProduct:(id:string,p:Partial<StoreProduct>)=>Promise<void>;
@@ -28,7 +29,7 @@ type Ops={
  addMenuItem:(m:Omit<CafeMenuItem,"id">)=>Promise<void>;
  updateMenuItem:(id:string,m:Partial<CafeMenuItem>)=>Promise<void>;
  deleteMenuItem:(id:string)=>Promise<void>;
- addStoreOrder:(o:Omit<StoreOrder,"id"> & {paymentMethod:"Cash"|"KPay"|"Pay Later"; itemSummary?:string})=>Promise<void>;
+ addStoreOrder:(o:Omit<StoreOrder,"id"> & {paymentMethod:"Cash"|"KPay"|"Pay Later"|"Pay Online"; itemSummary?:string})=>Promise<StoreOrder>;
  adjustStock:(productId:string,quantity:number,note:string)=>Promise<void>;
  addContent:(c:Omit<ContentItem,"id">)=>Promise<void>;
  updateContent:(id:string,c:Partial<ContentItem>)=>Promise<void>;
@@ -66,7 +67,7 @@ export function OperationsProvider({children}:{children:ReactNode}){
    const canCoaches=['admin','owner','gym_fo','badminton_fo','member'].includes(role);
    const canAppointments=['admin','clinic_fo','doctor','member'].includes(role);
    const canBookings=['admin','owner','gym_fo','badminton_fo','clinic_fo','coach','member'].includes(role);
-   const canCourts=['admin','owner','badminton_fo','member'].includes(role);
+   const canCourts=['admin','owner','badminton_fo','cafe_fo','member'].includes(role);
    const results=await Promise.allSettled([
       canBadminton||role==='member'?get<any[]>("/packages/badminton"):Promise.resolve([]),canGym?get<any[]>("/packages/gym"):Promise.resolve([]),canGym?get<any[]>("/memberships"):Promise.resolve([]),
      canCourts?get<any[]>("/courts"):Promise.resolve([]),canCoaches?get<any[]>("/coaches"):Promise.resolve([]),canBookings?get<any[]>("/bookings"):Promise.resolve([]),canAppointments?get<any[]>("/appointments"):Promise.resolve([]),
@@ -98,6 +99,7 @@ export function OperationsProvider({children}:{children:ReactNode}){
  const updateCourtBooking=(id:string,status:any)=>action(()=>patch(`/bookings/${id}/status`,{status}).then(()=>undefined));
  const updateAppointment=(id:string,status:any)=>action(()=>patch(`/appointments/${id}/status`,{status}).then(()=>undefined));
  const updateCafeOrder=(id:string,status:any)=>action(()=>patch(`/cafe/orders/${id}/status`,{status}).then(()=>undefined));
+ const addCafeOrder=(order:{location:string;courtId?:string|null;customer?:string;items:{id:string;quantity:number;notes?:string}[];discount?:number;paymentMethod:"CASH"|"ONLINE"|"PAY_LATER"})=>action(()=>post("/cafe/orders",order));
  const addTransaction=(t:any)=>action(()=>post("/transactions",t).then(()=>undefined));
  const addProduct=(p:any)=>action(()=>post("/products",p).then(()=>undefined));
  const addCategory=(c:any)=>action(()=>post("/store/categories",c).then(()=>undefined));
@@ -106,7 +108,7 @@ export function OperationsProvider({children}:{children:ReactNode}){
  const addMenuItem=(m:any)=>action(()=>post("/menu",m).then(()=>undefined));
  const updateMenuItem=(id:string,m:any)=>action(()=>patch(`/menu/${id}`,m).then(()=>undefined));
  const deleteMenuItem=(id:string)=>action(()=>del(`/menu/${id}`));
- const addStoreOrder=(o:any)=>action(()=>post("/store/orders",o).then(()=>undefined));
+ const addStoreOrder=(o:any)=>action(()=>post<StoreOrder>("/store/orders",o));
  const updateProduct=(id:string,p:any)=>action(()=>patch(`/products/${id}`,p).then(()=>undefined));
  const deleteProduct=(id:string)=>action(()=>del(`/products/${id}`));
  const adjustStock=(id:string,quantity:number,note:string)=>action(()=>post(`/products/${id}/stock`,{quantity,note}).then(()=>undefined));
@@ -132,6 +134,6 @@ export function OperationsProvider({children}:{children:ReactNode}){
    lowStock:state.products.filter((p:any)=>p.stock<=5&&p.status==="active").length
  }),[state]);
 
- return <C.Provider value={{...state,addBadmintonPackage,updateBadmintonPackage,deleteBadmintonPackage,addGymPackage,updateGymPackage,deleteGymPackage,addMembership,updateCourtBooking,updateAppointment,updateCafeOrder,addTransaction,addProduct,updateProduct,deleteProduct,addCategory,updateCategory,deleteCategory,addMenuItem,updateMenuItem,deleteMenuItem,addStoreOrder,adjustStock,addContent,updateContent,deleteContent,publishContent,addStudent,updateStudent,deleteStudent,addSchedule,updateSchedule,addCourt,updateCourt,addCoach,updateCoach,metrics,loading,loadError,refresh}}>{children}</C.Provider>
+ return <C.Provider value={{...state,addBadmintonPackage,updateBadmintonPackage,deleteBadmintonPackage,addGymPackage,updateGymPackage,deleteGymPackage,addMembership,updateCourtBooking,updateAppointment,updateCafeOrder,addCafeOrder,addTransaction,addProduct,updateProduct,deleteProduct,addCategory,updateCategory,deleteCategory,addMenuItem,updateMenuItem,deleteMenuItem,addStoreOrder,adjustStock,addContent,updateContent,deleteContent,publishContent,addStudent,updateStudent,deleteStudent,addSchedule,updateSchedule,addCourt,updateCourt,addCoach,updateCoach,metrics,loading,loadError,refresh}}>{children}</C.Provider>
 }
 export const useOperations=()=>{const c=useContext(C);if(!c)throw Error("OperationsProvider missing");return c};

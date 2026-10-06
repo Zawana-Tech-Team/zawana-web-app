@@ -41,3 +41,5 @@ Returns member booking data (today, upcoming, recent and combined lists/counts),
 ## Route ownership
 
 The active route registry is `backend/src/server.ts`, with auth, store, and menu routers mounted from modules. Other router files and `backend/src/app.ts` are not proof that those routes are active. Preserve existing public paths and response contracts when extracting handlers. Use the schemas and handlers as the authority for request fields and permissions.
+
+Gym private-training, Cafe ordering/status/payment, media upload, and migration details are recorded in [GYM_TRAINING_CAFE_MEDIA.md](GYM_TRAINING_CAFE_MEDIA.md). The Gym training endpoints are mounted from `backend/src/routes/gymTraining.ts`; Cafe menu and order routes use the shared Prisma instance. Online Cafe orders remain unpaid until a verified payment provider is available.

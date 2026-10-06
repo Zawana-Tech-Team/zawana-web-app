@@ -39,9 +39,9 @@ type Ctx={
 const C=createContext<Ctx|null>(null);
 const firebaseMessage=(error:any)=>{
   const known:Record<string,string>={
-    'auth/invalid-credential':'Firebase could not sign in with this email and password. If you are using a seeded Zawana demo role, its password exists only in the app database: create the same email as a user in Firebase Authentication and set its Firebase password, or use Forgot password for an existing Firebase account.',
-    'auth/user-not-found':'Firebase could not sign in with this email and password. If you are using a seeded Zawana demo role, its password exists only in the app database: create the same email as a user in Firebase Authentication and set its Firebase password, or use Forgot password for an existing Firebase account.',
-    'auth/wrong-password':'Firebase could not sign in with this email and password. If you are using a seeded Zawana demo role, its password exists only in the app database: create the same email as a user in Firebase Authentication and set its Firebase password, or use Forgot password for an existing Firebase account.',
+    'auth/invalid-credential':'Firebase did not accept this email and password. If an Admin created this account before automatic Firebase linking was enabled, ask them to edit it in Users and save a new password. Otherwise use Forgot password and check that you are signing into the right Firebase project.',
+    'auth/user-not-found':'No Firebase login exists for this email. For an older Admin-created account, ask an Admin to edit it in Users and save a new password to link its login.',
+    'auth/wrong-password':'Firebase did not accept this password. Use Forgot password, or ask an Admin to edit this older account in Users and save a new password to link its login.',
     'auth/email-already-in-use':'An account with this email already exists. Sign in or reset your password.',
     'auth/operation-not-allowed':'Email and password sign-in is disabled for this Firebase project. Enable the Email/Password provider in Firebase Authentication settings.',
     'auth/configuration-not-found':'Firebase Authentication is not configured for this project yet. Enable Email/Password under Firebase Console → Authentication → Sign-in method.',

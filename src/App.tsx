@@ -16,6 +16,7 @@ import PaymentHistory from './pages/PaymentHistory';
 import { CompleteProfile, ForgotPassword, AuthAction } from './pages/AuthFlows';
 import { Settings } from './pages/Settings';
 import { PaymentStatus } from './pages/PaymentStatus';
+import MemberTraining from './pages/MemberTraining';
 import type { UserRole } from './types';
 import { classes, courts } from './data';
 
@@ -51,6 +52,7 @@ export default function App(){
 
   {/* Customer experience — existing screens preserved */}
   <Route path="/member" element={<Guard role="member"><Dashboard/></Guard>}/>
+  <Route path="/member/training" element={<Guard role="member"><MemberTraining/></Guard>}/>
   <Route path="/dashboard" element={<Guard role="member"><Dashboard/></Guard>}/>
     <Route
     path="/book"
@@ -114,14 +116,14 @@ export default function App(){
   <Route path="/badminton-fo/packages" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/check-in" replace/></Guard>}/>
   <Route path="/badminton-fo/students" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/check-in" replace/></Guard>}/>
   <Route path="/badminton-fo/private-courses" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/bookings" replace/></Guard>}/>
-  {['/gym-fo','/gym-fo/notifications','/gym-fo/check-in','/gym-fo/members','/gym-fo/memberships','/gym-fo/appointments','/gym-fo/coaches','/gym-fo/payments'].map(path=>operational('gym_fo',path))}
+  {['/gym-fo','/gym-fo/notifications','/gym-fo/check-in','/gym-fo/members','/gym-fo/memberships','/gym-fo/private-training','/gym-fo/appointments','/gym-fo/coaches','/gym-fo/payments'].map(path=>operational('gym_fo',path))}
   {['/clinic-fo','/clinic-fo/notifications','/clinic-fo/patients','/clinic-fo/appointments','/clinic-fo/doctors','/clinic-fo/schedule','/clinic-fo/records','/clinic-fo/payments'].map(path=>operational('clinic_fo',path))}
   {['/store-fo','/store-fo/notifications','/store-fo/products','/store-fo/categories','/store-fo/inventory','/store-fo/pos','/store-fo/orders','/store-fo/transactions'].map(path=>operational('store_fo',path))}
   {['/cafe','/cafe/notifications','/cafe/orders','/cafe/menu','/cafe/pos','/cafe/transactions'].map(path=>operational('cafe_fo',path))}
 
   {/* Professional portals */}
   <Route path="/coach/schedule" element={<Guard role="coach"><CoachCalendar/></Guard>}/>
-  {['/coach','/coach/notifications','/coach/bookings','/coach/clients'].map(path=>operational('coach',path))}
+  {['/coach','/coach/notifications','/coach/bookings','/coach/clients','/coach/training'].map(path=>operational('coach',path))}
   <Route path="/coach/availability" element={<Guard role="coach"><Navigate to="/coach/schedule" replace/></Guard>}/>
   {['/doctor','/doctor/notifications','/doctor/schedule','/doctor/appointments','/doctor/patients','/doctor/profile'].map(path=>operational('doctor',path))}
 

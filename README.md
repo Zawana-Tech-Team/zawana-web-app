@@ -57,6 +57,8 @@ The active API currently has two levels of modularity:
 - The two schemas and migration histories are maintained separately. Review both before changing shared models.
 - No database schema change is required for the auth/config refactor documented here.
 
+The Gym private-training, shared media, and Cafe order extensions are documented in [docs/GYM_TRAINING_CAFE_MEDIA.md](docs/GYM_TRAINING_CAFE_MEDIA.md). Their SQLite and PostgreSQL migrations must be applied using the corresponding migration history.
+
 ## Authentication flow
 
 The frontend and backend modes must agree:

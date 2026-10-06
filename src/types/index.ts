@@ -193,6 +193,7 @@ export type GymPackage = {
   title: string;
   price: number;
   duration: number;
+  sessions: number;
   description: string;
   benefits: string[];
   status: 'active' | 'inactive';
@@ -209,6 +210,9 @@ export type MembershipRecord = {
   expiryDate: string;
   status: 'active' | 'expired' | 'pending';
   lastCheckIn?: string;
+  sessionsTotal: number;
+  sessionsRemaining: number;
+  checkIns?: { id:string; date:string; time:string; sessionsUsed:number; note?:string|null }[];
 };
 
 export type CourtBooking = {
@@ -283,7 +287,7 @@ export type InventoryTransaction = {
 
 
 export type ProductCategory = { id: string; name: string; active: boolean };
-export type CafeMenuItem = { id: string; name: string; category: string; description: string; price: number; available: boolean };
+export type CafeMenuItem = { id: string; name: string; category: string; description: string; price: number; available: boolean; imageUrl?: string | null };
 
 export type StoreProduct = Product & {
   sku: string;
@@ -292,28 +296,41 @@ export type StoreProduct = Product & {
   cost: number;
   tax: number;
   status: 'active' | 'inactive';
+  imageUrl?: string | null;
 };
 
 export type StoreOrder = {
   id: string;
   customer: string;
   total: number;
+  discount?: number;
+  tax?: number;
   paid: number;
   dueDate?: string;
   status: 'pending' | 'partially_paid' | 'paid' | 'overdue';
-  items: { productId: string; quantity: number }[];
-  paymentMethod?: 'Cash' | 'KPay' | 'Pay Later';
+  items: { productId: string; quantity: number; name?:string; price?:number }[];
+  paymentMethod?: 'Cash' | 'KPay' | 'Pay Later' | 'Pay Online';
   itemSummary?: string;
 };
 
 export type CafeOrder = {
   id: string;
+  orderNumber?: string | null;
+  customerId?: string | null;
   customer: string;
-  items: { name: string; quantity: number; price: number }[];
+  items: { id?: string; name: string; quantity: number; price: number; notes?: string | null }[];
+  location?: string;
   floor: string;
+  court?: { id: string; name: string } | null;
+  courtId?: string | null;
   orderTime: string;
-  paymentMethod: 'Cash' | 'KPay';
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  paymentMethod: 'CASH' | 'ONLINE' | 'PAY_LATER' | 'Cash' | 'KPay' | 'Pay Later';
+  paymentStatus?: 'pending' | 'paid';
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
+  total?: number;
+  status: 'NEW' | 'PREPARING' | 'READY' | 'DELIVERING' | 'COMPLETED' | 'CANCELLED' | 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
 };
 
 export type ContentItem = {

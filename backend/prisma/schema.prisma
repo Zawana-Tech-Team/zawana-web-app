@@ -89,6 +89,14 @@ enum ProductStatus {
   inactive
 }
 
+enum PrivateTrainingStatus {
+  SCHEDULED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
 model ProductCategory {
   id        String    @id @default(cuid())
   name      String    @unique
@@ -104,7 +112,9 @@ model CafeMenuItem {
   description String   @default("")
   price       Int
   available   Boolean  @default(true)
+  imageUrl    String?
   createdAt   DateTime @default(now())
+  orderItems  CafeOrderItem[]
 }
 
 enum TransactionBusiness {
@@ -139,6 +149,10 @@ model User {
   memberships          Membership[]
   transactions         Transaction[]
   storeOrders          StoreOrder[]
+  privateTrainingSessions PrivateTrainingSession[] @relation("PrivateTrainingMember")
+  createdTrainingSessions PrivateTrainingSession[] @relation("PrivateTrainingCreator")
+  cafeOrders           CafeOrder[] @relation("CafeOrderCustomer")
+  createdCafeOrders    CafeOrder[] @relation("CafeOrderCreator")
   badmintonPackageCategories BadmintonPackageCategory[] @relation("BadmintonPackageCategoryCreator")
   badmintonPackagePurchases BadmintonPackagePurchase[]
   paymentAttempts       PaymentAttempt[]
@@ -157,6 +171,7 @@ model Court {
   features  Json
   createdAt DateTime     @default(now())
   bookings  Booking[]
+  cafeOrders CafeOrder[]
   blocks    CourtBlock[]
 }
 
@@ -213,6 +228,7 @@ model Coach {
   userId    String?     @unique
   user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   bookings  Booking[]
+  privateTrainingSessions PrivateTrainingSession[]
   privateCourses PrivateCourse[] @relation("PrivateCourseCoaches")
 }
 
@@ -271,6 +287,27 @@ model Booking {
   @@index([kind, status, paymentExpiresAt], map: "Booking_privateCourse_paymentExpiresAt_idx")
 }
 
+model PrivateTrainingSession {
+  id               String                @id @default(cuid())
+  memberId         String
+  member           User                  @relation("PrivateTrainingMember", fields: [memberId], references: [id], onDelete: Cascade)
+  coachId          String
+  coach            Coach                 @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  date             String
+  startTime        String
+  endTime          String
+  durationMinutes  Int                   @default(60)
+  status           PrivateTrainingStatus @default(SCHEDULED)
+  notes            String?
+  createdById      String
+  createdBy        User                  @relation("PrivateTrainingCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @default(now()) @updatedAt
+
+  @@index([memberId, date, status])
+  @@index([coachId, date, status])
+}
+
 model PrivateCourse {
   id          String   @id @default(cuid())
   title       String
@@ -322,6 +359,23 @@ model Membership {
   expiryDate  String
   status      String
   lastCheckIn String?
+  sessionsTotal     Int      @default(0)
+  sessionsRemaining Int      @default(0)
+  checkIns          GymCheckIn[]
+}
+
+model GymCheckIn {
+  id           String     @id @default(cuid())
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  date         String
+  time         String
+  sessionsUsed Int        @default(1)
+  staffId      String?
+  note         String?
+  createdAt    DateTime   @default(now())
+
+  @@unique([membershipId, date])
 }
 
 model Product {
@@ -338,6 +392,7 @@ model Product {
   cost                  Int                    @default(0)
   tax                   Int                    @default(0)
   status                ProductStatus          @default(active)
+  imageUrl              String?
   inventoryTransactions InventoryTransaction[]
 }
 
@@ -357,6 +412,8 @@ model StoreOrder {
   user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   customer String
   total    Int
+  discount Int     @default(0)
+  tax      Int     @default(0)
   paid     Int
   dueDate  String?
   status   String
@@ -364,13 +421,50 @@ model StoreOrder {
 }
 
 model CafeOrder {
-  id            String @id @default(cuid())
+  id            String          @id @default(cuid())
+  orderNumber   String?         @unique
+  customerId    String?
+  customerUser  User?           @relation("CafeOrderCustomer", fields: [customerId], references: [id], onDelete: SetNull)
   customer      String
   items         Json
-  floor         String
+  orderItems    CafeOrderItem[]
+  location      String          @default("Cafe")
+  floor         String          @default("Ground Floor")
+  courtId       String?
+  court         Court?          @relation(fields: [courtId], references: [id], onDelete: SetNull)
   orderTime     String
   paymentMethod String
-  status        String
+  paymentStatus String          @default("pending")
+  subtotal      Int             @default(0)
+  discount      Int             @default(0)
+  tax           Int             @default(0)
+  total         Int             @default(0)
+  status        String          @default("NEW")
+  createdById   String?
+  createdBy     User?           @relation("CafeOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  transactionId String?         @unique
+  transaction   Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @default(now()) @updatedAt
+
+  @@index([status, createdAt])
+  @@index([location, createdAt])
+}
+
+model CafeOrderItem {
+  id         String        @id @default(cuid())
+  orderId    String
+  order      CafeOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId String?
+  menuItem   CafeMenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  name       String
+  quantity   Int
+  unitPrice  Int
+  notes      String?
+  createdAt  DateTime      @default(now())
+
+  @@index([orderId])
+  @@index([menuItemId])
 }
 
 model Transaction {
@@ -389,6 +483,7 @@ model Transaction {
   staff         String
   status        String
   createdAt     DateTime            @default(now())
+  cafeOrder     CafeOrder?
 
   @@index([userId, date])
   @@index([business, status, date])
@@ -562,6 +657,7 @@ model GymPackage {
   title       String
   price       Int
   duration    Int
+  sessions    Int    @default(0)
   description String
   benefits    Json
   status      String @default("active")

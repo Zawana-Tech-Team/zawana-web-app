@@ -12,6 +12,9 @@ import { Role, BookingStatus, CourtStatus, TransactionBusiness } from "@prisma/c
 import storeRoutes from "./routes/store.js";
 import menuRoutes from "./routes/menu.js";
 import authRoutes from "./routes/auth.js";
+import mediaRoutes from "./routes/media.js";
+import cafeRoutes from "./routes/cafe.js";
+import gymTrainingRoutes from "./routes/gymTraining.js";
 import { auth, roles } from "./middleware/auth.js";
 import type { AuthRequest } from "./types/auth.js";
 import { env } from "./config/env.js";
@@ -21,6 +24,8 @@ import { toSafeAppUser } from "./services/userSerializer.js";
 import { registerBookingQueryRoutes } from "./routes/bookingQueries.js";
 import { isDateKey } from "./utils/dateKeys.js";
 import { asyncRoute } from "./utils/asyncRoute.js";
+import { isStoredImageUrl } from "./services/mediaStorage.js";
+import { firebaseAdminAuth } from "./services/firebaseAdmin.js";
 
 const app = express();
 const PORT = env.port;
@@ -41,12 +46,16 @@ app.use(express.json({limit:"8mb",verify:(req:any,_res,buffer)=>{req.rawBody=Buf
 app.use("/uploads/coaches",express.static(coachUploadPath));
 app.use("/uploads/courses",express.static(courseUploadPath));
 app.use("/uploads/profiles",express.static(profileUploadPath));
+app.use("/uploads/media",express.static(fileURLToPath(new URL("../uploads/media/",import.meta.url))));
 
 // Store/POS and Cafe menu routes. These must be registered on the actual server entrypoint
 // (src/server.ts); src/app.ts is not used by the dev/start scripts.
 app.use("/api/store", storeRoutes);
 app.use("/api/menu", menuRoutes);
 app.use("/api/auth",authRoutes);
+app.use("/api/media",mediaRoutes);
+app.use("/api/cafe",cafeRoutes);
+app.use("/api",gymTrainingRoutes);
 
 const businessTimeZone=process.env.BUSINESS_TIME_ZONE||"Asia/Yangon";
 const businessNow=()=>{
@@ -126,6 +135,7 @@ async function ensureStorePosTables() {
   const cols = await rawQuery<any[]>(prisma,`PRAGMA table_info("Product")`);
   const names = new Set(cols.map(c => String(c.name)));
   if (!names.has("categoryId")) await rawExec(prisma,`ALTER TABLE "Product" ADD COLUMN "categoryId" TEXT`);
+  if (!names.has("imageUrl")) await rawExec(prisma,`ALTER TABLE "Product" ADD COLUMN "imageUrl" TEXT`);
   await rawExec(prisma,`CREATE INDEX IF NOT EXISTS "Product_categoryId_idx" ON "Product"("categoryId")`);
 
   await rawExec(prisma,`CREATE TABLE IF NOT EXISTS "ProductCategory" (
@@ -142,14 +152,65 @@ async function ensureStorePosTables() {
     "description" TEXT NOT NULL DEFAULT '',
     "price" INTEGER NOT NULL,
     "available" BOOLEAN NOT NULL DEFAULT true,
+    "imageUrl" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
+  const menuColumns = await rawQuery<any[]>(prisma,`PRAGMA table_info("CafeMenuItem")`);
+  if (!menuColumns.some(column => String(column.name) === "imageUrl")) await rawExec(prisma,`ALTER TABLE "CafeMenuItem" ADD COLUMN "imageUrl" TEXT`);
   await rawExec(prisma,`INSERT OR IGNORE INTO "ProductCategory" ("id","name","active") VALUES
     ('seed-cat-apparel','Apparel',1),('seed-cat-equipment','Equipment',1),('seed-cat-accessories','Accessories',1)`);
   await rawExec(prisma,`INSERT OR IGNORE INTO "CafeMenuItem" ("id","name","category","description","price","available") VALUES
     ('seed-menu-americano','Iced Americano','Coffee','Cold brewed espresso over ice.',5000,1),
     ('seed-menu-wrap','Chicken Wrap','Food','Chicken wrap for a quick post-training meal.',9000,1),
     ('seed-menu-bowl','Protein Bowl','Healthy','Protein-focused bowl.',12000,1)`);
+  await rawExec(prisma,`CREATE TABLE IF NOT EXISTS "PrivateTrainingSession" (
+    "id" TEXT NOT NULL PRIMARY KEY,"memberId" TEXT NOT NULL,"coachId" TEXT NOT NULL,"date" TEXT NOT NULL,
+    "startTime" TEXT NOT NULL,"endTime" TEXT NOT NULL,"durationMinutes" INTEGER NOT NULL DEFAULT 60,
+    "status" TEXT NOT NULL DEFAULT 'SCHEDULED',"notes" TEXT,"createdById" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "PrivateTrainingSession_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "PrivateTrainingSession_coachId_fkey" FOREIGN KEY ("coachId") REFERENCES "Coach"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "PrivateTrainingSession_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+  )`);
+  await rawExec(prisma,`CREATE INDEX IF NOT EXISTS "PrivateTrainingSession_memberId_date_status_idx" ON "PrivateTrainingSession"("memberId","date","status")`);
+  await rawExec(prisma,`CREATE INDEX IF NOT EXISTS "PrivateTrainingSession_coachId_date_status_idx" ON "PrivateTrainingSession"("coachId","date","status")`);
+  await rawExec(prisma,`CREATE TABLE IF NOT EXISTS "CafeOrderItem" (
+    "id" TEXT NOT NULL PRIMARY KEY,"orderId" TEXT NOT NULL,"menuItemId" TEXT,"name" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL,"unitPrice" INTEGER NOT NULL,"notes" TEXT,"createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "CafeOrderItem_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "CafeOrder"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "CafeOrderItem_menuItemId_fkey" FOREIGN KEY ("menuItemId") REFERENCES "CafeMenuItem"("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`);
+  await rawExec(prisma,`CREATE INDEX IF NOT EXISTS "CafeOrderItem_orderId_idx" ON "CafeOrderItem"("orderId")`);
+  await rawExec(prisma,`CREATE INDEX IF NOT EXISTS "CafeOrderItem_menuItemId_idx" ON "CafeOrderItem"("menuItemId")`);
+  const cafeOrderColumns = await rawQuery<any[]>(prisma,`PRAGMA table_info("CafeOrder")`);
+  const cafeOrderColumnNames = new Set(cafeOrderColumns.map(column => String(column.name)));
+  const cafeOrderAdditions: [string,string][] = [
+    ["orderNumber","TEXT"],["customerId",'TEXT REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE'],
+    ["location","TEXT NOT NULL DEFAULT 'Cafe'"],["courtId",'TEXT REFERENCES "Court"("id") ON DELETE SET NULL ON UPDATE CASCADE'],
+    ["paymentStatus","TEXT NOT NULL DEFAULT 'pending'"],["subtotal","INTEGER NOT NULL DEFAULT 0"],
+    ["discount","INTEGER NOT NULL DEFAULT 0"],["tax","INTEGER NOT NULL DEFAULT 0"],["total","INTEGER NOT NULL DEFAULT 0"],
+    ["createdById",'TEXT REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE'],
+    ["transactionId",'TEXT REFERENCES "Transaction"("id") ON DELETE SET NULL ON UPDATE CASCADE'],
+    ["createdAt","DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"],["updatedAt","DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"]
+  ];
+  for (const [column,definition] of cafeOrderAdditions) if (!cafeOrderColumnNames.has(column)) await rawExec(prisma,`ALTER TABLE "CafeOrder" ADD COLUMN "${column}" ${definition}`);
+  await rawExec(prisma,`CREATE UNIQUE INDEX IF NOT EXISTS "CafeOrder_orderNumber_key" ON "CafeOrder"("orderNumber")`);
+  await rawExec(prisma,`CREATE INDEX IF NOT EXISTS "CafeOrder_status_createdAt_idx" ON "CafeOrder"("status","createdAt")`);
+  await rawExec(prisma,`CREATE INDEX IF NOT EXISTS "CafeOrder_location_createdAt_idx" ON "CafeOrder"("location","createdAt")`);
+  const storeOrderColumns=await rawQuery<any[]>(prisma,`PRAGMA table_info("StoreOrder")`);
+  const storeOrderNames=new Set(storeOrderColumns.map(column=>String(column.name)));
+  if(!storeOrderNames.has("discount"))await rawExec(prisma,`ALTER TABLE "StoreOrder" ADD COLUMN "discount" INTEGER NOT NULL DEFAULT 0`);
+  if(!storeOrderNames.has("tax"))await rawExec(prisma,`ALTER TABLE "StoreOrder" ADD COLUMN "tax" INTEGER NOT NULL DEFAULT 0`);
+}
+
+async function ensureGymSessionTables(){
+  const gymCols=await rawQuery<any[]>(prisma,`PRAGMA table_info("GymPackage")`);
+  if(!gymCols.some(c=>String(c.name)==="sessions"))await rawExec(prisma,`ALTER TABLE "GymPackage" ADD COLUMN "sessions" INTEGER NOT NULL DEFAULT 0`);
+  const membershipCols=await rawQuery<any[]>(prisma,`PRAGMA table_info("Membership")`),names=new Set(membershipCols.map(c=>String(c.name)));
+  if(!names.has("sessionsTotal"))await rawExec(prisma,`ALTER TABLE "Membership" ADD COLUMN "sessionsTotal" INTEGER NOT NULL DEFAULT 0`);
+  if(!names.has("sessionsRemaining"))await rawExec(prisma,`ALTER TABLE "Membership" ADD COLUMN "sessionsRemaining" INTEGER NOT NULL DEFAULT 0`);
+  await rawExec(prisma,`CREATE TABLE IF NOT EXISTS "GymCheckIn"("id" TEXT NOT NULL PRIMARY KEY,"membershipId" TEXT NOT NULL,"date" TEXT NOT NULL,"time" TEXT NOT NULL,"sessionsUsed" INTEGER NOT NULL DEFAULT 1,"staffId" TEXT,"note" TEXT,"createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "GymCheckIn_membershipId_fkey" FOREIGN KEY("membershipId") REFERENCES "Membership"("id") ON DELETE CASCADE ON UPDATE CASCADE)`);
+  await rawExec(prisma,`CREATE UNIQUE INDEX IF NOT EXISTS "GymCheckIn_membershipId_date_key" ON "GymCheckIn"("membershipId","date")`);
 }
 
 async function ensureBadmintonBookingTables() {
@@ -360,6 +421,26 @@ app.post("/api/profile/avatar",auth,asyncRoute(async(req:AuthRequest,res)=>{
 }));
 
 // Users / members
+async function syncManagedFirebaseIdentity(input:{userId:string;email:string;password?:string;name:string;firebaseUid?:string|null;disabled?:boolean}) {
+  const auth=firebaseAdminAuth();
+  const changes={
+    displayName:input.name,
+    emailVerified:true,
+    ...(input.password?{password:input.password}:{}),
+    ...(typeof input.disabled==="boolean"?{disabled:input.disabled}:{}),
+  };
+  if(input.firebaseUid)return auth.updateUser(input.firebaseUid,changes);
+  try {
+    const existing=await auth.getUserByEmail(input.email);
+    const linkedUser=await prisma.user.findFirst({where:{firebaseUid:existing.uid},select:{id:true}});
+    if(linkedUser&&linkedUser.id!==input.userId)throw Object.assign(new Error("This Firebase account is already linked to a different Zawana user."),{statusCode:409});
+    return await auth.updateUser(existing.uid,changes);
+  } catch(error:any) {
+    if(error?.code!=="auth/user-not-found")throw error;
+    return auth.createUser({email:input.email,...changes});
+  }
+}
+
 app.get("/api/users",auth,roles("admin","owner"),asyncRoute(async(req,res)=>{
   const hasPage=typeof req.query.page!=="undefined",page=Math.max(1,Number(req.query.page)||1),limit=Math.min(100,Math.max(1,Number(req.query.limit)||20));
   const role=String(req.query.role||"all"),search=String(req.query.search||"").trim();
@@ -374,20 +455,53 @@ app.get("/api/users",auth,roles("admin","owner"),asyncRoute(async(req,res)=>{
 app.post("/api/users",auth,roles("admin"),asyncRoute(async(req,res)=>{
   const b=z.object({name:z.string().min(2),email:z.string().email(),password:z.string().min(8),phone:z.string().optional(),role:z.nativeEnum(Role),coachDepartment:z.enum(["Badminton","Gym"]).optional()}).parse(req.body);
   const email=b.email.toLowerCase();
+  if(await prisma.user.findUnique({where:{email},select:{id:true}}))return res.status(409).json({message:"A Zawana account with this email already exists."});
   const passwordHash=await bcrypt.hash(b.password,12);
-  const created=await prisma.$transaction(async tx=>{
-    const user=await tx.user.create({data:{name:b.name,email,passwordHash,phone:b.phone||null,role:b.role}});
-    const coach=b.role==="coach"?await tx.coach.create({data:{name:b.name,email,specialty:b.coachDepartment||"Badminton",department:b.coachDepartment||"Badminton",phone:b.phone||"",userId:user.id}}):null;
-    if(b.role==="doctor")await tx.doctor.create({data:{userId:user.id,phone:b.phone||""}});
-    return {user,coach};
-  });
+  const firebaseMode=!env.databaseAuthEnabled;
+  let identity:null|Awaited<ReturnType<ReturnType<typeof firebaseAdminAuth>["createUser"]>>=null;
+  if(firebaseMode){
+    try{identity=await firebaseAdminAuth().createUser({email,password:b.password,displayName:b.name,emailVerified:true});}
+    catch(error:any){
+      if(error?.code==="auth/email-already-exists")throw Object.assign(new Error("This email already has a Firebase sign-in account. Link that account to its existing Zawana user or choose another email."),{statusCode:409});
+      throw error;
+    }
+  }
+  let created;
+  try {
+    created=await prisma.$transaction(async tx=>{
+      const user=await tx.user.create({data:{name:b.name,email,passwordHash,phone:b.phone||null,role:b.role,...(identity?{firebaseUid:identity.uid,emailVerified:true}:{})}});
+      const coach=b.role==="coach"?await tx.coach.create({data:{name:b.name,email,specialty:b.coachDepartment||"Badminton",department:b.coachDepartment||"Badminton",phone:b.phone||"",userId:user.id}}):null;
+      if(b.role==="doctor")await tx.doctor.create({data:{userId:user.id,phone:b.phone||""}});
+      return {user,coach};
+    });
+  } catch(error) {
+    if(identity)await firebaseAdminAuth().deleteUser(identity.uid).catch(()=>undefined);
+    throw error;
+  }
   res.status(201).json({id:created.user.id,name:created.user.name,email:created.user.email,role:created.user.role,phone:created.user.phone,active:created.user.active,createdAt:created.user.createdAt,coachId:created.coach?.id||null});
 }));
 app.patch("/api/users/:id",auth,roles("admin"),asyncRoute(async(req,res)=>{
   const body=z.object({name:z.string().min(2).optional(),phone:z.string().nullable().optional(),role:z.nativeEnum(Role).optional(),membership:z.string().nullable().optional(),active:z.boolean().optional(),password:z.string().min(8).optional(),coachDepartment:z.enum(["Badminton","Gym"]).optional()}).parse(req.body);
   if(req.params.id===req.user!.id&&body.active===false)return res.status(400).json({message:"You cannot deactivate your own admin account."});
+  const current=await prisma.user.findUnique({where:{id:String(req.params.id)}});
+  if(!current)return res.status(404).json({message:"User not found."});
+  let linkedFirebaseUid=current.firebaseUid;
+  let newlyCreatedFirebaseUid:string|undefined;
+  if(!env.databaseAuthEnabled&&(body.password||typeof body.active==="boolean")){
+    const auth=firebaseAdminAuth();
+    if(linkedFirebaseUid){
+      await auth.updateUser(linkedFirebaseUid,{...(body.password?{password:body.password}:{}),...(typeof body.active==="boolean"?{disabled:!body.active}:{})});
+    }else if(body.password){
+      const identity=await syncManagedFirebaseIdentity({userId:current.id,email:current.email,password:body.password,name:body.name||current.name,disabled:body.active===undefined?!current.active:!body.active});
+      linkedFirebaseUid=identity.uid;
+      newlyCreatedFirebaseUid=identity.uid;
+    }
+  }
   const data:any={...body};delete data.coachDepartment;if(body.password){data.passwordHash=await bcrypt.hash(body.password,12);delete data.password;}
-  const updated=await prisma.$transaction(async tx=>{
+  if(linkedFirebaseUid)data.firebaseUid=linkedFirebaseUid;
+  if(linkedFirebaseUid&&!env.databaseAuthEnabled)data.emailVerified=true;
+  let updated;
+  try{updated=await prisma.$transaction(async tx=>{
     const user=await tx.user.update({where:{id:req.params.id},data,select:{id:true,name:true,email:true,role:true,phone:true,membership:true,active:true,createdAt:true,lastLoginAt:true}});
     if(user.role==="coach"){
       const existing=await tx.coach.findFirst({where:{OR:[{userId:user.id},{email:user.email}]}});
@@ -401,8 +515,16 @@ app.patch("/api/users/:id",auth,roles("admin"),asyncRoute(async(req,res)=>{
       else await tx.doctor.create({data:{userId:user.id,phone:user.phone||"",status:user.active?"active":"inactive"}});
     } else if(body.role) await tx.doctor.updateMany({where:{userId:user.id},data:{status:"inactive"}});
     return user;
-  });
+  });}catch(error){if(newlyCreatedFirebaseUid)await firebaseAdminAuth().deleteUser(newlyCreatedFirebaseUid).catch(()=>undefined);throw error;}
   res.json(updated);
+}));
+app.delete("/api/users/:id",auth,roles("admin"),asyncRoute(async(req:AuthRequest,res)=>{
+  const id=String(req.params.id);if(id===req.user!.id)return res.status(400).json({message:"You cannot delete your own admin account."});
+  const user=await prisma.user.findUnique({where:{id}});if(!user)return res.status(404).json({message:"User not found."});
+  if(!user.active)return res.status(409).json({message:"This account is already inactive."});
+  if(user.firebaseUid&&!env.databaseAuthEnabled)await firebaseAdminAuth().updateUser(user.firebaseUid,{disabled:true});
+  await prisma.$transaction(async tx=>{await tx.user.update({where:{id},data:{active:false}});await tx.coach.updateMany({where:{userId:id},data:{status:"inactive"}});await tx.doctor.updateMany({where:{userId:id},data:{status:"inactive"}})});
+  res.status(204).end();
 }));
 app.get("/api/users/:id/activity",auth,roles("admin"),asyncRoute(async(req,res)=>{
   const user=await prisma.user.findUnique({where:{id:String(req.params.id)},include:{bookings:{include:{court:true,coach:true},orderBy:{createdAt:"desc"},take:50},badmintonEnrollments:{include:{checkIns:{orderBy:{createdAt:"desc"},take:30}},orderBy:{createdAt:"desc"},take:30},appointments:{orderBy:{date:"desc"},take:30},transactions:{orderBy:{createdAt:"desc"},take:50},memberships:{take:30},storeOrders:{take:30}}});
@@ -428,13 +550,13 @@ app.get("/api/coaches",auth,roles("admin","owner","gym_fo","badminton_fo","membe
   res.json(await prisma.coach.findMany({where,include:{user:{select:{id:true,name:true,email:true,active:true,avatar:true}}},orderBy:{name:"asc"},take:200}));
 }));
 app.post("/api/coaches",auth,roles("admin"),asyncRoute(async(req,res)=>{
-  const b=z.object({name:z.string(),specialty:z.string(),department:z.enum(["Badminton","Gym"]).default("Badminton"),phone:z.string(),email:z.string().email(),status:z.enum(["active","inactive"]).optional(),color:z.string().optional()}).parse(req.body);
+  const b=z.object({name:z.string(),specialty:z.string(),department:z.enum(["Badminton","Gym"]).default("Badminton"),phone:z.string(),email:z.string().email(),status:z.enum(["active","inactive"]).optional(),color:z.string().optional(),imageUrl:z.string().max(2048).refine(isStoredImageUrl,"Choose an uploaded image URL.").nullable().optional()}).parse(req.body);
   const user=await prisma.user.findFirst({where:{email:b.email.toLowerCase(),role:"coach",active:true}});
   if(!user)return res.status(400).json({message:"Create or select an active Coach user account first, then link this profile to its email."});
   res.status(201).json(await prisma.coach.create({data:{...b,email:user.email,userId:user.id,status:b.status||"active",color:b.color||"#D6FF3F"}}));
 }));
 app.patch("/api/coaches/:id",auth,roles("admin"),asyncRoute(async(req,res)=>{
-  const b=z.object({name:z.string().optional(),specialty:z.string().optional(),department:z.enum(["Badminton","Gym"]).optional(),phone:z.string().optional(),email:z.string().email().optional(),status:z.enum(["active","inactive"]).optional(),color:z.string().optional(),imageUrl:z.string().nullable().optional()}).parse(req.body);
+  const b=z.object({name:z.string().optional(),specialty:z.string().optional(),department:z.enum(["Badminton","Gym"]).optional(),phone:z.string().optional(),email:z.string().email().optional(),status:z.enum(["active","inactive"]).optional(),color:z.string().optional(),imageUrl:z.string().max(2048).refine(isStoredImageUrl,"Choose an uploaded image URL.").nullable().optional()}).parse(req.body);
   if(b.department==="Gym"&&await prisma.privateCourse.count({where:{status:"active",coaches:{some:{id:String(req.params.id)}}}}))return res.status(409).json({message:"Remove this coach from active badminton courses before changing the department."});
   let data:any={...b};
   if(b.email){const user=await prisma.user.findFirst({where:{email:b.email.toLowerCase(),role:"coach",active:true}});if(!user)return res.status(400).json({message:"Select an active Coach user account email."});data.email=user.email;data.userId=user.id;}
@@ -707,17 +829,43 @@ app.post("/api/packages/badminton",auth,roles("admin","badminton_fo"),asyncRoute
 app.patch("/api/packages/badminton/:id",auth,roles("admin","badminton_fo"),asyncRoute(async(req,res)=>res.json(await prisma.badmintonPackage.update({where:{id:req.params.id},data:badmintonPackageInput.partial().parse(req.body)}))));
 app.delete("/api/packages/badminton/:id",auth,roles("admin","badminton_fo"),asyncRoute(async(req,res)=>{await prisma.badmintonPackage.delete({where:{id:req.params.id}});res.status(204).end()}));
 app.get("/api/packages/gym",auth,roles("admin","owner","gym_fo"),asyncRoute(async(_req,res)=>res.json(await prisma.gymPackage.findMany({orderBy:{title:"asc"}}))));
-app.post("/api/packages/gym",auth,roles("admin","gym_fo"),asyncRoute(async(req,res)=>res.status(201).json(await prisma.gymPackage.create({data:{...req.body,benefits:req.body.benefits||[]}}))));
-app.patch("/api/packages/gym/:id",auth,roles("admin","gym_fo"),asyncRoute(async(req,res)=>res.json(await prisma.gymPackage.update({where:{id:req.params.id},data:{...req.body,benefits:req.body.benefits||undefined}}))));
+const gymPackageInput=z.object({title:z.string().trim().min(2).max(120),price:z.coerce.number().int().nonnegative(),duration:z.coerce.number().int().positive(),sessions:z.coerce.number().int().positive(),description:z.string().default(""),benefits:z.array(z.string()).default([]),status:z.enum(["active","inactive"]).default("active")});
+app.post("/api/packages/gym",auth,roles("admin","gym_fo"),asyncRoute(async(req,res)=>res.status(201).json(await prisma.gymPackage.create({data:gymPackageInput.parse(req.body)}))));
+app.patch("/api/packages/gym/:id",auth,roles("admin","gym_fo"),asyncRoute(async(req,res)=>{
+  const input=gymPackageInput.partial().parse(req.body);const result=await prisma.$transaction(async tx=>{
+    const pkg=await tx.gymPackage.update({where:{id:req.params.id},data:input});
+    if(input.sessions&&input.sessions>0)await tx.membership.updateMany({where:{packageId:pkg.id,status:"active",sessionsTotal:0},data:{sessionsTotal:input.sessions,sessionsRemaining:input.sessions}});
+    return pkg;
+  });res.json(result);
+}));
 app.delete("/api/packages/gym/:id",auth,roles("admin","gym_fo"),asyncRoute(async(req,res)=>{await prisma.gymPackage.delete({where:{id:req.params.id}});res.status(204).end()}));
 
 // Memberships
 app.get("/api/memberships",auth,asyncRoute(async(req:AuthRequest,res)=>{
-  const where=["admin","gym_fo"].includes(req.user!.role)?{}:req.user!.role==="member"?{userId:req.user!.id}:null;
+  const where=["admin","owner","gym_fo"].includes(req.user!.role)?{}:req.user!.role==="member"?{userId:req.user!.id}:null;
   if(!where)return res.status(403).json({message:"Insufficient permissions"});
-  res.json(await prisma.membership.findMany({where,orderBy:{expiryDate:"asc"}}));
+  res.json(await prisma.membership.findMany({where,include:{checkIns:{orderBy:[{date:"desc"},{time:"desc"}],take:10}},orderBy:{expiryDate:"asc"}}));
 }));
 app.post("/api/memberships",auth,roles("admin","gym_fo"),asyncRoute(async(_req,res)=>res.status(410).json({message:"Memberships can only be activated by verified KPay payment."})));
+app.post("/api/memberships/check-in",auth,roles("admin","owner","gym_fo"),asyncRoute(async(req:AuthRequest,res)=>{
+  const body=z.object({membershipId:z.string().min(1),note:z.string().optional()}).parse(req.body);
+  const date=today(),time=businessNow().clock;
+  let result:any;
+  try{result=await prisma.$transaction(async tx=>{
+    const row=await tx.membership.findUnique({where:{id:body.membershipId}});
+    if(!row)return {error:"Gym membership not found.",status:404};
+    if(row.status!=="active"||row.expiryDate<date)return {error:"This Gym membership has expired.",status:409};
+    if(row.sessionsRemaining<=0)return {error:"No Gym sessions remain on this package.",status:409};
+    const duplicate=await tx.gymCheckIn.findUnique({where:{membershipId_date:{membershipId:row.id,date}}});
+    if(duplicate)return {error:"This membership is already checked in today.",status:409};
+    const changed=await tx.membership.updateMany({where:{id:row.id,status:"active",expiryDate:{gte:date},sessionsRemaining:{gt:0}},data:{sessionsRemaining:{decrement:1},lastCheckIn:`${date} ${time}`}});
+    if(!changed.count)return {error:"Membership access changed. Refresh and try again.",status:409};
+    const checkIn=await tx.gymCheckIn.create({data:{membershipId:row.id,date,time,staffId:req.user!.id,note:body.note}});
+    return {membership:await tx.membership.findUnique({where:{id:row.id}}),checkIn};
+  });}catch(error:any){if(error?.code==="P2002")return res.status(409).json({message:"This membership has already been checked in today."});throw error;}
+  if("error" in result)return res.status(result.status).json({message:result.error});
+  res.status(201).json(result);
+}));
 
 // Badminton package ownership + check-in
 function addDaysIso(start:string, days:number){ const d=new Date(`${start}T00:00:00`); d.setDate(d.getDate()+Math.max(0,days-1)); return d.toISOString().slice(0,10); }
@@ -767,15 +915,6 @@ app.post("/api/member/badminton-packages/:id/purchase",auth,roles("member"),asyn
     return {purchase,enrollment};
   });
   res.status(201).json(result);
-}));
-app.post("/api/cafe/orders",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>{
-  const b=z.object({floor:z.enum(["Ground Floor","First Floor","Outdoor"]),items:z.array(z.object({id:z.string(),quantity:z.number().int().min(1).max(20)})).min(1).max(30)}).parse(req.body);
-  const menu=await prisma.cafeMenuItem.findMany({where:{id:{in:b.items.map(x=>x.id)},available:true}});if(menu.length!==new Set(b.items.map(x=>x.id)).size)return res.status(400).json({message:"One or more menu items are unavailable."});
-  const amount=b.items.reduce((sum,line)=>sum+(menu.find(item=>item.id===line.id)?.price||0)*line.quantity,0);if(amount<=0)return res.status(400).json({message:"Order total is invalid."});
-  const items=b.items.map(line=>{const item=menu.find(m=>m.id===line.id)!;return {id:item.id,name:item.name,price:item.price,quantity:line.quantity}});
-  const order=await prisma.cafeOrder.create({data:{customer:req.user!.name,items,floor:b.floor,orderTime:new Date().toISOString(),paymentMethod:"Temporarily disabled",status:"confirmed"}});
-  await prisma.notification.create({data:{userId:req.user!.id,title:"Cafe order confirmed",body:`Your order for ${amount.toLocaleString()} MMK is confirmed. Payment checkout is temporarily disabled.`,link:"/cafe",audience:"member",type:"booking",entityType:"cafe_order",entityId:order.id}});
-  res.status(201).json({order});
 }));
 app.get("/api/member/badminton-package-purchases",auth,roles("member"),asyncRoute(async(req:AuthRequest,res)=>res.json(await prisma.badmintonPackagePurchase.findMany({where:{userId:req.user!.id},include:{package:true},orderBy:{createdAt:"desc"}}))));
 app.get("/api/badminton/package-purchases",auth,roles("admin","badminton_fo"),asyncRoute(async(_req,res)=>res.json(await prisma.badmintonPackagePurchase.findMany({where:{status:"AWAITING_PAYMENT"},include:{user:{select:{id:true,name:true,email:true,phone:true}},package:true},orderBy:{createdAt:"asc"}}))));
@@ -898,11 +1037,12 @@ const productInput = z.object({
   stock: z.coerce.number().int().nonnegative().default(0),
   cost: z.coerce.number().int().nonnegative().default(0),
   tax: z.coerce.number().int().nonnegative().default(0),
-  status: z.enum(["active", "inactive"]).default("active")
+  status: z.enum(["active", "inactive"]).default("active"),
+  imageUrl: z.string().max(2048).refine(isStoredImageUrl, "Choose an uploaded image URL.").nullable().optional(),
 });
 
 async function productRows(where = "", ...params: any[]) {
-  return rawQuery<any[]>(prisma,`SELECT p.id,p.name,p.price,p.category,p.description,p.sku,p.barcode,p.stock,p.cost,p.tax,p.status,
+  return rawQuery<any[]>(prisma,`SELECT p.id,p.name,p.price,p.category,p.description,p.sku,p.barcode,p.stock,p.cost,p.tax,p.status,p.imageUrl,
     ${"categoryId"} AS categoryId
     FROM "Product" p ${where} ORDER BY p.name ASC`, ...params);
 }
@@ -915,9 +1055,9 @@ app.post("/api/products", auth, roles("admin", "store_fo"), asyncRoute(async (re
   const b = productInput.parse(req.body);
   const id = crypto.randomUUID();
   await rawExec(prisma,
-    `INSERT INTO "Product" (id,name,price,category,description,sku,barcode,stock,cost,tax,status,categoryId)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    id,b.name,b.price,b.category,b.description,b.sku,b.barcode,b.stock,b.cost,b.tax,b.status,b.categoryId ?? null
+    `INSERT INTO "Product" (id,name,price,category,description,sku,barcode,stock,cost,tax,status,categoryId,imageUrl)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    id,b.name,b.price,b.category,b.description,b.sku,b.barcode,b.stock,b.cost,b.tax,b.status,b.categoryId ?? null,b.imageUrl ?? null
   );
   const rows = await productRows(`WHERE p.id = ?`, id);
   res.status(201).json(rows[0]);
@@ -928,7 +1068,7 @@ app.patch("/api/products/:id", auth, roles("admin", "store_fo"), asyncRoute(asyn
   const id = String(req.params.id);
   const fields: string[] = [];
   const values: any[] = [];
-  const map: Record<string,string> = {name:"name",price:"price",category:"category",categoryId:"categoryId",description:"description",sku:"sku",barcode:"barcode",stock:"stock",cost:"cost",tax:"tax",status:"status"};
+  const map: Record<string,string> = {name:"name",price:"price",category:"category",categoryId:"categoryId",description:"description",sku:"sku",barcode:"barcode",stock:"stock",cost:"cost",tax:"tax",status:"status",imageUrl:"imageUrl"};
   for (const [key,col] of Object.entries(map)) if (key in b) { fields.push(`"${col}" = ?`); values.push((b as any)[key] ?? null); }
   if (!fields.length) return res.status(400).json({message:"No fields to update"});
   values.push(id);
@@ -956,13 +1096,13 @@ app.get("/api/inventory", auth, roles("admin", "owner", "store_fo"), asyncRoute(
   const rows = await rawQuery<any[]>(prisma,`SELECT i.id,i.productId,i.type,i.quantity,i.note,i.date,
     p.id as product_id,p.name as product_name,p.price as product_price,p.category as product_category,
     p.description as product_description,p.sku as product_sku,p.barcode as product_barcode,p.stock as product_stock,
-    p.cost as product_cost,p.tax as product_tax,p.status as product_status,
+    p.cost as product_cost,p.tax as product_tax,p.status as product_status,p.imageUrl as product_imageUrl,
     p.categoryId as product_categoryId
     FROM "InventoryTransaction" i JOIN "Product" p ON p.id=i.productId ORDER BY i.date DESC`);
   res.json(rows.map(r => ({
     id:r.id, productId:r.productId, type:r.type, quantity:r.quantity, note:r.note, date:r.date,
     product:{id:r.product_id,name:r.product_name,price:r.product_price,category:r.product_category,description:r.product_description,
-      sku:r.product_sku,barcode:r.product_barcode,stock:r.product_stock,cost:r.product_cost,tax:r.product_tax,status:r.product_status,categoryId:r.product_categoryId}
+      sku:r.product_sku,barcode:r.product_barcode,stock:r.product_stock,cost:r.product_cost,tax:r.product_tax,status:r.product_status,categoryId:r.product_categoryId,imageUrl:r.product_imageUrl}
   })));
 }));
 
@@ -971,11 +1111,6 @@ app.delete("/api/products/:id", auth, roles("admin", "store_fo"), asyncRoute(asy
   if (!result) return res.status(404).json({message:"Product not found"});
   res.status(204).end();
 }));
-
-// Cafe
-app.get("/api/cafe/orders",auth,asyncRoute(async(_req,res)=>res.json(await prisma.cafeOrder.findMany({orderBy:{id:"desc"}}))));
-app.post("/api/cafe/orders",auth,asyncRoute(async(req,res)=>res.status(201).json(await prisma.cafeOrder.create({data:req.body}))));
-app.patch("/api/cafe/orders/:id/status",auth,roles("admin","cafe_fo"),asyncRoute(async(req,res)=>res.json(await prisma.cafeOrder.update({where:{id:req.params.id},data:{status:req.body.status}}))));
 
 // Legacy student snapshots remain readable to admins for migration review, but
 // new identity and package ownership must use User accounts.
@@ -994,6 +1129,7 @@ app.get("/api/transactions",auth,asyncRoute(async(req:AuthRequest,res)=>{
   if(req.query.date)where.date=String(req.query.date);
   if(req.query.status)where.status=String(req.query.status);
   if(req.query.paymentMethod)where.paymentMethod=String(req.query.paymentMethod);
+  if(req.query.item)where.item={contains:String(req.query.item).trim()};
   const q=String(req.query.q||"").trim();if(q)where.OR=[{customer:{contains:q}},{item:{contains:q}},{id:{contains:q}},{staff:{contains:q}}];
   if(!hasPage)return res.json(await prisma.transaction.findMany({where,orderBy:{createdAt:"desc"},take:100}));
   const [total,data,summary]=await Promise.all([prisma.transaction.count({where}),prisma.transaction.findMany({where,orderBy:{createdAt:"desc"},skip:(page-1)*limit,take:limit}),prisma.transaction.aggregate({where,_sum:{amount:true,discount:true,finalAmount:true}})]);
@@ -1349,7 +1485,7 @@ app.use((err:any,_req:Request,res:Response,_next:NextFunction)=>{
   res.status(500).json({message:"Internal server error"});
 });
 
-const prepareLegacySqlite=sqliteDatabase?ensureBadmintonBookingTables().then(()=>ensurePrivateCourseTables()).then(()=>ensureStorePosTables()).then(()=>ensureCentralUserIdentity()):Promise.resolve();
+const prepareLegacySqlite=sqliteDatabase?ensureBadmintonBookingTables().then(()=>ensurePrivateCourseTables()).then(()=>ensureStorePosTables()).then(()=>ensureGymSessionTables()).then(()=>ensureCentralUserIdentity()):Promise.resolve();
 prepareLegacySqlite.then(async()=>{
   await expirePrivateCourseReservations();
   app.listen(PORT,()=>{

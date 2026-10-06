@@ -18,7 +18,7 @@ const configs:Record<Exclude<UserRole,'member'>,{label:string;eyebrow:string;ite
   {to:'/badminton-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/badminton-fo/check-in',label:'Package Check-In & Sales',icon:ClipboardList},{to:'/badminton-fo/courts',label:'Court Rental Desk',icon:CalendarDays},{to:'/badminton-fo/bookings',label:'Court Bookings',icon:CalendarDays},{to:'/badminton-fo/pos',label:'POS',icon:ShoppingBag},{to:'/badminton-fo/transactions',label:'Transactions',icon:CreditCard}
  ]},
  gym_fo:{label:'HPC Gym Front Office',eyebrow:'Membership Operations',items:[
-  {to:'/gym-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/gym-fo/check-in',label:'Check-In',icon:ClipboardList},{to:'/gym-fo/members',label:'Members',icon:Users},{to:'/gym-fo/memberships',label:'Memberships',icon:Package},{to:'/gym-fo/appointments',label:'Appointments',icon:CalendarDays},{to:'/gym-fo/coaches',label:'Coaches',icon:Dumbbell},{to:'/gym-fo/payments',label:'Payments',icon:CreditCard}
+  {to:'/gym-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/gym-fo/check-in',label:'Check-In',icon:ClipboardList},{to:'/gym-fo/members',label:'Members',icon:Users},{to:'/gym-fo/memberships',label:'Memberships',icon:Package},{to:'/gym-fo/private-training',label:'Private Training',icon:CalendarDays},{to:'/gym-fo/appointments',label:'Appointments',icon:CalendarDays},{to:'/gym-fo/coaches',label:'Coaches',icon:Dumbbell},{to:'/gym-fo/payments',label:'Payments',icon:CreditCard}
  ]},
  clinic_fo:{label:'Revive Clinic Front Office',eyebrow:'Clinical Operations',items:[
   {to:'/clinic-fo',label:'Dashboard',icon:LayoutDashboard},{to:'/clinic-fo/patients',label:'Patients',icon:Users},{to:'/clinic-fo/appointments',label:'Appointments',icon:CalendarDays},{to:'/clinic-fo/doctors',label:'Doctors',icon:Stethoscope},{to:'/clinic-fo/schedule',label:'Doctor Schedule',icon:CalendarDays},{to:'/clinic-fo/records',label:'Records',icon:HeartPulse},{to:'/clinic-fo/payments',label:'Payments',icon:CreditCard}
@@ -33,7 +33,7 @@ const configs:Record<Exclude<UserRole,'member'>,{label:string;eyebrow:string;ite
   {to:'/doctor',label:'Dashboard',icon:LayoutDashboard},{to:'/doctor/schedule',label:'My Schedule',icon:CalendarDays},{to:'/doctor/appointments',label:'Bookings',icon:ClipboardList},{to:'/doctor/patients',label:'Patients',icon:Users},{to:'/doctor/profile',label:'Profile',icon:UserRound}
  ]},
  coach:{label:'Coach Portal',eyebrow:'My Coaching Workspace',items:[
-  {to:'/coach',label:'Dashboard',icon:LayoutDashboard},{to:'/coach/schedule',label:'My Calendar',icon:CalendarDays},{to:'/coach/bookings',label:'Bookings',icon:ClipboardList},{to:'/coach/clients',label:'Customers',icon:Users}
+  {to:'/coach',label:'Dashboard',icon:LayoutDashboard},{to:'/coach/schedule',label:'My Calendar',icon:CalendarDays},{to:'/coach/training',label:'Gym Training',icon:Dumbbell},{to:'/coach/bookings',label:'Bookings',icon:ClipboardList},{to:'/coach/clients',label:'Customers',icon:Users}
  ]}
 };
 function ClockIcon(){return <CalendarDays size={18}/>}

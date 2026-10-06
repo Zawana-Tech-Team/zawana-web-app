@@ -123,4 +123,6 @@ See `docs/API.md` for selected endpoint contracts. The Prisma schemas and active
 - SQLite compatibility schema setup runs at startup; production PostgreSQL migration behavior is separate.
 - No schema changes were introduced by the auth/config extraction.
 
+Later domain extensions add Gym `PrivateTrainingSession`, Cafe `CafeOrderItem` and order/payment/location fields, and `imageUrl` references for Store products and Cafe menu items. See [GYM_TRAINING_CAFE_MEDIA.md](GYM_TRAINING_CAFE_MEDIA.md) for route, relationship, and migration details.
+
 Use the assessment in `docs/REFACTORING_ASSESSMENT.md` to guide safe domain-by-domain cleanup.
