@@ -118,8 +118,10 @@ enum TransactionBusiness {
 
 model User {
   id                   String                @id @default(cuid())
+  firebaseUid          String?               @unique
   name                 String
   email                String                @unique
+  emailVerified        Boolean               @default(false)
   passwordHash         String
   role                 Role                  @default(member)
   phone                String?
@@ -387,6 +389,9 @@ model Transaction {
   staff         String
   status        String
   createdAt     DateTime            @default(now())
+
+  @@index([userId, date])
+  @@index([business, status, date])
 }
 
 model Appointment {

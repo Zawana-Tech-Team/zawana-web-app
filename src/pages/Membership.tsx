@@ -60,15 +60,16 @@ export function Membership() {
       <div className="mb-5"><h2 className="text-xl font-black">Available badminton packages</h2><p className="mt-1 text-sm text-zawana-500">Compare sessions, validity and price, then activate the package for your badminton visits.</p></div>
       {shown.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map(p => {
         const pending = pendingFor(p.id);
+        const comingSoon = p.status === 'coming_soon';
         return <Card key={p.id} className="p-6">
           {p.imageUrl && <img src={p.imageUrl} alt="" className="mb-4 h-36 w-full rounded-xl object-cover" />}
-          <div className="flex items-center justify-between"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-zawana-accent/15"><Trophy /></span><Badge good>{p.sessions} sessions</Badge></div>
+          <div className="flex items-center justify-between"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-zawana-accent/15"><Trophy /></span>{comingSoon ? <Badge>Coming Soon</Badge> : <Badge good>{p.sessions} sessions</Badge>}</div>
           <h3 className="mt-4 text-xl font-black">{p.title}</h3><p className="mt-2 min-h-10 text-sm text-zawana-500">{p.description}</p>
           <p className="mt-5 text-2xl font-black">{Number(p.price).toLocaleString()} <span className="text-sm text-zawana-500">MMK</span></p>
           <p className="mt-2 text-sm text-zawana-500">Valid for {p.validity} days{p.availableFrom && p.availableUntil ? ` · ${p.availableFrom}–${p.availableUntil}` : ''}</p>
           {p.scheduleNotes && <p className="mt-2 text-xs text-zawana-500">{p.scheduleNotes}</p>}{p.courtRules && <p className="mt-2 text-xs text-zawana-500">Court rules: {p.courtRules}</p>}
-          <div className="mt-5 flex items-center gap-2 text-xs text-zawana-500"><Check size={14} />Package check-in supported</div>
-          <Button className="mt-5 w-full" disabled={!!pending || busyId === p.id} onClick={() => buy(p.id)}>{busyId === p.id ? 'Activating package…' : pending ? 'Purchase processing' : `Activate package · ${Number(p.price).toLocaleString()} MMK`}</Button>
+          {!comingSoon && <div className="mt-5 flex items-center gap-2 text-xs text-zawana-500"><Check size={14} />Package check-in supported</div>}
+          {comingSoon ? <Link to="/contact" className="mt-5 block"><Button variant="secondary" className="w-full">Contact Admin</Button></Link> : <Button className="mt-5 w-full" disabled={!!pending || busyId === p.id} onClick={() => buy(p.id)}>{busyId === p.id ? 'Activating package…' : pending ? 'Purchase processing' : `Activate package · ${Number(p.price).toLocaleString()} MMK`}</Button>}
         </Card>;
       })}</div> : <Empty title="No badminton packages available" body="There are no active packages listed right now." />}
     </>}

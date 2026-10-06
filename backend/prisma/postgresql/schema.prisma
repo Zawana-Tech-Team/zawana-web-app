@@ -1,0 +1,579 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  member
+  coach
+  admin
+  gym_fo
+  clinic_fo
+  badminton_fo
+  store_fo
+  cafe_fo
+  doctor
+  owner
+}
+
+enum CourtStatus {
+  available
+  maintenance
+  inactive
+}
+
+enum CourtDateOverrideType {
+  open
+  closed
+}
+
+enum BookingKind {
+  court
+  class
+  pt
+  recovery
+  private_course
+}
+
+enum BookingStatus {
+  pending
+  confirmed
+  completed
+  cancelled
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  PENDING_COACH_CONFIRMATION
+  AWAITING_PAYMENT
+  COACH_DECLINED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  refunded
+}
+
+enum PaymentAttemptStatus {
+  INITIATING
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
+enum CoachStatus {
+  active
+  inactive
+}
+
+enum ScheduleRole {
+  doctor
+}
+
+enum AppointmentStatus {
+  pending
+  confirmed
+  checked_in
+  completed
+  cancelled
+}
+
+enum ProductStatus {
+  active
+  inactive
+}
+
+model ProductCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model CafeMenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  description String   @default("")
+  price       Int
+  available   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+enum TransactionBusiness {
+  Gym
+  Badminton
+  Clinic
+  Store
+  Cafe
+  Academy
+}
+
+model User {
+  id                   String                @id @default(cuid())
+  firebaseUid          String?               @unique
+  name                 String
+  email                String                @unique
+  emailVerified        Boolean               @default(false)
+  passwordHash         String
+  role                 Role                  @default(member)
+  phone                String?
+  membership           String?
+  avatar               String?
+  createdAt            DateTime              @default(now())
+  active               Boolean               @default(true)
+  lastLoginAt          DateTime?
+  bookings             Booking[]
+  notifications        Notification[]
+  badmintonEnrollments BadmintonEnrollment[]
+  coachProfile         Coach?
+  doctorProfile        Doctor?
+  appointments         Appointment[]
+  memberships          Membership[]
+  transactions         Transaction[]
+  storeOrders          StoreOrder[]
+  badmintonPackageCategories BadmintonPackageCategory[] @relation("BadmintonPackageCategoryCreator")
+  badmintonPackagePurchases BadmintonPackagePurchase[]
+  paymentAttempts       PaymentAttempt[]
+  courtDateOverrides    CourtDateOverride[]
+
+  @@index([role, active])
+}
+
+model Court {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  type      String
+  surface   String
+  price     Int
+  status    CourtStatus  @default(available)
+  features  Json
+  createdAt DateTime     @default(now())
+  bookings  Booking[]
+  blocks    CourtBlock[]
+}
+
+model CourtBlock {
+  id        String   @id @default(cuid())
+  courtId   String
+  court     Court    @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  date      String
+  dayOfWeek Int?
+  active    Boolean  @default(true)
+  start     String
+  end       String
+  title     String
+  type      String   @default("class")
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([courtId, date])
+  @@index([courtId, dayOfWeek])
+}
+
+model CourtDateOverride {
+  id          String                 @id @default(cuid())
+  date        String                 @unique
+  type        CourtDateOverrideType
+  title       String                 @default("Holiday")
+  reason      String?
+  createdById String?
+  createdBy   User?                  @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime               @default(now())
+
+  @@index([date, type])
+}
+
+model HolidayRate {
+  id        String   @id @default(cuid())
+  date      String   @unique
+  title     String
+  price     Int      @default(30000)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Coach {
+  id        String      @id @default(cuid())
+  name      String
+  specialty String
+  department String     @default("Badminton")
+  phone     String
+  email     String
+  status    CoachStatus @default(active)
+  color     String      @default("#D6FF3F")
+  imageUrl  String?
+  userId    String?     @unique
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bookings  Booking[]
+  privateCourses PrivateCourse[] @relation("PrivateCourseCoaches")
+}
+
+model Doctor {
+  id        String      @id @default(cuid())
+  userId    String      @unique
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialty String      @default("Physiotherapy & rehabilitation")
+  phone     String      @default("")
+  status    CoachStatus @default(active)
+  color     String      @default("#79B4FF")
+  appointments Appointment[]
+  schedules Schedule[]
+  createdAt DateTime    @default(now())
+}
+
+model Schedule {
+  id      String       @id @default(cuid())
+  person  String
+  role    ScheduleRole
+  day     String
+  start   String
+  end     String
+  service String?
+  active  Boolean      @default(true)
+  doctorId String?
+  doctor Doctor?       @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+}
+
+model Booking {
+  id                   String        @id @default(cuid())
+  code                 String        @unique
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind                 BookingKind
+  title                String
+  date                 String
+  time                 String
+  location             String
+  status               BookingStatus @default(pending)
+  price                Int
+  courtId              String?
+  court                Court?        @relation(fields: [courtId], references: [id], onDelete: SetNull)
+  coachId              String?
+  coach                Coach?        @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  meta                 String?
+  paymentStatus        PaymentStatus @default(pending)
+  reservationExpiresAt DateTime?
+  coachAcceptedAt      DateTime?
+  paymentExpiresAt     DateTime?
+  createdAt            DateTime      @default(now())
+
+  @@index([userId, createdAt])
+  @@index([courtId, date, status])
+  @@index([coachId, date, status])
+  @@index([kind, status, paymentExpiresAt], map: "Booking_privateCourse_paymentExpiresAt_idx")
+}
+
+model PrivateCourse {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  duration    Int      @default(60)
+  price       Int
+  status      String   @default("active")
+  imageUrl    String?
+  category    String   @default("Private Training")
+  coaches     Coach[]  @relation("PrivateCourseCoaches")
+  createdAt   DateTime @default(now())
+
+  @@index([status, title])
+}
+
+model Class {
+  id       String @id @default(cuid())
+  title    String
+  coach    String
+  time     String
+  duration Int
+  capacity Int
+  booked   Int    @default(0)
+  level    String
+  location String
+  price    Int
+}
+
+model MembershipPlan {
+  id       String @id @default(cuid())
+  title    String
+  price    Int
+  duration Int
+  kind     String
+  features Json
+  status   String @default("active")
+}
+
+model Membership {
+  id          String  @id @default(cuid())
+  customerId  String
+  userId      String?
+  user        User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customer    String
+  phone       String
+  packageId   String
+  package     String
+  startDate   String
+  expiryDate  String
+  status      String
+  lastCheckIn String?
+}
+
+model Product {
+  id                    String                 @id @default(cuid())
+  name                  String
+  price                 Int
+  category              String
+  categoryId            String?
+  categoryRef           ProductCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  description           String
+  sku                   String                 @unique
+  barcode               String                 @unique
+  stock                 Int                    @default(0)
+  cost                  Int                    @default(0)
+  tax                   Int                    @default(0)
+  status                ProductStatus          @default(active)
+  inventoryTransactions InventoryTransaction[]
+}
+
+model InventoryTransaction {
+  id        String  @id @default(cuid())
+  productId String
+  type      String
+  quantity  Int
+  note      String
+  date      String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model StoreOrder {
+  id       String  @id @default(cuid())
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customer String
+  total    Int
+  paid     Int
+  dueDate  String?
+  status   String
+  items    Json
+}
+
+model CafeOrder {
+  id            String @id @default(cuid())
+  customer      String
+  items         Json
+  floor         String
+  orderTime     String
+  paymentMethod String
+  status        String
+}
+
+model Transaction {
+  id            String              @id @default(cuid())
+  userId        String?
+  user          User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  date          String
+  customer      String
+  business      TransactionBusiness
+  item          String
+  amount        Int
+  discount      Int
+  tax           Int
+  finalAmount   Int
+  paymentMethod String
+  staff         String
+  status        String
+  createdAt     DateTime            @default(now())
+
+  @@index([userId, date])
+  @@index([business, status, date])
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  userId        String?
+  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  doctorId      String?
+  doctorProfile Doctor?           @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  patient       String
+  doctor        String
+  date          String
+  time          String
+  type          String
+  status        AppointmentStatus @default(pending)
+  notes         String?
+  paymentStatus PaymentStatus     @default(pending)
+}
+
+model Student {
+  id            String @id @default(cuid())
+  name          String
+  phone         String
+  className     String
+  coach         String
+  package       String
+  paymentStatus String
+  attendance    Int
+  expiryDate    String
+  status        String
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String?
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  link      String?
+  audience  String?
+  type      String?
+  icon      String?
+  imageUrl  String?
+  actionLabel String?
+  entityType String?
+  entityId String?
+  activeInInbox Boolean @default(true)
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BadmintonPackage {
+  id             String @id @default(cuid())
+  title          String
+  price          Int
+  sessions       Int
+  validity       Int
+  description    String
+  status         String @default("active")
+  categoryId     String?
+  category       BadmintonPackageCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  availableDays  Json?
+  availableFrom  String?
+  availableUntil String?
+  scheduleNotes  String?
+  courtRules     String?
+  imageUrl       String?
+  purchases      BadmintonPackagePurchase[]
+
+  @@index([categoryId, status])
+}
+
+model BadmintonPackagePurchase {
+  id            String @id @default(cuid())
+  code          String @unique
+  userId        String
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  packageId     String
+  package       BadmintonPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  packageName   String
+  price         Int
+  paymentMethod String @default("KPay")
+  status        String @default("PENDING")
+  createdAt     DateTime @default(now())
+  paidAt        DateTime?
+  enrollment    BadmintonEnrollment?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PaymentAttempt {
+  id                String               @id @default(cuid())
+  reference         String               @unique
+  userId            String
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resourceType      String
+  resourceId        String
+  amount            Int
+  currency          String               @default("MMK")
+  provider          String               @default("KPay")
+  providerReference String?              @unique
+  checkoutUrl       String?
+  qrCode            String?
+  status            PaymentAttemptStatus @default(INITIATING)
+  expiresAt         DateTime
+  paidAt            DateTime?
+  failureReason     String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([status, expiresAt])
+}
+
+model BadmintonPackageCategory {
+  id        String @id @default(cuid())
+  name      String @unique
+  active    Boolean @default(true)
+  createdBy String?
+  creator   User? @relation("BadmintonPackageCategoryCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  packages  BadmintonPackage[]
+  createdAt DateTime @default(now())
+}
+
+model BadmintonEnrollment {
+  id                String             @id @default(cuid())
+  studentId         String
+  userId            String?
+  user              User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  studentName       String
+  phone             String
+  packageId         String
+  packageName       String
+  sessionsTotal     Int
+  sessionsRemaining Int
+  startDate         String
+  expiryDate        String
+  status            String             @default("active")
+  renewalCount      Int                @default(0)
+  lastCheckIn       String?
+  purchaseId        String?            @unique
+  purchase          BadmintonPackagePurchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  createdAt         DateTime           @default(now())
+  checkIns          BadmintonCheckIn[]
+
+  @@index([studentId])
+  @@index([userId])
+  @@index([expiryDate, status])
+}
+
+model BadmintonCheckIn {
+  id           String              @id @default(cuid())
+  enrollmentId String
+  enrollment   BadmintonEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  date         String
+  time         String
+  sessionsUsed Int                 @default(1)
+  staffId      String?
+  note         String?
+  createdAt    DateTime            @default(now())
+
+  @@index([enrollmentId, date])
+}
+
+model GymPackage {
+  id          String @id @default(cuid())
+  title       String
+  price       Int
+  duration    Int
+  description String
+  benefits    Json
+  status      String @default("active")
+}
+
+model ContentItem {
+  id             String @id @default(cuid())
+  title          String
+  image          String
+  description    String
+  googleFormLink String
+  status         String @default("draft")
+  publishDate    String
+}

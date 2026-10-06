@@ -3,7 +3,7 @@ import {
   Plus, X, Pencil, Trash2, MapPinned, CalendarDays, UserRound,
   ShieldCheck, Wrench, Clock3, Sparkles, Search, Power, MoreHorizontal
 } from "lucide-react";
-import { Card, Page, Button, Badge, Toast } from "../components/UI";
+import { Card, Page, Button, Badge, Toast, Pagination } from "../components/UI";
 import { get, post, patch, del } from "../api";
 
 type Section = "courts" | "coaches";
@@ -37,11 +37,12 @@ export function AdminManagement({section}:{section:Section}){
  const [coaches,setCoaches]=useState<any[]>([]);
  const [coachAccounts,setCoachAccounts]=useState<any[]>([]);
  const [deleting,setDeleting]=useState<any>(null); const [query,setQuery]=useState(""); const [saving,setSaving]=useState(false);
+ const [page,setPage]=useState(1);
  const [form,setForm]=useState<any>({}); const [notice,setNotice]=useState("");
  const [imageFile,setImageFile]=useState('');
  const notify=(m:string)=>{setNotice(m);setTimeout(()=>setNotice(""),2500)};
  const load=()=>get<any[]>(`/${section}`).then(setRows);
- useEffect(()=>{load()},[section]);
+ useEffect(()=>{setPage(1);load()},[section]);
  useEffect(()=>{if(section==='coaches')get<any[]>('/users').then(users=>setCoachAccounts(users.filter((u:any)=>u.role==='coach'))).catch(()=>setCoachAccounts([]))},[section]);
 
  const start=(row?:any)=>{
@@ -68,6 +69,8 @@ export function AdminManagement({section}:{section:Section}){
  };
  const remove=async()=>{if(!deleting)return;try{await del(`/${section}/${deleting.id}`);setDeleting(null);await load();notify(`${titleFor(section)} deleted successfully.`)}catch(e:any){notify(e.message||"Could not delete record.")}};
  const filtered=useMemo(()=>rows.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())),[rows,query]);
+ const pageSize=12,totalPages=Math.max(1,Math.ceil(filtered.length/pageSize)),currentPage=Math.min(page,totalPages);
+ const visibleRows=filtered.slice((currentPage-1)*pageSize,currentPage*pageSize);
  const title=section==="courts"?"Courts":"Coaches";
  const titleFor=(s:Section)=>s==="courts"?"Court":"Coach";
  const icon=section==="courts"?<MapPinned/>:<UserRound/>;
@@ -75,13 +78,13 @@ export function AdminManagement({section}:{section:Section}){
  return <Page title={`${title} management`} eyebrow="Administration" actions={<Button onClick={()=>start()}><Plus size={16}/> Add {title.slice(0,-1).toLowerCase()}</Button>}>
   {notice&&<Toast message={notice} onClose={()=>setNotice("")}/>}
   <div className="mb-6 flex flex-col gap-3 md:flex-row">
-   <div className="relative flex-1"><Search size={16} className="absolute left-4 top-3.5 text-zawana-500"/><input className="pl-10" placeholder={`Search ${title.toLowerCase()}…`} value={query} onChange={e=>setQuery(e.target.value)}/></div>
+   <div className="relative flex-1"><Search size={16} className="absolute left-4 top-3.5 text-zawana-500"/><input className="pl-10" placeholder={`Search ${title.toLowerCase()}…`} value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}}/></div>
    <div className="flex items-center gap-2 rounded-2xl bg-zawana-900 px-4 text-xs font-bold text-zawana-500"><ShieldCheck size={15}/> Live operational controls</div>
   </div>
 
   {section==="courts" ?
-   <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{filtered.map(r=><CourtCard key={r.id} row={r} onEdit={()=>start(r)} onDelete={()=>setDeleting(r)}/>)}</div>
-   : <div className="grid gap-4 lg:grid-cols-2">{filtered.map(r=><Card key={r.id} className="group overflow-hidden p-5 transition hover:-translate-y-0.5 hover:shadow-xl">
+   <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{visibleRows.map(r=><CourtCard key={r.id} row={r} onEdit={()=>start(r)} onDelete={()=>setDeleting(r)}/>)}</div>
+   : <div className="grid gap-4 lg:grid-cols-2">{visibleRows.map(r=><Card key={r.id} className="group overflow-hidden p-5 transition hover:-translate-y-0.5 hover:shadow-xl">
       <div className="flex items-start justify-between gap-4"><div className="flex gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-zawana-900">{section==="coaches"&&r.imageUrl?<img src={r.imageUrl} alt="" className="h-full w-full object-cover"/>:<UserRound size={19}/>}</div><div><p className="text-[10px] font-black uppercase tracking-widest text-zawana-gold">{r.specialty}</p><h3 className="text-lg font-black">{r.name}</h3><p className="mt-1 text-xs text-zawana-500">{r.email} · {r.phone}</p></div></div>
        <div className="flex gap-1"><button className="rounded-xl p-2 hover:bg-zawana-900" onClick={()=>start(r)}><Pencil size={15}/></button><button className="rounded-xl p-2 text-red-600 hover:bg-red-50" onClick={()=>setDeleting(r)}><Trash2 size={15}/></button></div>
       </div>
@@ -89,6 +92,7 @@ export function AdminManagement({section}:{section:Section}){
     </Card>)}</div>}
 
   {!filtered.length&&<Card className="p-12 text-center"><Sparkles className="mx-auto text-zawana-gold"/><h3 className="mt-3 font-black">Nothing here yet</h3><p className="mt-1 text-sm text-zawana-500">Create your first {title.toLowerCase().slice(0,-1)} to start managing the facility.</p></Card>}
+  <Pagination page={currentPage} totalPages={totalPages} total={filtered.length} onPage={setPage}/>
 
   {open&&<Modal title={`${editing?"Edit":"Create"} ${section==="courts"?"court":"coach"}`} subtitle={section==="courts"?"Set the commercial data and operational availability.":"Link an active coach account to make the profile selectable for badminton courses."} onClose={()=>setOpen(false)}>
    <div className="grid gap-4 md:grid-cols-2">

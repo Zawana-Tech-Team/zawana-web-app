@@ -13,6 +13,8 @@ import { CoachCalendar } from './pages/CoachCalendar';
 import PrivateCourseAdmin from './pages/PrivateCourseAdmin';
 import UserManagement from './pages/UserManagement';
 import PaymentHistory from './pages/PaymentHistory';
+import { CompleteProfile, ForgotPassword, AuthAction } from './pages/AuthFlows';
+import { Settings } from './pages/Settings';
 import { PaymentStatus } from './pages/PaymentStatus';
 import type { UserRole } from './types';
 import { classes, courts } from './data';
@@ -29,6 +31,12 @@ function Guard({role,children}:{role:UserRole;children:ReactNode}){
  if(role==='member') return <AppLayout role="member">{children}</AppLayout>;
  return <RoleLayout role={role as Exclude<UserRole,'member'>}>{children}</RoleLayout>;
 }
+function AccountSettings(){
+ const {user,loading}=useAuth();
+ if(loading)return <div className="p-8 text-sm text-zawana-500">Loading account…</div>;
+ if(!user)return <Navigate to="/login" replace/>;
+ return user.role==='member'?<AppLayout role="member"><Settings/></AppLayout>:<RoleLayout role={user.role as Exclude<UserRole,'member'>}><Settings/></RoleLayout>;
+}
 const operational=(role:UserRole,path:string)=> <Route path={path} element={<Guard role={role}><OperationsPage role={role}/></Guard>}/>;
 
 export default function App(){
@@ -39,6 +47,7 @@ export default function App(){
   <Route path="/coaches" element={<Generic title="Coaches" body="Meet Zawana coaches across badminton, strength, conditioning and recovery."/>}/>
   <Route path="/contact" element={<Generic title="Contact Zawana" body="Visit the arena or speak with the team about training."/>}/>
   <Route path="/login" element={<Login/>}/><Route path="/signup" element={<Signup/>}/>
+  <Route path="/complete-profile" element={<CompleteProfile/>}/><Route path="/forgot-password" element={<ForgotPassword/>}/><Route path="/auth/action" element={<AuthAction/>}/>
 
   {/* Customer experience — existing screens preserved */}
   <Route path="/member" element={<Guard role="member"><Dashboard/></Guard>}/>
@@ -85,7 +94,7 @@ export default function App(){
   <Route path="/training" element={<Guard role="member"><Training/></Guard>}/><Route path="/revive" element={<Guard role="member"><Revive/></Guard>}/>
   <Route path="/classes" element={<Guard role="member"><Classes/></Guard>}/><Route path="/community" element={<Guard role="member"><Community/></Guard>}/>
   <Route path="/store" element={<Guard role="member"><Store/></Guard>}/><Route path="/cafe-order" element={<Guard role="member"><CafeCustomer/></Guard>}/><Route path="/notifications" element={<Guard role="member"><Notifications/></Guard>}/>
-  <Route path="/profile" element={<Guard role="member"><Profile/></Guard>}/><Route path="/settings" element={<Guard role="member"><Generic title="Settings" body="Manage preferences, notifications, security and demo-mode controls."/></Guard>}/>
+  <Route path="/profile" element={<Guard role="member"><Profile/></Guard>}/><Route path="/settings" element={<AccountSettings/>}/>
 
   {/* Admin */}
   {['/admin','/admin/notifications','/admin/badminton-packages','/admin/gym-packages','/admin/finance','/admin/cms'].map(path=>operational('admin',path))}

@@ -15,6 +15,7 @@ export type User = {
   name: string;
   email: string;
   role: UserRole;
+  phone?: string | null;
   membership?: string;
   avatar?: string;
 };
@@ -176,7 +177,7 @@ export type BadmintonPackage = {
   sessions: number;
   validity: number;
   description: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'coming_soon';
   categoryId?: string | null;
   imageUrl?: string | null;
   availableDays?: string[] | null;

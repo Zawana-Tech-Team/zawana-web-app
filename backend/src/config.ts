@@ -1,7 +1,5 @@
-import "dotenv/config";
+export { env } from "./config/env.js";
+import { env } from "./config/env.js";
 
-export const PORT = Number(process.env.PORT || 8000);
-export const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
-export const CLIENT_URLS =
-  process.env.CLIENT_URL?.split(",").map((v) => v.trim()).filter(Boolean) ||
-  ["http://localhost:5173"];
+export const PORT=env.port;
+export const CLIENT_URLS=env.clientUrls;
