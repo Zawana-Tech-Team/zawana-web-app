@@ -55,8 +55,13 @@ jobs:
         working-directory: backend
         run: pnpm run prisma:generate:postgres
 
-      - name: Typecheck
-        run: pnpm run typecheck
+      - name: Typecheck Backend
+        working-directory: backend
+        run: pnpm exec tsc --noEmit
 
-      - name: Build
+      - name: Build Backend
+        working-directory: backend
+        run: pnpm run build
+
+      - name: Build Frontend
         run: pnpm run build
