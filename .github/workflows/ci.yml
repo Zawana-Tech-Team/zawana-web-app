@@ -10,25 +10,46 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+
     env:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/zawana
       DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/zawana
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 10.30.3
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: |
-            pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir backend exec prisma validate
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate SQLite schema
+        working-directory: backend
+        run: pnpm exec prisma validate --schema prisma/schema.prisma
         env:
           DATABASE_URL: file:./dev.db
-      - run: pnpm run validate:prisma:postgres
-      - run: pnpm --dir backend run prisma:generate:postgres
-      - run: pnpm run typecheck
-      - run: pnpm run build
+
+      - name: Validate PostgreSQL schema
+        working-directory: backend
+        run: pnpm exec prisma validate --schema prisma/postgresql/schema.prisma
+
+      - name: Generate PostgreSQL Prisma Client
+        working-directory: backend
+        run: pnpm run prisma:generate:postgres
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
