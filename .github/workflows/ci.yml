@@ -25,7 +25,7 @@ jobs:
           cache-dependency-path: |
             pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run validate:prisma:sqlite
+      - run: pnpm --dir backend exec prisma validate
         env:
           DATABASE_URL: file:./dev.db
       - run: pnpm run validate:prisma:postgres
