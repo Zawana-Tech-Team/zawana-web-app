@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { patch, post } from '../api';
 import type { Notification, UserRole } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 const roleConfig: Record<UserRole, { title: string; description: string; emptyTitle: string; emptyBody: string }> = {
   member: { title: 'Notifications', description: 'Bookings, memberships and personal updates.', emptyTitle: 'You are all caught up', emptyBody: 'There are no new notifications for you right now.' },
@@ -47,6 +48,7 @@ function getNotificationIcon(notification: Notification, role: UserRole) {
 }
 
 export function Notifications() {
+  const { locale } = useLanguage();
   const { user } = useAuth();
   const { notifications } = useApp();
   const role: UserRole = user?.role ?? 'member';
@@ -109,7 +111,7 @@ export function Notifications() {
                         <h3 className="font-black">{notification.title}</h3>
                         {!notification.read && <Badge good>New</Badge>}
                       </div>
-                      <span className="shrink-0 text-xs font-semibold text-zawana-400">{notification.time}</span>
+                      <span className="shrink-0 text-xs font-semibold text-zawana-400">{new Date(notification.time).toLocaleString(locale)}</span>
                     </div>
                     <p className="mt-2 max-w-3xl text-sm leading-6 text-zawana-500">{notification.body}</p>
                   </div>

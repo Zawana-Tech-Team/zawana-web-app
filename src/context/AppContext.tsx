@@ -35,7 +35,7 @@ export function AppProvider({children}:{children:ReactNode}){
     try {
       const [b,n]=await Promise.all([get<any[]>("/bookings"),get<any[]>("/notifications")]);
       setBookings(b.map(x=>({id:x.code||x.id,kind:x.kind,title:x.title,date:x.date,time:x.time,location:x.location,status:x.status,price:x.price,meta:x.meta})));
-      setNotifications(n.map(x=>({id:x.id,title:x.title,body:x.body,time:new Date(x.createdAt).toLocaleString(),read:x.read,link:x.link,audience:x.audience,type:x.type,entityType:x.entityType,entityId:x.entityId,actionLabel:x.actionLabel})));
+      setNotifications(n.map(x=>({id:x.id,title:x.title,body:x.body,time:x.createdAt,read:x.read,link:x.link,audience:x.audience,type:x.type,entityType:x.entityType,entityId:x.entityId,actionLabel:x.actionLabel})));
     } finally {setLoading(false)}
   };
   useEffect(()=>{refresh().catch(console.error)},[user?.id]);

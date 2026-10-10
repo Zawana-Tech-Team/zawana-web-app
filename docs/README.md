@@ -6,7 +6,7 @@ Zawana Life is a multi-role sports and facility management application. The web 
 
 The active backend entry point is `backend/src/server.ts`. It creates the Express app, mounts the auth/store/menu routers, and currently owns many domain endpoints and business rules. Authentication is extracted into `backend/src/routes/auth.ts` and `backend/src/modules/auth`; shared auth/configuration and Prisma access live in dedicated modules. The older `backend/src/app.ts` is not used by package scripts and must not be treated as the active route registry.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for request flow and domain details, [docs/API.md](docs/API.md) for API notes, [docs/SECURITY.md](docs/SECURITY.md) for current security boundaries, [docs/SCALABILITY.md](docs/SCALABILITY.md) for scaling observations, and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for contribution guidance.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for request flow and domain details, [docs/API.md](docs/API.md) for API notes, [docs/SECURITY.md](docs/SECURITY.md) for current security boundaries, [docs/SCALABILITY.md](docs/SCALABILITY.md) for scaling observations, [docs/UI_UX_MODERNIZATION.md](docs/UI_UX_MODERNIZATION.md) for the staged visual redesign plan, and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for contribution guidance.
 
 ## Technology stack
 

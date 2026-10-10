@@ -445,7 +445,7 @@ app.get("/api/users",auth,roles("admin","owner"),asyncRoute(async(req,res)=>{
   const hasPage=typeof req.query.page!=="undefined",page=Math.max(1,Number(req.query.page)||1),limit=Math.min(100,Math.max(1,Number(req.query.limit)||20));
   const role=String(req.query.role||"all"),search=String(req.query.search||"").trim();
   if(role!=="all"&&!Object.values(Role).includes(role as Role))return res.status(400).json({message:"Choose a valid role filter."});
-  const where:any={...(role!=="all"?{role:Role[role as keyof typeof Role]||"__invalid__"}:{}),...(search?{OR:[{name:{contains:search}},{email:{contains:search}},{phone:{contains:search}}]}:{})};
+  const where:any={deletedAt:null,...(role!=="all"?{role:Role[role as keyof typeof Role]||"__invalid__"}:{}),...(search?{OR:[{name:{contains:search}},{email:{contains:search}},{phone:{contains:search}}]}:{})};
   const select={id:true,name:true,email:true,role:true,phone:true,membership:true,avatar:true,active:true,createdAt:true,lastLoginAt:true,coachProfile:{select:{id:true,department:true,imageUrl:true}},_count:{select:{bookings:true,notifications:true,badmintonEnrollments:true,appointments:true,transactions:true}}};
   if(!hasPage)return res.json(await prisma.user.findMany({where,select,orderBy:{createdAt:"desc"},take:100}));
   const [total,data,members,staff,active]=await Promise.all([prisma.user.count({where}),prisma.user.findMany({where,select,orderBy:{createdAt:"desc"},skip:(page-1)*limit,take:limit}),prisma.user.count({where:{AND:[where,{role:"member"}]}}),prisma.user.count({where:{AND:[where,{role:{not:"member"}}]}}),prisma.user.count({where:{AND:[where,{active:true}]}})]);
@@ -484,7 +484,7 @@ app.patch("/api/users/:id",auth,roles("admin"),asyncRoute(async(req,res)=>{
   const body=z.object({name:z.string().min(2).optional(),phone:z.string().nullable().optional(),role:z.nativeEnum(Role).optional(),membership:z.string().nullable().optional(),active:z.boolean().optional(),password:z.string().min(8).optional(),coachDepartment:z.enum(["Badminton","Gym"]).optional()}).parse(req.body);
   if(req.params.id===req.user!.id&&body.active===false)return res.status(400).json({message:"You cannot deactivate your own admin account."});
   const current=await prisma.user.findUnique({where:{id:String(req.params.id)}});
-  if(!current)return res.status(404).json({message:"User not found."});
+  if(!current||current.deletedAt)return res.status(404).json({message:"User not found."});
   let linkedFirebaseUid=current.firebaseUid;
   let newlyCreatedFirebaseUid:string|undefined;
   if(!env.databaseAuthEnabled&&(body.password||typeof body.active==="boolean")){
@@ -519,11 +519,42 @@ app.patch("/api/users/:id",auth,roles("admin"),asyncRoute(async(req,res)=>{
   res.json(updated);
 }));
 app.delete("/api/users/:id",auth,roles("admin"),asyncRoute(async(req:AuthRequest,res)=>{
-  const id=String(req.params.id);if(id===req.user!.id)return res.status(400).json({message:"You cannot delete your own admin account."});
-  const user=await prisma.user.findUnique({where:{id}});if(!user)return res.status(404).json({message:"User not found."});
-  if(!user.active)return res.status(409).json({message:"This account is already inactive."});
-  if(user.firebaseUid&&!env.databaseAuthEnabled)await firebaseAdminAuth().updateUser(user.firebaseUid,{disabled:true});
-  await prisma.$transaction(async tx=>{await tx.user.update({where:{id},data:{active:false}});await tx.coach.updateMany({where:{userId:id},data:{status:"inactive"}});await tx.doctor.updateMany({where:{userId:id},data:{status:"inactive"}})});
+  const id=String(req.params.id);
+  const body=z.object({confirmationName:z.string().min(1,"Type the account name to confirm deletion.")}).parse(req.body);
+  if(id===req.user!.id)return res.status(400).json({message:"You cannot delete your own admin account."});
+  const user=await prisma.user.findUnique({where:{id}});
+  if(!user||user.deletedAt)return res.status(404).json({message:"User not found."});
+  if(body.confirmationName!==user.name)return res.status(400).json({message:"The name does not match this account. Check the spelling and try again."});
+  let firebaseStateChanged=false;
+  if(user.firebaseUid&&!env.databaseAuthEnabled){
+    try{
+      const firebaseAuth=firebaseAdminAuth();
+      const identity=await firebaseAuth.getUser(user.firebaseUid);
+      if(!identity.disabled){
+        await firebaseAuth.updateUser(user.firebaseUid,{disabled:true});
+        firebaseStateChanged=true;
+      }
+    }catch(error:any){
+      if(error?.code!=="auth/user-not-found"){
+        console.error("Could not disable Firebase identity during user deletion",{userId:id,code:error?.code||"unknown"});
+        throw Object.assign(new Error("The linked Firebase account could not be disabled. The Zawana account was not deleted. Check the Firebase Admin credentials and permissions."),{statusCode:503});
+      }
+    }
+  }
+  try{
+    await prisma.$transaction(async tx=>{
+      const deleted=await tx.user.updateMany({where:{id,deletedAt:null},data:{active:false,deletedAt:new Date()}});
+      if(!deleted.count)throw Object.assign(new Error("This account has already been deleted."),{statusCode:409});
+      await tx.coach.updateMany({where:{userId:id},data:{status:"inactive"}});
+      await tx.doctor.updateMany({where:{userId:id},data:{status:"inactive"}});
+    });
+  }catch(error){
+    if(firebaseStateChanged&&user.active&&user.firebaseUid){
+      const current=await prisma.user.findUnique({where:{id},select:{deletedAt:true}}).catch(()=>null);
+      if(current&&!current.deletedAt)await firebaseAdminAuth().updateUser(user.firebaseUid,{disabled:false}).catch(rollbackError=>console.error("Failed to restore Firebase identity after user deletion rollback",{userId:id,code:(rollbackError as any)?.code||"unknown"}));
+    }
+    throw error;
+  }
   res.status(204).end();
 }));
 app.get("/api/users/:id/activity",auth,roles("admin"),asyncRoute(async(req,res)=>{
@@ -1475,14 +1506,18 @@ app.get("/api/analytics/overview",auth,roles("admin","owner"),asyncRoute(async(_
 }));
 
 app.use((_req,res)=>res.status(404).json({message:"Route not found"}));
-app.use((err:any,_req:Request,res:Response,_next:NextFunction)=>{
-  console.error(err);
+app.use((err:any,req:Request,res:Response,_next:NextFunction)=>{
   if(err?.name==="ZodError") return res.status(400).json({message:err.issues?.map((i:any)=>`${i.path?.join(".")||"request"}: ${i.message}`).join("; ")||"Validation error",issues:err.issues});
   if(err?.code==="P2002") return res.status(409).json({message:"A record with that unique value already exists"});
   if(err?.code==="P2025") return res.status(404).json({message:"Record not found"});
+  if(err?.code==="P2003") return res.status(409).json({message:"This record is linked to existing history and cannot be removed."});
   if(err?.code==="P2034"||err?.code==="P1008"||/SQLITE_BUSY|database is locked/i.test(String(err?.message||"")))return res.status(409).json({message:"Another booking is being confirmed. Refresh availability and try again."});
   if(err?.statusCode) return res.status(err.statusCode).json({message:err.message||"Request conflict",...(err.conflicts?{conflicts:err.conflicts}:{})});
-  res.status(500).json({message:"Internal server error"});
+  const requestId=crypto.randomUUID();
+  res.setHeader("X-Request-Id",requestId);
+  if(process.env.NODE_ENV==="production")console.error("Unhandled API error",{requestId,method:req.method,path:req.path,code:err?.code||null,name:err?.name||"Error"});
+  else console.error(`Unhandled API error ${requestId} (${req.method} ${req.path})`,err);
+  res.status(500).json({message:"Internal server error",requestId});
 });
 
 const prepareLegacySqlite=sqliteDatabase?ensureBadmintonBookingTables().then(()=>ensurePrivateCourseTables()).then(()=>ensureStorePosTables()).then(()=>ensureGymSessionTables()).then(()=>ensureCentralUserIdentity()):Promise.resolve();

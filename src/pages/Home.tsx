@@ -1,7 +1,7 @@
 import type { ReactNode, FormEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, ShoppingBag, Search } from 'lucide-react';
+import { ArrowRight, Check, Menu, Search, ShoppingBag, X } from 'lucide-react';
 import { Button, Card, Badge, Page, Stat, Logo, Empty } from '../components/UI';
 import { classes, courts, memberships, products, revenue, performance } from '../data';
 import { useAuth } from '../context/AuthContext';
@@ -12,11 +12,34 @@ import {
   BarChart, Bar
 } from 'recharts';
 import OptimizedImage from '../components/OptimizedImage';
+import PartnersCarousel from '../components/home/PartnersCarousel';
+import HeroFallback from '../components/home/HeroFallback';
+import HeroSceneBoundary from '../components/home/HeroSceneBoundary';
+import { LanguageSwitcher, LocalizedTree } from '../context/LanguageContext';
+
+const HeroScene = lazy(() => import('../components/home/HeroScene'));
 
 export function Home(){
   const [publishedContent,setPublishedContent]=useState<any[]>([]);
   const [contentError,setContentError]=useState(false);
-  useEffect(()=>{let active=true;get<any[]>('/content').then(items=>{if(active)setPublishedContent(items.slice(0,3))}).catch(()=>{if(active)setContentError(true)});return()=>{active=false}},[]);
+  const [mobileMenuOpen,setMobileMenuOpen]=useState(false);
+  useEffect(()=>{
+    let active=true;
+    const loadPublishedContent=()=>{
+      get<any[]>('/content')
+        .then(items=>{if(active){setPublishedContent(items.slice(0,3));setContentError(false)}})
+        .catch(()=>{if(active)setContentError(true)});
+    };
+    const handleVisibility=()=>{if(document.visibilityState==='visible')loadPublishedContent()};
+    loadPublishedContent();
+    window.addEventListener('focus',loadPublishedContent);
+    document.addEventListener('visibilitychange',handleVisibility);
+    return()=>{
+      active=false;
+      window.removeEventListener('focus',loadPublishedContent);
+      document.removeEventListener('visibilitychange',handleVisibility);
+    };
+  },[]);
   const facilities = [
   {
     name: 'Badminton Courts',
@@ -56,7 +79,7 @@ export function Home(){
   },
 ];
 
-  return <div className="overflow-hidden bg-white text-zawana-950">
+  return <LocalizedTree><div className="overflow-hidden bg-white text-zawana-950">
     <header className="absolute left-0 right-0 top-0 z-30 mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 md:px-10">
       <Logo/>
       <nav className="hidden items-center gap-8 text-[11px] font-extrabold uppercase tracking-[.18em] text-zawana-500 lg:flex">
@@ -66,215 +89,57 @@ export function Home(){
         <a href="#community" className="transition hover:text-zawana-950">Community</a>
       </nav>
       <div className="flex items-center gap-2">
+        <LanguageSwitcher />
         <Link to="/login" className="hidden rounded-full px-4 py-2.5 text-sm font-bold text-zawana-950 sm:block">Log in</Link>
-        <Link to="/signup"><Button>Join Zawana</Button></Link>
+        <button type="button" aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'} aria-expanded={mobileMenuOpen} aria-controls="home-mobile-navigation" onClick={()=>setMobileMenuOpen(open=>!open)} className="grid h-10 w-10 place-items-center rounded-xl border border-zawana-border bg-white text-zawana-600 transition hover:bg-zawana-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold lg:hidden">
+          {mobileMenuOpen ? <X size={18}/> : <Menu size={18}/>}
+        </button>
+        <Link to="/signup"><Button><span className="sm:hidden">Join</span><span className="hidden sm:inline">Join Zawana</span></Button></Link>
       </div>
+      <nav id="home-mobile-navigation" aria-label="Mobile navigation" className={`absolute left-4 right-4 top-[72px] z-40 rounded-2xl border border-zawana-border bg-white p-2 shadow-xl lg:hidden ${mobileMenuOpen ? 'block' : 'hidden'}`}>
+        {[["#arena","The Arena"],["#membership","Membership"],["#performance","Performance"],["#community","Community"]].map(([href,label])=><a key={href} href={href} onClick={()=>setMobileMenuOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-zawana-600 transition hover:bg-zawana-gold-soft hover:text-zawana-950">{label}</a>)}
+        <Link to="/login" onClick={()=>setMobileMenuOpen(false)} className="mt-1 flex min-h-11 items-center border-t border-zawana-border px-3 text-sm font-semibold text-zawana-accent">Log in</Link>
+      </nav>
     </header>
 
     <main>
-      <section className="sport-grid relative min-h-[760px] overflow-hidden border-b border-zawana-950/8 pt-28 md:min-h-[850px] md:pt-32">
-
-        {/* Background */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_26%,rgba(196,175,73,.13),transparent_24%),linear-gradient(180deg,rgba(255,255,255,.2),rgba(247,247,248,.55))]" />
-
-        <div className="hero-orb pointer-events-none right-[-6rem] top-24 hidden opacity-80 lg:block" />
-
-        {/* Decorative shape */}
-        <div className="absolute right-[-2rem] top-[18rem] h-[22rem] w-[22rem] rotate-[11deg] rounded-[48px] bg-zawana-950 md:right-[7%] md:w-[26rem]" />
-
-        {/* Arena card */}
-        <div className="absolute right-[4%] top-[20rem] z-10 hidden h-[24rem] w-[26rem] rounded-[34px] border border-white/20 bg-zawana-950 p-6 text-white shadow-2xl md:block lg:p-8 court-lines">
-
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="eyebrow text-zawana-gold">
-                Arena 01
+      <section className="relative overflow-hidden border-b border-zawana-border bg-white pt-24 md:pt-28">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_18%,rgba(198,163,74,.09),transparent_32%),linear-gradient(180deg,#fff_60%,#FAFAFA)]" />
+        <div className="relative mx-auto max-w-[1440px] px-5 pb-12 md:px-10 md:pb-16">
+          <div className="grid min-w-0 items-center gap-8 lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)] lg:gap-12">
+            <div className="min-w-0 max-w-[670px] py-5 md:py-10">
+              <p className="eyebrow text-zawana-accent">The Zawana · Yangon</p>
+              <div className="gold-rule mt-5" />
+              <h1 className="mt-6 max-w-[760px] text-balance text-[clamp(3rem,6vw,6rem)] font-black leading-[.98] tracking-[-.075em] text-zawana-950">
+                Elevate Your Game.
+                <br />
+                <span className="text-zawana-accent">Redefine Your Lifestyle.</span>
+              </h1>
+              <p className="mt-6 max-w-[570px] text-base leading-7 text-zawana-600 md:text-lg md:leading-8">
+                Discover a connected world of badminton, fitness, performance, recovery, and lifestyle at ZAWANA.
               </p>
-
-              <p className="mt-2 text-sm font-semibold text-white/70">
-                Train / play / recover
-              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link to="/facilities"><Button>Explore ZAWANA <ArrowRight size={16} /></Button></Link>
+                <Link to="/book"><Button variant="secondary">Book a Court</Button></Link>
+              </div>
+              <p className="mt-7 text-xs font-medium tracking-wide text-zawana-500">Badminton · Training · Recovery · Community</p>
             </div>
 
-            <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-white/70">
-              Yangon
-            </span>
+            <figure className="relative mx-auto w-full min-w-0 max-w-[700px] rounded-[30px] border border-zawana-950/[.06] bg-[#f6f4ed] p-1 shadow-[0_18px_54px_rgba(23,25,28,.08)] lg:my-4">
+              <HeroSceneBoundary fallback={<HeroFallback />}>
+                <Suspense fallback={<HeroFallback />}>
+                  <HeroScene />
+                </Suspense>
+              </HeroSceneBoundary>
+              <figcaption className="pointer-events-none absolute right-5 top-5 z-10 rounded-full border border-white/80 bg-white/80 px-3 py-2 text-[10px] font-semibold uppercase tracking-[.14em] text-zawana-600 shadow-sm backdrop-blur sm:right-6 sm:top-6">
+                Zawana Badminton Arena
+              </figcaption>
+            </figure>
           </div>
-
-          <div className="mt-12 rounded-[26px] border border-white/20 p-4">
-
-            <div className="relative h-40 overflow-hidden rounded-[18px] border border-white/20">
-
-              <div className="absolute inset-x-[14%] bottom-0 top-0 border-x border-white/25" />
-
-              <div className="absolute left-0 right-0 top-1/2 border-t border-white/25" />
-
-              <div className="absolute bottom-[25%] left-[25%] right-[25%] top-[25%] border border-white/25" />
-
-              <div className="absolute bottom-[25%] left-1/2 top-[25%] border-l border-dashed border-white/20" />
-
-            </div>
-
-            <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-
-              <div>
-                <p className="text-xl font-black">8</p>
-                <p className="mt-1 text-[9px] uppercase tracking-[.15em] text-white/50">
-                  Courts
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xl font-black">24/7</p>
-                <p className="mt-1 text-[9px] uppercase tracking-[.15em] text-white/50">
-                  Access*
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xl font-black">01</p>
-                <p className="mt-1 text-[9px] uppercase tracking-[.15em] text-white/50">
-                  Community
-                </p>
-              </div>
-
-            </div>
-          </div>
-
-          <div className="mt-5 flex items-center justify-between text-xs">
-            <span className="text-white/55">
-              * Membership dependent
-            </span>
-
-            <span className="font-bold text-zawana-gold">
-              PASSION FIRST
-            </span>
-          </div>
-
         </div>
-
-        {/* Hero content */}
-        <div className="relative mx-auto max-w-[1440px] px-5 md:px-10">
-
-          <div className="max-w-[820px] pt-4 md:pt-12">
-
-            <p className="eyebrow text-zawana-gold">
-              The Zawana Badminton Arena · Est. 2022
-            </p>
-
-            <div className="gold-rule mt-5" />
-
-            <h1 className="display-title mt-6 text-6xl md:text-8xl lg:text-[9.4rem]">
-              PLAY.
-              <br />
-              TRAIN.
-              <br />
-              <span className="text-zawana-gold">
-                PERFORM.
-              </span>
-            </h1>
-
-            <p className="mt-8 max-w-[600px] text-base font-medium leading-7 text-zawana-500 md:text-lg">
-              A premium sports environment built around movement, training and
-              the ambition to grow Myanmar&apos;s next generation of athletes.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/book">
-                <Button>
-                  Book a court
-                  <ArrowRight className="ml-2" size={16} />
-                </Button>
-              </Link>
-
-              <Link to="/facilities">
-                <Button variant="secondary">
-                  Explore the arena
-                </Button>
-              </Link>
-            </div>
-
-          </div>
-
-          {/* Partners */}
-          <div className="mt-24 pb-10 md:mt-32 md:pb-12">
-
-            <div className="mb-6 flex items-end justify-between">
-
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-zawana-500">
-                  Trusted by
-                </p>
-
-                <h2 className="mt-2 text-xl font-black tracking-[-0.04em] md:text-2xl">
-                  Our Partners
-                </h2>
-              </div>
-
-              <p className="hidden text-xs font-medium text-zawana-500 md:block">
-                Building sport together.
-              </p>
-
-            </div>
-
-            <div className="grid overflow-hidden rounded-[26px] border border-zawana-950/10 bg-white sm:grid-cols-2 lg:grid-cols-4">
-
-              {[
-                {
-                  name: "MAI",
-                  logo: "/partners/partner-1.png",
-                },
-                {
-                  name: "ROYAL-D",
-                  logo: "/partners/partner-2.PNG",
-                },
-                {
-                  name: "LI-NING",
-                  logo: "/partners/partner-3.PNG",
-                },
-                {
-                  name: "Hundred",
-                  logo: "/partners/partner-4.PNG",
-                },
-              ].map((partner, index) => (
-                <div
-                  key={partner.name}
-                  className={`
-                    group flex min-h-[120px] items-center justify-center
-                    border-zawana-950/10 p-8
-                    transition-colors duration-300
-                    hover:bg-zawana-50
-                    md:min-h-[150px]
-                    ${index < 3 ? "lg:border-r" : ""}
-                    ${index % 2 === 0 ? "sm:border-r lg:border-r" : ""}
-                  `}
-                >
-                  <OptimizedImage
-                    src={partner.logo}
-                    alt={`${partner.name} logo`}
-                    loading="lazy"
-                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                    className="
-                    h-20 w-auto max-w-[260px]
-                    object-contain
-                    grayscale opacity-65
-                    transition-all duration-300
-                    group-hover:grayscale-0
-                    group-hover:opacity-100
-                    md:h-24 md:max-w-[320px]
-                    lg:h-28 lg:max-w-[360px]
-                  "
-                  />
-                </div>
-              ))}
-
-            </div>
-
-          </div>
-
-        </div>
-
       </section>
+
+      <PartnersCarousel />
    
       <section
         id="arena"
@@ -607,5 +472,5 @@ export function Home(){
     <footer className="border-t border-zawana-950/8 px-5 py-9 md:px-10">
       <div className="mx-auto flex max-w-[1440px] flex-col justify-between gap-5 md:flex-row md:items-center"><Logo/><p className="text-xs font-semibold text-zawana-500">© 2026 THE ZAWANA · PLAY. TRAIN. PERFORM.</p></div>
     </footer>
-  </div>
+  </div></LocalizedTree>
 }

@@ -1,3 +1,10 @@
+supportedArchitectures:
+  os:
+    - win32
+    - linux
+  cpu:
+    - x64
+
 allowBuilds:
   '@firebase/util': true
   '@prisma/client': true

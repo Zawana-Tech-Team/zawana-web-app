@@ -55,4 +55,4 @@ Gym packages and memberships are distinct Prisma models from badminton enrollmen
 
 ## Transaction boundaries and retention
 
-Court/package/check-in/order/payment paths use Prisma transactions or conditional updates where conflicts matter. Keep these boundaries when extracting modules. `User` relations include cascade delete behavior for some historical entities, so admin account removal should continue to use the existing archive/deactivate workflow rather than direct Prisma hard deletion. Review every `onDelete` relation before changing retention behavior.
+Court/package/check-in/order/payment paths use Prisma transactions or conditional updates where conflicts matter. Keep these boundaries when extracting modules. `User` relations include cascade delete behavior for some historical entities, so user deletion is a soft delete: it disables sign-in, records `deletedAt`, hides the account from normal user listings, and preserves booking/payment history. Deactivation remains a separate reversible action. Do not directly hard-delete users; review every `onDelete` relation before changing retention behavior.

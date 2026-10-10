@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button, Card, Badge, Page, Empty, Pagination } from "../components/UI";
 import { get, patch, post } from "../api";
 import { formatBookingDate, localDateKey, type BookingDatePreset } from "../utils/bookingDates";
+import { useLanguage } from "../context/LanguageContext";
 
 type BookingFilter = { datePreset: BookingDatePreset; q: string; kind: string; status: string; courtId: string; coachId: string; from: string; to: string };
 type PageInfo = { page: number; limit: number; total: number; totalPages: number };
@@ -12,6 +13,7 @@ const EMPTY_PAGE: PageInfo = { page: 1, limit: 20, total: 0, totalPages: 0 };
 const ACTIVE_STATUSES = ["confirmed", "CONFIRMED", "pending", "PENDING_COACH_CONFIRMATION", "AWAITING_PAYMENT"];
 
 export function Bookings() {
+  const { locale } = useLanguage();
   const [bookings, setBookings] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [coaches, setCoaches] = useState<any[]>([]);
@@ -89,7 +91,7 @@ export function Bookings() {
     {loading ? <Card className="p-8">Loading bookings…</Card> : <div className="space-y-3">
       {bookings.map(booking => <Card key={booking.id} className="p-5"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div>
         <div className="flex flex-wrap items-center gap-2"><h3 className="font-black">{booking.title}</h3><Badge good={["confirmed", "CONFIRMED", "COMPLETED"].includes(booking.status)}>{statusLabel(booking.status)}</Badge>{booking.kind === "private_course" && <Badge>{booking.paymentStatus === "paid" ? "Paid" : booking.status === "AWAITING_PAYMENT" ? "Payment step · venue payment" : booking.status === "CONFIRMED" && booking.paymentStatus !== "paid" ? "Payment due at venue" : booking.status === "PENDING_COACH_CONFIRMATION" ? "Court reserved" : "Private course"}</Badge>}</div>
-        <p className="mt-2 text-sm text-zawana-500">{formatBookingDate(booking.date, { month: "long", day: "numeric", year: "numeric" })} · {booking.time} · {booking.court?.name || booking.location}{booking.coach ? ` · ${booking.coach.name}` : ""}</p><p className="mt-1 text-xs text-zawana-500">{booking.code} · {Number(booking.price).toLocaleString()} MMK</p>
+        <p className="mt-2 text-sm text-zawana-500">{formatBookingDate(booking.date, { month: "long", day: "numeric", year: "numeric" }, locale)} · {booking.time} · {booking.court?.name || booking.location}{booking.coach ? ` · ${booking.coach.name}` : ""}</p><p className="mt-1 text-xs text-zawana-500">{booking.code} · {Number(booking.price).toLocaleString(locale)} MMK</p>
         {booking.kind === "private_course" && booking.status === "AWAITING_PAYMENT" && <p className="mt-2 text-sm font-bold text-amber-800">Coach confirmed. Confirm this booking to complete it; payment is arranged at the venue.</p>}
         {booking.kind === "private_course" && booking.status === "CONFIRMED" && booking.paymentStatus !== "paid" && <p className="mt-2 text-sm text-zawana-500">Your coach, court and time are confirmed. Payment has not been collected; please arrange it at the venue.</p>}
         {booking.kind === "private_course" && booking.status === "PENDING_COACH_CONFIRMATION" && <p className="mt-2 text-sm text-amber-800">Waiting for coach confirmation. Your selected court and time are reserved.</p>}

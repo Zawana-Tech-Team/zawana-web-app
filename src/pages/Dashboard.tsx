@@ -5,14 +5,14 @@ import { Badge, Button, Card, Empty, Page, Stat } from '../components/UI';
 import { get, post } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { formatBookingDate, localDateKey } from '../utils/bookingDates';
+import { useLanguage } from '../context/LanguageContext';
 
 type DashboardData={bookings:any[];recentBookings?:any[];todayBookings?:any[];todayBookingCount?:number;upcomingBookings?:any[];upcomingBookingCount?:number;packages:any[];notifications:any[];enrollment:any;checkIns:any[]};
-const dateLabel=(value:string)=>formatBookingDate(value,{month:'short',day:'numeric',year:'numeric'});
 const statusLabel=(s:string)=>s?.replaceAll('_',' ').toLowerCase().replace(/^./,x=>x.toUpperCase());
 const todayKey=()=>localDateKey();
 
 export function Dashboard(){
- const {user}=useAuth(); const [data,setData]=useState<DashboardData|null>(null); const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [busy,setBusy]=useState(false); const [message,setMessage]=useState('');
+ const {user}=useAuth(); const {locale}=useLanguage(); const dateLabel=(value:string)=>formatBookingDate(value,{month:'short',day:'numeric',year:'numeric'},locale); const [data,setData]=useState<DashboardData|null>(null); const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [busy,setBusy]=useState(false); const [message,setMessage]=useState('');
  const load=()=>get<DashboardData>(`/member/dashboard?referenceDate=${localDateKey()}`).then(setData).catch((e:any)=>setError(e.message||'Could not load your badminton dashboard.')).finally(()=>setLoading(false));
  useEffect(()=>{load()},[]);
  const checkIn=async()=>{if(!data?.enrollment)return;setBusy(true);setMessage('');try{await post('/member/check-in',{enrollmentId:data.enrollment.id});setMessage('Checked in. One session was used from your package.');await load()}catch(e:any){setMessage(e.message||'Check-in could not be completed.')}finally{setBusy(false)}};

@@ -512,7 +512,97 @@ function Finance(){const [business,setBusiness]=useState('');const [page,setPage
 
 function Transactions({business}:{business:Transaction['business']}){const [rows,setRows]=useState<any[]>([]),[page,setPage]=useState(1),[pageInfo,setPageInfo]=useState<any>({total:0,totalPages:0}),[search,setSearch]=useState(''),[query,setQuery]=useState(''),[item,setItem]=useState(''),[status,setStatus]=useState(''),[loading,setLoading]=useState(true),[error,setError]=useState('');useEffect(()=>{let alive=true;setLoading(true);const params=new URLSearchParams({page:String(page),limit:'20',business});if(query)params.set('q',query);if(item)params.set('item',item);if(status)params.set('status',status);get<any>(`/transactions?${params}`).then(r=>{if(!alive)return;setRows(r.data||[]);setPageInfo(r.pagination||{total:0,totalPages:0});setError('')}).catch((e:any)=>{if(alive)setError(e.message||'Could not load transactions.')}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[business,page,query,item,status]);return <div><form className="mb-4 grid gap-3 rounded-2xl border border-zawana-950/10 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4" onSubmit={e=>{e.preventDefault();setPage(1);setQuery(search.trim())}}><input aria-label="Search transactions" placeholder="Search customer or transaction ID" value={search} onChange={e=>setSearch(e.target.value)}/><input aria-label="Filter by item or product" placeholder="Filter item / product" value={item} onChange={e=>{setPage(1);setItem(e.target.value)}}/><select aria-label="Filter status" value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="">All statuses</option><option value="paid">Paid</option><option value="pending">Pending</option><option value="refunded">Refunded</option></select><Button>Search transactions</Button></form>{error&&<p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}{loading?<Card className="h-24 animate-pulse bg-zawana-950/5"/>:rows.length?<><div className="hidden md:block"><Table paginate={false} headers={['ID','Customer','Item / product','Final Amount','Payment','Status']}>{rows.map(t=><tr key={t.id}><Cell>{t.id}</Cell><Cell>{t.customer}</Cell><Cell>{t.item}</Cell><Cell><b>{money(t.finalAmount)}</b></Cell><Cell>{t.paymentMethod}</Cell><Cell><Badge good={t.status==='paid'}>{t.status}</Badge></Cell></tr>)}</Table></div><div className="space-y-3 md:hidden">{rows.map(t=><Card key={t.id} className="p-4"><div className="flex justify-between gap-3"><b>{t.customer}</b><b>{money(t.finalAmount)}</b></div><p className="mt-2 text-sm">{t.item}</p><p className="mt-1 text-xs text-zawana-500">{t.date} · {t.paymentMethod} · {t.status}</p><p className="mt-1 text-[10px] text-zawana-400">{t.id}</p></Card>)}</div><Pagination page={page} totalPages={pageInfo.totalPages||0} total={pageInfo.total||0} onPage={setPage}/></>:<Empty title="No matching transactions" body="Try another product, item or status filter."/>}</div>}
 
-function CMS({notify}:{notify:(s:string)=>void}){const o=useOperations();const [editing,setEditing]=useState<any>(null);const [deleting,setDeleting]=useState<any>(null);const [open,setOpen]=useState(false);const [form,setForm]=useState<any>({title:'',description:'',image:'',googleFormLink:'',status:'draft',publishDate:''});const start=(item?:any)=>{setEditing(item||null);setForm(item?{...item}:{title:'',description:'',image:'',googleFormLink:'',status:'draft',publishDate:''});setOpen(true)};const save=async()=>{if(!form.title){notify('Content title is required.');return}try{if(editing)await o.updateContent(editing.id,{title:form.title,description:form.description,image:form.image,googleFormLink:form.googleFormLink,status:form.status,publishDate:form.publishDate||today});else await o.addContent({...form,publishDate:form.publishDate||today});notify(editing?'Content updated.':'Content created.');setOpen(false)}catch(e:any){notify(e.message||'Could not save content.')}};const remove=async()=>{if(!deleting)return;try{await o.deleteContent(deleting.id);notify(`${deleting.title} deleted.`);setDeleting(null)}catch(e:any){notify(e.message||'Delete failed.')}};const publish=async(c:any)=>{try{await o.publishContent(c.id);notify(`${c.title} published to the homepage.`)}catch(e:any){notify(e.message||'Publish failed.')}};return <div><div className="mb-5 flex justify-between"><p className="max-w-xl text-sm text-zawana-500">Create homepage/community content with an image, description and Google Form CTA.</p><Button onClick={()=>start()}><Plus size={16}/> New content</Button></div><Table headers={['Content','Status','Publish date','Homepage','Actions']}>{o.content.map(c=><tr key={c.id}><Cell><div className="flex items-center gap-3"><div className="h-12 w-16 overflow-hidden rounded-xl bg-zawana-900">{c.image&&<img src={c.image} className="h-full w-full object-cover"/>}</div><div><b>{c.title}</b><p className="max-w-sm truncate text-xs text-zawana-500">{c.description}</p></div></div></Cell><Cell><Badge good={c.status==='published'}>{c.status}</Badge></Cell><Cell>{c.publishDate}</Cell><Cell>{c.status==='published'?'Live':'Hidden'}</Cell><Cell><div className="flex flex-wrap gap-2"><button className="rounded-xl p-2 hover:bg-zawana-900" onClick={()=>start(c)} title="Edit"><Edit3 size={15}/></button><button className="rounded-xl p-2 text-red-600 hover:bg-red-50" onClick={()=>setDeleting(c)} title="Delete"><Trash2 size={15}/></button>{c.status==='draft'&&<Button className="px-3 py-2" onClick={()=>publish(c)}>Publish</Button>}</div></Cell></tr>)}</Table>{open&&<OpsModal title={editing?'Edit content':'Create content'} subtitle="Published content is surfaced to the homepage/community feed." onClose={()=>setOpen(false)}><div className="grid gap-4 md:grid-cols-2"><input placeholder="Title" value={form.title||''} onChange={e=>setForm({...form,title:e.target.value})}/><input placeholder="Image URL / path" value={form.image||''} onChange={e=>setForm({...form,image:e.target.value})}/><input placeholder="Google Form link" value={form.googleFormLink||''} onChange={e=>setForm({...form,googleFormLink:e.target.value})}/><select value={form.status||'draft'} onChange={e=>setForm({...form,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option></select><textarea className="md:col-span-2" rows={6} placeholder="Description" value={form.description||''} onChange={e=>setForm({...form,description:e.target.value})}/><input type="date" value={form.publishDate||''} onChange={e=>setForm({...form,publishDate:e.target.value})}/></div><div className="mt-6 flex justify-end gap-2"><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button onClick={save}><Check size={15}/> Save content</Button></div></OpsModal>}{deleting&&<ConfirmDelete name={deleting.title} onCancel={()=>setDeleting(null)} onConfirm={remove}/>}</div>}
+function CMS({notify}:{notify:(s:string)=>void}){
+ const o=useOperations();
+ const [editing,setEditing]=useState<any>(null);
+ const [deleting,setDeleting]=useState<any>(null);
+ const [open,setOpen]=useState(false);
+ const [publishingId,setPublishingId]=useState('');
+ const [form,setForm]=useState<any>({title:'',description:'',image:'',googleFormLink:'',status:'draft',publishDate:''});
+
+ const start=(item?:any)=>{
+  setEditing(item||null);
+  setForm(item?{...item}:{title:'',description:'',image:'',googleFormLink:'',status:'draft',publishDate:''});
+  setOpen(true);
+ };
+ const isLive=(item:any)=>item.status==='published'&&Boolean(item.publishDate)&&item.publishDate<=today;
+ const isScheduled=(item:any)=>item.status==='published'&&Boolean(item.publishDate)&&item.publishDate>today;
+ const save=async()=>{
+  if(!form.title){notify('Content title is required.');return}
+  try{
+   if(editing)await o.updateContent(editing.id,{title:form.title,description:form.description,image:form.image,googleFormLink:form.googleFormLink,status:form.status,publishDate:form.publishDate||today});
+   else await o.addContent({...form,publishDate:form.publishDate||today});
+   notify(editing?'Content updated.':'Content created.');
+   setOpen(false);
+  }catch(e:any){notify(e.message||'Could not save content.')}
+ };
+ const remove=async()=>{
+  if(!deleting)return;
+  try{
+   await o.deleteContent(deleting.id);
+   notify(deleting.title+' deleted.');
+   setDeleting(null);
+  }catch(e:any){notify(e.message||'Delete failed.')}
+ };
+ const publish=async(item:any)=>{
+  setPublishingId(item.id);
+  try{
+   await o.publishContent(item.id);
+   notify(item.title+' is live on the homepage.');
+  }catch(e:any){notify(e.message||'Publish failed.')}
+  finally{setPublishingId('')}
+ };
+
+ return <div>
+  <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+   <div>
+    <p className="max-w-xl text-sm text-zawana-500">Create homepage/community content with an image, description and Google Form CTA.</p>
+    <p className="mt-1 text-xs text-zawana-400">Future publish dates are scheduled. Use Publish now to show an item immediately.</p>
+   </div>
+   <Button onClick={()=>start()}><Plus size={16}/> New content</Button>
+  </div>
+  <Table headers={['Content','Status','Publish date','Homepage','Actions']}>
+   {o.content.map((c:any)=>{
+    const live=isLive(c);
+    const scheduled=isScheduled(c);
+    const dateLabel=c.publishDate?new Date(c.publishDate+'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'No date';
+    return <tr key={c.id}>
+     <Cell>
+      <div className="flex items-center gap-3">
+       <div className="h-12 w-16 overflow-hidden rounded-xl bg-zawana-900">{c.image&&<img src={c.image} alt={c.title} className="h-full w-full object-cover"/>}</div>
+       <div><b>{c.title}</b><p className="max-w-sm truncate text-xs text-zawana-500">{c.description}</p></div>
+      </div>
+     </Cell>
+     <Cell><Badge good={live}>{live?'Live':scheduled?'Scheduled':'Draft'}</Badge></Cell>
+     <Cell>{dateLabel}</Cell>
+     <Cell>{live?'Visible on homepage':scheduled?'Scheduled for '+dateLabel:'Hidden'}</Cell>
+     <Cell>
+      <div className="flex flex-wrap gap-2">
+       <button className="rounded-xl p-2 hover:bg-zawana-900" onClick={()=>start(c)} title="Edit" aria-label={'Edit '+c.title}><Edit3 size={15}/></button>
+       <button className="rounded-xl p-2 text-red-600 hover:bg-red-50" onClick={()=>setDeleting(c)} title="Delete" aria-label={'Delete '+c.title}><Trash2 size={15}/></button>
+       {!live&&<Button className="px-3 py-2" disabled={publishingId===c.id} onClick={()=>publish(c)}>{publishingId===c.id?'Publishing…':'Publish now'}</Button>}
+      </div>
+     </Cell>
+    </tr>
+   })}
+  </Table>
+  {open&&<OpsModal title={editing?'Edit content':'Create content'} subtitle="Set a future date to schedule publication, or use Publish now to make it visible immediately." onClose={()=>setOpen(false)}>
+   <div className="grid gap-4 md:grid-cols-2">
+    <input placeholder="Title" value={form.title||''} onChange={e=>setForm({...form,title:e.target.value})}/>
+    <input placeholder="Image URL / path" value={form.image||''} onChange={e=>setForm({...form,image:e.target.value})}/>
+    <input placeholder="Google Form link" value={form.googleFormLink||''} onChange={e=>setForm({...form,googleFormLink:e.target.value})}/>
+    <select aria-label="Content status" value={form.status||'draft'} onChange={e=>setForm({...form,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option></select>
+    <textarea className="md:col-span-2" rows={6} placeholder="Description" value={form.description||''} onChange={e=>setForm({...form,description:e.target.value})}/>
+    <label className="text-sm font-semibold text-zawana-600">Publish date
+     <input className="mt-2 w-full" type="date" value={form.publishDate||''} onChange={e=>setForm({...form,publishDate:e.target.value})}/>
+     <span className="mt-1 block text-xs font-normal text-zawana-400">Published content appears on the homepage on this date.</span>
+    </label>
+   </div>
+   <div className="mt-6 flex justify-end gap-2"><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button onClick={save}><Check size={15}/> Save content</Button></div>
+  </OpsModal>}
+  {deleting&&<ConfirmDelete name={deleting.title} onCancel={()=>setDeleting(null)} onConfirm={remove}/>}
+ </div>;
+}
 
 
 function ProductManager({notify}:{notify:(s:string)=>void}){

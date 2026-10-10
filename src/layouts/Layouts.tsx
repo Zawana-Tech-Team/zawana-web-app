@@ -1,100 +1,218 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Bell, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Home, LogOut, Menu, ShoppingBag, UserRound, Users, BarChart3, Activity, HeartPulse, Settings, ClipboardList, Building2, X, CreditCard } from 'lucide-react';
-import { Logo, Button } from '../components/UI';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Activity,
+  BarChart3,
+  Bell,
+  Building2,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  CreditCard,
+  Dumbbell,
+  Home,
+  LogOut,
+  Menu,
+  Settings,
+  ShoppingBag,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
+import { Logo } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from '../components/NotificationBell';
+import { LanguageSwitcher, LocalizedTree, useLanguage } from '../context/LanguageContext';
 
-const member = [['/member', 'Overview', Home], ['/book/court', 'Courts', CalendarDays], ['/private-course', 'Private Course', Dumbbell], ['/member/training', 'My Gym Training', Dumbbell], ['/bookings', 'Bookings', ClipboardList], ['/membership', 'Packages', Users], ['/payments', 'Payments', CreditCard]] as const;
-const coach = [['/coach', 'Overview', Home], ['/coach/schedule', 'Schedule', CalendarDays], ['/coach/bookings', 'Requests', ClipboardList], ['/coach/clients', 'Clients', Users]] as const;
-const admin = [['/admin', 'Overview', Home], ['/admin/users', 'Users', Users], ['/admin/bookings', 'Bookings', CalendarDays], ['/admin/courts', 'Courts', Building2], ['/admin/classes', 'Classes', Dumbbell], ['/admin/coaches', 'Coaches', Users], ['/admin/payments', 'Payments', ClipboardList], ['/admin/checkins', 'Check-ins', Activity], ['/admin/analytics', 'Analytics', BarChart3]] as const;
+type SidebarItem = readonly [string, string, LucideIcon];
 
-function Sidebar({ items, collapsed, onCollapse }: { items: readonly (readonly [string, string, typeof Home])[]; collapsed: boolean; onCollapse: () => void }) {
-  const { logout } = useAuth();
+const member: readonly SidebarItem[] = [
+  ['/member', 'Overview', Home],
+  ['/book/court', 'Badminton courts', CalendarDays],
+  ['/private-course', 'Private course', Dumbbell],
+  ['/member/training', 'My Gym Training', Activity],
+  ['/bookings', 'Bookings', ClipboardList],
+  ['/membership', 'Packages', Users],
+  ['/payments', 'Payments', CreditCard],
+];
+
+const coach: readonly SidebarItem[] = [
+  ['/coach', 'Overview', Home],
+  ['/coach/schedule', 'Schedule', CalendarDays],
+  ['/coach/bookings', 'Requests', ClipboardList],
+  ['/coach/clients', 'Clients', Users],
+];
+
+const admin: readonly SidebarItem[] = [
+  ['/admin', 'Overview', Home],
+  ['/admin/users', 'Users', Users],
+  ['/admin/bookings', 'Bookings', CalendarDays],
+  ['/admin/courts', 'Courts', Building2],
+  ['/admin/classes', 'Classes', Dumbbell],
+  ['/admin/coaches', 'Coaches', Users],
+  ['/admin/payments', 'Payments', ClipboardList],
+  ['/admin/checkins', 'Check-ins', Activity],
+  ['/admin/analytics', 'Analytics', BarChart3],
+];
+
+const accountItems: readonly SidebarItem[] = [
+  ['/profile', 'Profile', UserRound],
+  ['/notifications', 'Notifications', Bell],
+  ['/settings', 'Settings', Settings],
+];
+
+function initials(name?: string | null) {
+  return name?.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'Z';
+}
+
+function SidebarLinks({ items, collapsed = false, onNavigate }: { items: readonly SidebarItem[]; collapsed?: boolean; onNavigate?: () => void }) {
+  const { t } = useLanguage();
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 hidden border-r border-zawana-950/10 bg-white lg:block ${collapsed ? 'w-20' : 'w-64'}`}>
-      <div className="flex h-full flex-col p-4">
-        <div className="flex h-14 items-center justify-between px-1">
-          {!collapsed && <Logo />}
-          <button onClick={onCollapse} className="rounded-full p-2 text-zawana-500 hover:bg-zawana-950/5 hover:text-zawana-950">
-            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          </button>
-        </div>
-        <nav className="mt-7 space-y-1">
-          {items.map(([to, label, Icon]) => (
-            <NavLink key={to} to={to} end={to === '/member' || to === '/coach' || to === '/admin'} className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${isActive ? 'bg-zawana-950 text-white' : 'text-zawana-500 hover:bg-zawana-950/5 hover:text-zawana-950'}`}>
-              <Icon size={18} />
-              {!collapsed && label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="mt-auto space-y-1 border-t border-zawana-950/10 pt-4">
-          {([
-            ['/profile', 'Profile', UserRound],
-            ['/notifications', 'Notifications', Bell],
-            ['/settings', 'Settings', Settings],
-          ] as const).map(([to, label, Icon]) => (
-            <NavLink key={to} to={to} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-zawana-500 hover:bg-zawana-950/5 hover:text-zawana-950">
-              <Icon size={18} />
-              {!collapsed && label}
-            </NavLink>
-          ))}
-          <button onClick={logout} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-zawana-500 hover:bg-zawana-950/5 hover:text-zawana-950">
-            <LogOut size={18} />
-            {!collapsed && 'Logout'}
-          </button>
-        </div>
-      </div>
-    </aside>
+    <>
+      {items.map(([to, label, Icon]) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === '/member' || to === '/coach' || to === '/admin'}
+          onClick={onNavigate}
+          title={collapsed ? t(label) : undefined}
+          aria-label={collapsed ? t(label) : undefined}
+          className={({ isActive }) => `group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${isActive ? 'bg-zawana-gold-soft text-zawana-950 before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-zawana-accent' : 'text-zawana-600 hover:bg-zawana-800 hover:text-zawana-950'}`}
+        >
+          <Icon size={18} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />
+          {!collapsed && <span className="truncate">{t(label)}</span>}
+        </NavLink>
+      ))}
+    </>
+  );
+}
+
+function AccountLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const { logout } = useAuth();
+  const { t } = useLanguage();
+
+  return (
+    <>
+      {accountItems.map(([to, label, Icon]) => (
+        <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors ${isActive ? 'bg-zawana-gold-soft text-zawana-950' : 'text-zawana-600 hover:bg-zawana-800 hover:text-zawana-950'}`}>
+          <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+          <span>{t(label)}</span>
+        </NavLink>
+      ))}
+      <button type="button" onClick={logout} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold text-zawana-600 transition-colors hover:bg-zawana-800 hover:text-zawana-950">
+        <LogOut size={18} strokeWidth={1.8} aria-hidden="true" />
+        <span>{t('Sign out')}</span>
+      </button>
+    </>
   );
 }
 
 export function AppLayout({ children, role }: { children: ReactNode; role: 'member' | 'coach' | 'admin' }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [mobile, setMobile] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
   const items = role === 'admin' ? admin : role === 'coach' ? coach : member;
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileOpen]);
+
   return (
-    <div className="min-h-screen bg-white">
-      <Sidebar items={items} collapsed={collapsed} onCollapse={() => setCollapsed(!collapsed)} />
-      {mobile && (
-        <div className="fixed inset-0 z-50 bg-zawana-950/35 lg:hidden" onClick={() => setMobile(false)}>
-          <aside className="h-full w-72 bg-white p-5" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
+    <LocalizedTree>
+    <div className="min-h-screen bg-zawana-page text-zawana-950">
+      <aside className={`fixed inset-y-0 left-0 z-40 hidden border-r border-zawana-border bg-white lg:block ${collapsed ? 'w-[76px]' : 'w-[260px]'}`}>
+        <div className="flex h-full flex-col px-3 py-4">
+          <div className={`flex h-12 items-center ${collapsed ? 'justify-center' : 'justify-between px-1'}`}>
+            <Logo compact={collapsed} />
+            <button
+              type="button"
+              onClick={() => setCollapsed(value => !value)}
+              aria-label={t(collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-zawana-500 transition hover:bg-zawana-800 hover:text-zawana-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${collapsed ? 'absolute right-[-18px] top-5 border border-zawana-border bg-white shadow-sm' : ''}`}
+            >
+              {collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+            </button>
+          </div>
+
+          <div className={`mt-8 mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-zawana-400 ${collapsed ? 'sr-only' : ''}`}>{t('Workspace')}</div>
+          <nav aria-label="Workspace navigation" className="space-y-1">
+            <SidebarLinks items={items} collapsed={collapsed} />
+          </nav>
+
+          <div className="mt-auto border-t border-zawana-border pt-4">
+            {!collapsed && (
+              <div className="mb-3 flex items-center gap-3 rounded-xl px-2 py-2">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-zawana-gold-soft text-xs font-bold text-zawana-accent">{initials(user?.name)}</span>
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{user?.name || 'Zawana member'}</span><span className="mt-0.5 block text-xs capitalize text-zawana-500">{role.replaceAll('_', ' ')}</span></span>
+              </div>
+            )}
+            <nav aria-label="Account navigation" className="space-y-1">
+              {collapsed ? (
+                <>
+                  <NavLink to="/profile" aria-label={t('Profile')} title={t('Profile')} className="grid h-11 place-items-center rounded-xl text-zawana-600 hover:bg-zawana-800"><UserRound size={18}/></NavLink>
+                  <NavLink to="/notifications" aria-label={t('Notifications')} title={t('Notifications')} className="grid h-11 place-items-center rounded-xl text-zawana-600 hover:bg-zawana-800"><Bell size={18}/></NavLink>
+                  <button type="button" aria-label={t('Sign out')} title={t('Sign out')} onClick={logout} className="grid h-11 w-full place-items-center rounded-xl text-zawana-600 hover:bg-zawana-800"><LogOut size={18}/></button>
+                </>
+              ) : <AccountLinks />}
+            </nav>
+          </div>
+        </div>
+      </aside>
+
+      <div aria-hidden={!mobileOpen} className={`fixed inset-0 z-50 bg-zawana-950/30 lg:hidden ${mobileOpen ? 'block' : 'hidden'}`}>
+          <button type="button" aria-label={t('Close navigation')} onClick={() => setMobileOpen(false)} className="absolute inset-0 z-0 h-full w-full cursor-default" />
+          <aside id="member-mobile-navigation" aria-label="Mobile navigation" className="relative z-10 flex h-full w-[min(320px,88vw)] flex-col bg-white p-4 shadow-2xl">
+            <div className="flex h-12 items-center justify-between px-1">
               <Logo />
-              <button onClick={() => setMobile(false)} className="rounded-full p-2 hover:bg-zawana-950/5"><X /></button>
+              <button type="button" aria-label={t('Close menu')} onClick={() => setMobileOpen(false)} className="grid h-10 w-10 place-items-center rounded-xl text-zawana-500 hover:bg-zawana-800"><X size={19}/></button>
             </div>
-            <nav className="mt-8 space-y-1">
-              {items.map(([to, label, Icon]) => (
-                <NavLink onClick={() => setMobile(false)} key={to} to={to} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-zawana-500 hover:bg-zawana-950/5 hover:text-zawana-950">
-                  <Icon size={18} />{label}
-                </NavLink>
-              ))}
+            <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-zawana-400">{t('Workspace')}</p>
+            <nav aria-label="Workspace navigation" className="space-y-1">
+              <SidebarLinks items={items} onNavigate={() => setMobileOpen(false)} />
             </nav>
-            <nav aria-label="Account" className="mt-6 space-y-1 border-t border-zawana-950/10 pt-4">
-              {([['/profile','Profile',UserRound],['/notifications','Notifications',Bell],['/settings','Settings',Settings]] as const).map(([to,label,Icon])=><NavLink onClick={()=>setMobile(false)} key={to} to={to} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-zawana-500 hover:bg-zawana-950/5"><Icon size={18}/>{label}</NavLink>)}
-              <button onClick={()=>{setMobile(false);logout()}} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-zawana-500 hover:bg-zawana-950/5"><LogOut size={18}/>Logout</button>
-            </nav>
-            <div className="mt-8">
-              <Button variant="secondary" className="w-full" onClick={() => setMobile(false)}>Close menu</Button>
+            <div className="mt-auto border-t border-zawana-border pt-4">
+              <div className="mb-3 flex items-center gap-3 rounded-xl px-2 py-2">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-zawana-gold-soft text-xs font-bold text-zawana-accent">{initials(user?.name)}</span>
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{user?.name || 'Zawana member'}</span><span className="mt-0.5 block text-xs capitalize text-zawana-500">{role.replaceAll('_', ' ')}</span></span>
+              </div>
+              <nav aria-label="Account navigation" className="space-y-1"><AccountLinks onNavigate={() => setMobileOpen(false)} /></nav>
             </div>
           </aside>
-        </div>
-      )}
-      <div className={`${collapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-zawana-950/10 bg-white/90 px-4 backdrop-blur md:px-8">
-          <button className="rounded-full p-2 lg:hidden" onClick={() => setMobile(true)}><Menu size={20} /></button>
+      </div>
+
+      <div className={`min-h-screen ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[260px]'}`}>
+        <header className="sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-zawana-border bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+            <button
+            type="button"
+            aria-label={t('Open navigation')}
+            aria-expanded={mobileOpen}
+            aria-controls="member-mobile-navigation"
+            onClick={() => setMobileOpen(true)}
+            className="grid h-10 w-10 place-items-center rounded-xl text-zawana-600 transition hover:bg-zawana-800 lg:hidden"
+          >
+            <Menu size={20} />
+          </button>
           <div className="lg:hidden"><Logo compact /></div>
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden text-sm font-semibold text-zawana-500 md:block">{user?.name}</span>
+          <div className="hidden text-xs font-semibold text-zawana-500 lg:block">{t(role === 'member' ? 'MEMBER SPACE' : `${role.replaceAll('_', ' ').toUpperCase()} WORKSPACE`)}</div>
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <span className="hidden max-w-48 truncate text-sm font-medium text-zawana-600 sm:block">{user?.name}</span>
+            <LanguageSwitcher />
             <NotificationBell />
-            <NavLink to="/profile" className="grid h-9 w-9 place-items-center rounded-full bg-zawana-gold text-xs font-black text-zawana-950">{user?.name?.slice(0, 2).toUpperCase()}</NavLink>
+            <NavLink to="/profile" aria-label={t('Open profile')} className="grid h-9 w-9 place-items-center rounded-xl border border-zawana-border bg-white text-xs font-bold text-zawana-accent transition hover:bg-zawana-gold-soft">{initials(user?.name)}</NavLink>
           </div>
         </header>
-        {children}
+        <div id="main-content">{children}</div>
       </div>
     </div>
+    </LocalizedTree>
   );
 }

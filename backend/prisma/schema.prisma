@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -139,6 +140,7 @@ model User {
   avatar               String?
   createdAt            DateTime              @default(now())
   active               Boolean               @default(true)
+  deletedAt            DateTime?
   lastLoginAt          DateTime?
   bookings             Booking[]
   notifications        Notification[]
@@ -159,6 +161,7 @@ model User {
   courtDateOverrides    CourtDateOverride[]
 
   @@index([role, active])
+  @@index([deletedAt])
 }
 
 model Court {

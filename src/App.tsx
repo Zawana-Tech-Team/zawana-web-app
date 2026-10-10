@@ -1,24 +1,55 @@
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 // @ts-expect-error ScrollToTop is a JSX module without a TypeScript declaration.
 import ScrollToTop from './components/ScrollToTop';
 import RoleLayout from './components/RoleLayout';
 import { AppLayout } from './layouts/Layouts';
 import { useAuth } from './context/AuthContext';
-import { Generic, Home, Login, Signup, CafeCustomer, Dashboard, Book, CourtBooking, CoachBooking, Bookings, Membership, Performance, Training, Revive, Classes, Community, Store, Notifications, Profile, Admin, AdminTable, GymCheckIn, ReviveClinicFO } from './pages';
-import OperationsPage from './pages/Operations';
-import { AdminManagement } from './pages/AdminManagement';
-import { PrivateCourse } from './pages/PrivateCourse';
-import { CoachCalendar } from './pages/CoachCalendar';
-import PrivateCourseAdmin from './pages/PrivateCourseAdmin';
-import UserManagement from './pages/UserManagement';
-import PaymentHistory from './pages/PaymentHistory';
-import { CompleteProfile, ForgotPassword, AuthAction } from './pages/AuthFlows';
-import { Settings } from './pages/Settings';
-import { PaymentStatus } from './pages/PaymentStatus';
-import MemberTraining from './pages/MemberTraining';
 import type { UserRole } from './types';
 import { classes, courts } from './data';
+import { useLanguage } from './context/LanguageContext';
+
+const Generic = lazy(() => import('./pages/Generic').then(module => ({ default: module.Generic })));
+const Home = lazy(() => import('./pages/Home').then(module => ({ default: module.Home })));
+const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
+const Signup = lazy(() => import('./pages/Signup').then(module => ({ default: module.Signup })));
+const CafeCustomer = lazy(() => import('./pages/CafeCustomer').then(module => ({ default: module.CafeCustomer })));
+const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
+const Book = lazy(() => import('./pages/Book').then(module => ({ default: module.Book })));
+const CourtBooking = lazy(() => import('./pages/CourtBooking').then(module => ({ default: module.CourtBooking })));
+const CoachBooking = lazy(() => import('./pages/CoachBooking').then(module => ({ default: module.CoachBooking })));
+const Bookings = lazy(() => import('./pages/Bookings').then(module => ({ default: module.Bookings })));
+const Membership = lazy(() => import('./pages/Membership').then(module => ({ default: module.Membership })));
+const Performance = lazy(() => import('./pages/Performance').then(module => ({ default: module.Performance })));
+const Training = lazy(() => import('./pages/Training').then(module => ({ default: module.Training })));
+const Revive = lazy(() => import('./pages/Revive').then(module => ({ default: module.Revive })));
+const Classes = lazy(() => import('./pages/Classes').then(module => ({ default: module.Classes })));
+const Community = lazy(() => import('./pages/Community').then(module => ({ default: module.Community })));
+const Store = lazy(() => import('./pages/Store').then(module => ({ default: module.Store })));
+const Notifications = lazy(() => import('./pages/Notifications').then(module => ({ default: module.Notifications })));
+const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
+const Admin = lazy(() => import('./pages/Admin').then(module => ({ default: module.Admin })));
+const AdminTable = lazy(() => import('./pages/AdminTable').then(module => ({ default: module.AdminTable })));
+const GymCheckIn = lazy(() => import('./pages/GymCheckIn').then(module => ({ default: module.GymCheckIn })));
+const ReviveClinicFO = lazy(() => import('./pages/ReviveClinicFO').then(module => ({ default: module.ReviveClinicFO })));
+const OperationsPage = lazy(() => import('./pages/Operations'));
+const AdminManagement = lazy(() => import('./pages/AdminManagement').then(module => ({ default: module.AdminManagement })));
+const PrivateCourse = lazy(() => import('./pages/PrivateCourse').then(module => ({ default: module.PrivateCourse })));
+const CoachCalendar = lazy(() => import('./pages/CoachCalendar').then(module => ({ default: module.CoachCalendar })));
+const PrivateCourseAdmin = lazy(() => import('./pages/PrivateCourseAdmin'));
+const UserManagement = lazy(() => import('./pages/UserManagement'));
+const PaymentHistory = lazy(() => import('./pages/PaymentHistory'));
+const CompleteProfile = lazy(() => import('./pages/AuthFlows').then(module => ({ default: module.CompleteProfile })));
+const ForgotPassword = lazy(() => import('./pages/AuthFlows').then(module => ({ default: module.ForgotPassword })));
+const AuthAction = lazy(() => import('./pages/AuthFlows').then(module => ({ default: module.AuthAction })));
+const Settings = lazy(() => import('./pages/Settings').then(module => ({ default: module.Settings })));
+const PaymentStatus = lazy(() => import('./pages/PaymentStatus').then(module => ({ default: module.PaymentStatus })));
+const MemberTraining = lazy(() => import('./pages/MemberTraining'));
+
+function RouteLoading() {
+ const { t } = useLanguage();
+ return <div className="grid min-h-[60vh] place-items-center bg-zawana-page px-5" role="status" aria-live="polite"><span className="flex items-center gap-3 text-sm font-medium text-zawana-500"><span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-zawana-border border-t-zawana-accent"/>{t('Loading page…')}</span></div>;
+}
 
 const homeByRole: Record<UserRole,string> = {
  member:'/member', coach:'/coach', admin:'/admin', owner:'/owner', gym_fo:'/gym-fo', clinic_fo:'/clinic-fo',
@@ -41,7 +72,7 @@ function AccountSettings(){
 const operational=(role:UserRole,path:string)=> <Route path={path} element={<Guard role={role}><OperationsPage role={role}/></Guard>}/>;
 
 export default function App(){
- return <><ScrollToTop/><Routes>
+ return <Suspense fallback={<RouteLoading/>}><ScrollToTop/><Routes>
   <Route path="/" element={<Home/>}/>
   <Route path="/facilities" element={<Generic title="Facilities" body="Badminton courts, performance gym, training studio and recovery services in one arena."/>}/>
   <Route path="/memberships" element={<Generic title="Memberships" body="Choose an access plan built around how you train."/>}/>
@@ -132,5 +163,5 @@ export default function App(){
   <Route path="/legacy/front-office/revive-clinic" element={<Guard role="clinic_fo"><ReviveClinicFO/></Guard>}/>
 
   <Route path="*" element={<Navigate to="/" replace/>}/>
- </Routes></>;
+ </Routes></Suspense>;
 }
