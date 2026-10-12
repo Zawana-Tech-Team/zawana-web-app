@@ -94,7 +94,7 @@ export function Home(){
         <button type="button" aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'} aria-expanded={mobileMenuOpen} aria-controls="home-mobile-navigation" onClick={()=>setMobileMenuOpen(open=>!open)} className="grid h-10 w-10 place-items-center rounded-xl border border-zawana-border bg-white text-zawana-600 transition hover:bg-zawana-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold lg:hidden">
           {mobileMenuOpen ? <X size={18}/> : <Menu size={18}/>}
         </button>
-        <Link to="/signup"><Button><span className="sm:hidden">Join</span><span className="hidden sm:inline">Join Zawana</span></Button></Link>
+        <Link to="/signup"><Button><span><span className="sm:hidden">Join</span><span className="hidden sm:inline">Join Zawana</span></span></Button></Link>
       </div>
       <nav id="home-mobile-navigation" aria-label="Mobile navigation" className={`absolute left-4 right-4 top-[72px] z-40 rounded-2xl border border-zawana-border bg-white p-2 shadow-xl lg:hidden ${mobileMenuOpen ? 'block' : 'hidden'}`}>
         {[["#arena","The Arena"],["#membership","Membership"],["#performance","Performance"],["#community","Community"]].map(([href,label])=><a key={href} href={href} onClick={()=>setMobileMenuOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-zawana-600 transition hover:bg-zawana-gold-soft hover:text-zawana-950">{label}</a>)}
@@ -119,7 +119,7 @@ export function Home(){
                 Discover a connected world of badminton, fitness, performance, recovery, and lifestyle at ZAWANA.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link to="/facilities"><Button>Explore ZAWANA <ArrowRight size={16} /></Button></Link>
+                <Link to="/facilities"><Button><span>Explore ZAWANA <ArrowRight size={16} /></span></Button></Link>
                 <Link to="/book"><Button variant="secondary">Book a Court</Button></Link>
               </div>
               <p className="mt-7 text-xs font-medium tracking-wide text-zawana-500">Badminton · Training · Recovery · Community</p>
@@ -246,7 +246,7 @@ export function Home(){
               <p className="eyebrow text-zawana-gold">03 · Membership</p>
               <h2 className="mt-4 text-4xl font-black tracking-[-.06em] md:text-6xl">Choose your access.</h2>
             </div>
-            <Link to="/memberships" className="text-sm font-extrabold uppercase tracking-[.16em] text-zawana-950">Compare plans <ArrowRight className="ml-2 inline" size={16}/></Link>
+            <Link to="/memberships" className="text-sm font-extrabold uppercase tracking-[.16em] text-zawana-950"><span>Compare plans <ArrowRight className="ml-2 inline" size={16}/></span></Link>
           </div>
           <div className="mt-12 grid gap-5 lg:grid-cols-3">
             {memberships.map((m,i)=><Card key={m.id} className={`${i===1?'border-zawana-gold shadow-[0_22px_60px_rgba(196,175,73,.15)]':''} p-7`}>
@@ -286,11 +286,10 @@ export function Home(){
         to="/community"
         className="group inline-flex items-center text-sm font-extrabold uppercase tracking-[.16em] text-zawana-950"
       >
-        View all
-        <ArrowRight
+        <span>View all<ArrowRight
           className="ml-2 transition-transform duration-300 group-hover:translate-x-1"
           size={16}
-        />
+        /></span>
       </Link>
     </div>
 
@@ -345,8 +344,7 @@ export function Home(){
                       rel="noreferrer"
                     >
                       <Button>
-                        Register Now
-                        <ArrowRight className="ml-2" size={16} />
+                        <span>Register Now <ArrowRight className="ml-2" size={16} /></span>
                       </Button>
                     </a>
                   )}
@@ -463,7 +461,7 @@ export function Home(){
         <div className="mx-auto max-w-[1440px] overflow-hidden rounded-[34px] bg-zawana-950 px-6 py-12 text-white md:px-12 md:py-14">
           <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
             <div><p className="eyebrow text-zawana-gold">Ready when you are</p><h2 className="mt-4 max-w-2xl text-4xl font-black tracking-[-.06em] md:text-6xl">Your next session starts here.</h2></div>
-            <Link to="/book"><Button>Book at Zawana <ArrowRight className="ml-2" size={16}/></Button></Link>
+            <Link to="/book"><Button><span>Book at Zawana <ArrowRight className="ml-2" size={16}/></span></Button></Link>
           </div>
         </div>
       </section>

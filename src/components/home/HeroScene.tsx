@@ -182,14 +182,6 @@ export default function HeroScene() {
   const [compact, setCompact] = useState(false);
 
   useEffect(() => {
-    const probe = document.createElement('canvas');
-    const context = probe.getContext('webgl2') || probe.getContext('webgl');
-    const loseContext = context?.getExtension('WEBGL_lose_context');
-    loseContext?.loseContext();
-    setSupportsWebGL(Boolean(context));
-  }, []);
-
-  useEffect(() => {
     const element = wrapper.current;
     if (!element) return;
     const observer = new IntersectionObserver(([entry]) => setIsInView(entry.isIntersecting), { threshold: 0.05 });
@@ -218,8 +210,13 @@ export default function HeroScene() {
       event.preventDefault();
       setContextLost(true);
     };
-    canvas.addEventListener('webglcontextlost', onLost, { once: true });
-    return () => canvas.removeEventListener('webglcontextlost', onLost);
+    const onRestored = () => setContextLost(false);
+    canvas.addEventListener('webglcontextlost', onLost);
+    canvas.addEventListener('webglcontextrestored', onRestored);
+    return () => {
+      canvas.removeEventListener('webglcontextlost', onLost);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+    };
   }, [canvas]);
 
   const onCreated = useCallback(({ gl }: RootState) => {
@@ -233,19 +230,17 @@ export default function HeroScene() {
   return (
     <div ref={wrapper} aria-hidden="true" className="relative isolate h-[350px] w-full overflow-hidden rounded-[30px] sm:h-[430px] lg:h-[540px]">
       <HeroFallback />
-      {supportsWebGL && !contextLost && (
-        <Canvas
-          camera={{ position: [0, 0, 4.25], fov: 39, near: 0.1, far: 50 }}
-          dpr={pixelRatio}
-          frameloop={active ? 'always' : 'demand'}
-          gl={{ alpha: true, antialias: !compact, powerPreference: 'low-power' }}
-          onCreated={onCreated}
-          fallback={<HeroFallback />}
-          className={`absolute inset-0 transition-opacity duration-700 ${sceneReady ? 'opacity-100' : 'opacity-0'}`}
-        >
-          <Scene compact={compact} reducedMotion={reducedMotion} />
-        </Canvas>
-      )}
+      <Canvas
+        camera={{ position: [0, 0, 4.25], fov: 39, near: 0.1, far: 50 }}
+        dpr={pixelRatio}
+        frameloop={active ? 'always' : 'demand'}
+        gl={{ alpha: true, antialias: !compact, powerPreference: 'low-power' }}
+        onCreated={onCreated}
+        fallback={<HeroFallback />}
+        className={`absolute inset-0 transition-opacity duration-700 ${sceneReady && !contextLost ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <Scene compact={compact} reducedMotion={reducedMotion} />
+      </Canvas>
     </div>
   );
 }
