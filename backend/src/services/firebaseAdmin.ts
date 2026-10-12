@@ -21,7 +21,15 @@ function configuredApp() {
 export async function verifyFirebaseIdToken(token: string): Promise<DecodedIdToken> {
   const app = configuredApp();
   if (!app) throw Object.assign(new Error('Firebase Authentication is not configured on the server.'), { statusCode: 503 });
-  return getAuth(app).verifyIdToken(token, true);
+  try {
+    return await getAuth(app).verifyIdToken(token, true);
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : '';
+    if (['auth/argument-error', 'auth/invalid-id-token', 'auth/id-token-expired', 'auth/id-token-revoked', 'auth/user-disabled', 'auth/user-not-found'].includes(String(code))) {
+      throw Object.assign(new Error('Invalid, expired, or revoked Firebase ID token.'), { statusCode: 401 });
+    }
+    throw Object.assign(new Error('Firebase identity verification is temporarily unavailable.'), { statusCode: 503 });
+  }
 }
 
 export function firebaseAdminAuth() {

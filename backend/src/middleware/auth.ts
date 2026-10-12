@@ -5,6 +5,7 @@ import { verifyFirebaseIdToken } from "../services/firebaseAdmin.js";
 import { verifyDatabaseToken } from "../services/databaseSession.js";
 import { env } from "../config/env.js";
 import type { AuthRequest, AuthUser } from "../types/auth.js";
+import { verifiedFirebaseIdentity } from '../modules/auth/firebaseIdentityPolicy.js';
 
 export function auth(req:AuthRequest,res:Response,next:NextFunction){
   const header=req.headers.authorization;
@@ -20,6 +21,7 @@ export function auth(req:AuthRequest,res:Response,next:NextFunction){
     return;
   }
   void verifyFirebaseIdToken(header.slice(7)).then(async claims=>{
+    if(!verifiedFirebaseIdentity(claims).verified)return res.status(403).json({message:"A verified Firebase identity is required."});
     const user=await prisma.user.findUnique({where:{firebaseUid:claims.uid},select:{id:true,role:true,email:true,name:true,phone:true,avatar:true,active:true}});
     if(!user||!user.active)return res.status(401).json({message:"Firebase identity is not linked to an active Zawana account."});
     req.firebaseClaims=claims;

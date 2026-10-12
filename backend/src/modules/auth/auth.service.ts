@@ -7,6 +7,7 @@ import { firebaseAdminAuth, verifyFirebaseIdToken } from "../../services/firebas
 import { issueDatabaseToken } from "../../services/databaseSession.js";
 import { toSafeAppUser } from "../../services/userSerializer.js";
 import { normalizePhone } from "./auth.validation.js";
+import { firebaseUserLookup, verifiedFirebaseIdentity } from './firebaseIdentityPolicy.js';
 
 export class AuthServiceError extends Error{
   constructor(message:string,public readonly statusCode:number){super(message);this.name="AuthServiceError";}
@@ -43,18 +44,13 @@ function bearerToken(req:Request){
 
 export async function resolveFirebaseSession(req:Request){
   const claims=await verifyFirebaseIdToken(bearerToken(req));
-  if(!claims.email||!claims.email_verified)throw new AuthServiceError("Verify your email address before signing in to Zawana.",403);
-  let user=await prisma.user.findUnique({where:{firebaseUid:claims.uid}});
-  if(!user){
-    const legacy=await prisma.user.findUnique({where:{email:claims.email.toLowerCase()}});
-    if(legacy){
-      if(legacy.firebaseUid&&legacy.firebaseUid!==claims.uid)throw new AuthServiceError("This Zawana account is already linked to another sign-in identity. Contact an administrator.",409);
-      user=await prisma.user.update({where:{id:legacy.id},data:{firebaseUid:claims.uid,emailVerified:true,avatar:legacy.avatar||claims.picture||null,lastLoginAt:new Date()}});
-    }
-  }
-  if(!user)throw Object.assign(new Error("Complete your member profile to continue."),{statusCode:428,code:"PROFILE_REQUIRED",profile:{name:claims.name||"",email:claims.email,avatar:claims.picture||null}});
+  const identity=verifiedFirebaseIdentity(claims);
+  if(!identity.verified)throw new AuthServiceError("Verify your email or mobile number before signing in to Zawana.",403);
+  const user=await prisma.user.findUnique({where:firebaseUserLookup(claims.uid)});
+  if(!user)throw Object.assign(new Error("Complete your member profile to continue. Existing accounts require explicit identity linking."),{statusCode:428,code:"PROFILE_REQUIRED",profile:{name:claims.name||"",email:claims.email||null,phone:identity.verifiedPhone?claims.phone_number:null,avatar:claims.picture||null}});
   if(!user.active)throw new AuthServiceError("This account is inactive. Contact an administrator.",403);
-  const updated=await prisma.user.update({where:{id:user.id},data:{emailVerified:true,lastLoginAt:new Date()}});
+  const verifiedStoredEmail=identity.verifiedEmail&&claims.email?.toLowerCase()===user.email.toLowerCase();
+  const updated=await prisma.user.update({where:{id:user.id},data:{...(verifiedStoredEmail?{emailVerified:true}:{}),lastLoginAt:new Date()}});
   const firebaseUser=await firebaseAdminAuth().getUser(claims.uid);
   return {user:toSafeAppUser(updated),security:{mfaEnrolled:(firebaseUser.multiFactor?.enrolledFactors.length||0)>0,mfaRequired:false}};
 }
@@ -67,8 +63,7 @@ export async function completeFirebaseProfile(req:Request,input:{name:string;pho
   if(!user){
     const legacy=await prisma.user.findUnique({where:{email:claims.email.toLowerCase()}});
     if(legacy){
-      if(legacy.firebaseUid&&legacy.firebaseUid!==claims.uid)throw new AuthServiceError("This account is already linked to another sign-in identity.",409);
-      user=await prisma.user.update({where:{id:legacy.id},data:{firebaseUid:claims.uid,emailVerified:true,name:input.name,phone,avatar:legacy.avatar||claims.picture||null,lastLoginAt:new Date()}});
+      throw new AuthServiceError("This account requires explicit identity linking. Sign in with the existing method or contact an administrator.",409);
     }else{
       user=await prisma.user.create({data:{name:input.name,email:claims.email.toLowerCase(),phone,avatar:claims.picture||null,firebaseUid:claims.uid,emailVerified:true,passwordHash:await bcrypt.hash(crypto.randomBytes(32).toString("hex"),12),role:"member",lastLoginAt:new Date()}});
     }

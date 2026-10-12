@@ -15,12 +15,17 @@ if(authMode==="database"){
 const port=Number(process.env.PORT||8000);
 if(!Number.isInteger(port)||port<1||port>65535)throw new Error("PORT must be a valid TCP port number.");
 
+const clientUrls=process.env.CLIENT_URL?.split(",").map(value=>value.trim()).filter(Boolean)||["http://localhost:5173"];
+if(process.env.NODE_ENV!=="production"){
+  for(const origin of ["http://localhost:8081","http://127.0.0.1:8081"]){if(!clientUrls.includes(origin))clientUrls.push(origin);}
+}
+
 export const env={
   authMode:authMode as AuthMode,
   databaseAuthEnabled:authMode==="database",
   databaseUrl,
   jwtSecret,
   port,
-  clientUrls:process.env.CLIENT_URL?.split(",").map(value=>value.trim()).filter(Boolean)||["http://localhost:5173"],
+  clientUrls,
   publicApiUrl:process.env.PUBLIC_API_URL||`http://localhost:${port}`,
 };
