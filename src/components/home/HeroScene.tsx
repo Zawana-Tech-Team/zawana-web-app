@@ -173,7 +173,6 @@ function Scene({ compact, reducedMotion }: { compact: boolean; reducedMotion: bo
 export default function HeroScene() {
   const wrapper = useRef<HTMLDivElement>(null);
   const reducedMotion = Boolean(useReducedMotion());
-  const [supportsWebGL, setSupportsWebGL] = useState(false);
   const [sceneReady, setSceneReady] = useState(false);
   const [contextLost, setContextLost] = useState(false);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
