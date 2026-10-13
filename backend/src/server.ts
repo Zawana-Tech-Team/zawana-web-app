@@ -11,6 +11,8 @@ import { Role, BookingStatus, CourtStatus, TransactionBusiness } from "@prisma/c
 import storeRoutes from "./routes/store.js";
 import menuRoutes from "./routes/menu.js";
 import authRoutes from "./routes/auth.js";
+import { hybrid } from "./modules/auth/hybrid.service.js";
+import { requireRecentSession } from "./modules/auth/hybrid.policy.js";
 import mediaRoutes from "./routes/media.js";
 import cafeRoutes from "./routes/cafe.js";
 import gymTrainingRoutes from "./routes/gymTraining.js";
@@ -979,11 +981,8 @@ async function syncManagedFirebaseIdentity(input: {
   if (input.firebaseUid) return auth.updateUser(input.firebaseUid, changes);
   try {
     const existing = await auth.getUserByEmail(input.email);
-    const linkedUser = await prisma.user.findFirst({
-      where: { firebaseUid: existing.uid },
-      select: { id: true }
-    });
-    if (linkedUser && linkedUser.id !== input.userId)
+    const linkedUser = await hybrid.resolve(existing.uid);
+    if (!linkedUser || linkedUser.id !== input.userId)
       throw Object.assign(
         new Error("This Firebase account is already linked to a different Zawana user."),
         { statusCode: 409 }
@@ -1092,7 +1091,8 @@ app.post(
     const email = b.email.toLowerCase();
     if (await prisma.user.findUnique({ where: { email }, select: { id: true } }))
       return res.status(409).json({ message: "A Zawana account with this email already exists." });
-    const passwordHash = await bcrypt.hash(b.password, 12);
+    requireRecentSession((req as AuthRequest).authSession);
+    const passwordHash = env.databaseAuthEnabled ? await bcrypt.hash(b.password, 12) : null;
     const firebaseMode = !env.databaseAuthEnabled;
     let identity: null | Awaited<ReturnType<ReturnType<typeof firebaseAdminAuth>["createUser"]>> =
       null;
@@ -1186,6 +1186,7 @@ app.patch(
       return res.status(400).json({ message: "You cannot deactivate your own admin account." });
     const current = await prisma.user.findUnique({ where: { id: String(req.params.id) } });
     if (!current || current.deletedAt) return res.status(404).json({ message: "User not found." });
+    if (body.password || typeof body.active === "boolean") requireRecentSession((req as AuthRequest).authSession);
     let linkedFirebaseUid = current.firebaseUid;
     let newlyCreatedFirebaseUid: string | undefined;
     if (!env.databaseAuthEnabled && (body.password || typeof body.active === "boolean")) {
@@ -1210,7 +1211,7 @@ app.patch(
     const data: any = { ...body };
     delete data.coachDepartment;
     if (body.password) {
-      data.passwordHash = await bcrypt.hash(body.password, 12);
+      data.passwordHash = env.databaseAuthEnabled ? await bcrypt.hash(body.password, 12) : null;
       delete data.password;
     }
     if (linkedFirebaseUid) data.firebaseUid = linkedFirebaseUid;
@@ -5491,6 +5492,8 @@ app.get(
 
 app.use((_req, res) => res.status(404).json({ message: "Route not found" }));
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  if (err?.name === "ZodError" && req.path.startsWith("/api/auth"))
+    return res.status(400).json({ code: "INVALID_INPUT", message: "Check your authentication details and try again." });
   if (err?.name === "ZodError")
     return res
       .status(400)
@@ -5516,12 +5519,14 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     return res
       .status(409)
       .json({ message: "Another booking is being confirmed. Refresh availability and try again." });
+  if (err?.statusCode === 429) res.setHeader("Retry-After", "900");
   if (err?.statusCode)
     return res
       .status(err.statusCode)
       .json({
         message: err.message || "Request conflict",
-        ...(err.conflicts ? { conflicts: err.conflicts } : {})
+        ...(err.conflicts ? { conflicts: err.conflicts } : {}),
+        ...(err.code ? { code: err.code } : {})
       });
   const requestId = crypto.randomUUID();
   res.setHeader("X-Request-Id", requestId);
@@ -5533,7 +5538,7 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       code: err?.code || null,
       name: err?.name || "Error"
     });
-  else console.error(`Unhandled API error ${requestId} (${req.method} ${req.path})`, err);
+  else console.error("Unhandled API error", { requestId, method: req.method, path: req.path, name: err?.name });
   res.status(500).json({ message: "Internal server error", requestId });
 });
 

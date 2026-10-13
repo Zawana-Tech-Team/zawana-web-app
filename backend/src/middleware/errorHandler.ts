@@ -8,7 +8,8 @@ export function notFound(_req: Request, res: Response) {
 }
 
 export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction) {
-  console.error(err);
+  if (err?.statusCode) return res.status(err.statusCode).json({ code: err.code || 'AUTH_ERROR', message: err.message });
+  console.error('API error', { name: err?.name, code: err?.code });
 
   if (err?.name === "ZodError") {
     return res.status(400).json({

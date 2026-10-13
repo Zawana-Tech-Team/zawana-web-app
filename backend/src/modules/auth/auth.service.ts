@@ -1,13 +1,12 @@
 import bcrypt from "bcryptjs";
-import crypto from "node:crypto";
 import type { Request } from "express";
 import { prisma } from "../../lib/prisma.js";
 import { env } from "../../config/env.js";
 import { firebaseAdminAuth, verifyFirebaseIdToken } from "../../services/firebaseAdmin.js";
-import { issueDatabaseToken } from "../../services/databaseSession.js";
-import { toSafeAppUser } from "../../services/userSerializer.js";
+import { sessions } from "../../services/authSession.js";
+import { hybrid } from "./hybrid.service.js";
+import { requireWebProof } from "./hybrid.policy.js";
 import { normalizePhone } from "./auth.validation.js";
-import { firebaseUserLookup, verifiedFirebaseIdentity } from './firebaseIdentityPolicy.js';
 
 export class AuthServiceError extends Error {
   constructor(
@@ -46,7 +45,7 @@ export async function registerDatabaseAccount(input: {
       emailVerified: true
     }
   });
-  return { user: toSafeAppUser(user), token: issueDatabaseToken(user.id) };
+  return sessions.issue(prisma, user, 'database_password', []);
 }
 
 export async function loginDatabaseAccount(input: { username: string; password: string }) {
@@ -67,13 +66,13 @@ export async function loginDatabaseAccount(input: { username: string; password: 
       );
     user = matches[0];
   }
-  if (!user || !user.active || !await bcrypt.compare(input.password, user.passwordHash))
+  if (!user || !user.active || !user.passwordHash || !await bcrypt.compare(input.password, user.passwordHash))
     throw new AuthServiceError("Username or password is incorrect.", 401);
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() }
   });
-  return { user: toSafeAppUser(updated), token: issueDatabaseToken(updated.id) };
+  return sessions.issue(prisma, updated, 'database_password', []);
 }
 
 function bearerToken(req: Request) {
@@ -84,46 +83,7 @@ function bearerToken(req: Request) {
 }
 
 export async function resolveFirebaseSession(req: Request) {
-  const claims = await verifyFirebaseIdToken(bearerToken(req));
-  const identity = verifiedFirebaseIdentity(claims);
-  if (!identity.verified)
-    throw new AuthServiceError(
-      "Verify your email or mobile number before signing in to Zawana.",
-      403
-    );
-  const user = await prisma.user.findUnique({ where: firebaseUserLookup(claims.uid) });
-  if (!user)
-    throw Object.assign(
-      new Error(
-        "Complete your member profile to continue. Existing accounts require explicit identity linking."
-      ),
-      {
-        statusCode: 428,
-        code: "PROFILE_REQUIRED",
-        profile: {
-          name: claims.name || "",
-          email: claims.email || null,
-          phone: identity.verifiedPhone ? claims.phone_number : null,
-          avatar: claims.picture || null
-        }
-      }
-    );
-  if (!user.active)
-    throw new AuthServiceError("This account is inactive. Contact an administrator.", 403);
-  const verifiedStoredEmail =
-    identity.verifiedEmail && claims.email?.toLowerCase() === user.email.toLowerCase();
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: { ...(verifiedStoredEmail ? { emailVerified: true } : {}), lastLoginAt: new Date() }
-  });
-  const firebaseUser = await firebaseAdminAuth().getUser(claims.uid);
-  return {
-    user: toSafeAppUser(updated),
-    security: {
-      mfaEnrolled: (firebaseUser.multiFactor?.enrolledFactors.length || 0) > 0,
-      mfaRequired: false
-    }
-  };
+  return hybrid.webSession(bearerToken(req));
 }
 
 export async function completeFirebaseProfile(
@@ -131,12 +91,15 @@ export async function completeFirebaseProfile(
   input: { name: string; phone: string }
 ) {
   const claims = await verifyFirebaseIdToken(bearerToken(req));
+  requireWebProof(claims);
   if (!claims.email || !claims.email_verified)
     throw new AuthServiceError("Verify your email before completing your profile.", 403);
+  const pending = await prisma.pendingRegistration.findUnique({ where: { firebaseUid: claims.uid } });
+  if (pending && !pending.completedUserId) throw Object.assign(new Error("Complete mobile account enrollment first."), { statusCode: 428, code: "INCOMPLETE_ENROLLMENT" });
   const phone = normalizePhone(input.phone);
   let user = await prisma.user.findUnique({ where: { firebaseUid: claims.uid } });
   if (!user) {
-    const legacy = await prisma.user.findUnique({ where: { email: claims.email.toLowerCase() } });
+    const legacy = await hybrid.emailOwner(claims.email);
     if (legacy) {
       throw new AuthServiceError(
         "This account requires explicit identity linking. Sign in with the existing method or contact an administrator.",
@@ -151,7 +114,7 @@ export async function completeFirebaseProfile(
           avatar: claims.picture || null,
           firebaseUid: claims.uid,
           emailVerified: true,
-          passwordHash: await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12),
+          passwordHash: null,
           role: "member",
           lastLoginAt: new Date()
         }
@@ -160,14 +123,7 @@ export async function completeFirebaseProfile(
   }
   if (!user.active)
     throw new AuthServiceError("This account is inactive. Contact an administrator.", 403);
-  const firebaseUser = await firebaseAdminAuth().getUser(claims.uid);
-  return {
-    user: toSafeAppUser(user),
-    security: {
-      mfaEnrolled: (firebaseUser.multiFactor?.enrolledFactors.length || 0) > 0,
-      mfaRequired: false
-    }
-  };
+  return hybrid.webSession(bearerToken(req));
 }
 
 export async function firebaseMfaStatus(userId: string) {

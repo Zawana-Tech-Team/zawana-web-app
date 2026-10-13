@@ -128,12 +128,14 @@ enum TransactionBusiness {
 }
 
 model User {
+  authIdentities AuthIdentity[]
+  authSessions AuthSession[]
   id                   String                @id @default(cuid())
   firebaseUid          String?               @unique
   name                 String
   email                String                @unique
   emailVerified        Boolean               @default(false)
-  passwordHash         String
+  passwordHash         String?
   role                 Role                  @default(member)
   phone                String?
   membership           String?
@@ -674,4 +676,81 @@ model ContentItem {
   googleFormLink String
   status         String @default("draft")
   publishDate    String
+}
+
+model AuthIdentity {
+  id String @id @default(cuid())
+  userId String
+  kind String
+  value String
+  verifiedAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@unique([kind, value])
+  @@index([userId])
+}
+
+model AuthChallenge {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  proofKey String @unique
+  firebaseUid String
+  phone String
+  authTime Int
+  intent String
+  attempts Int @default(0)
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+model PendingRegistration {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  firebaseUid String @unique
+  phoneUid String?
+  phone String?
+  name String @default("")
+  email String @default("")
+  credentialsStarted Boolean @default(false)
+  credentialsReady Boolean @default(false)
+  completedUserId String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model AuthSession {
+  id String @id @default(cuid())
+  userId String
+  accessHash String @unique
+  accessExpiresAt DateTime
+  expiresAt DateTime
+  revokedAt DateTime?
+  method String
+  proofs String
+  authenticatedAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  refreshTokens AuthRefreshToken[]
+  @@index([userId])
+}
+
+model AuthRefreshToken {
+  id String @id @default(cuid())
+  sessionId String
+  tokenHash String @unique
+  consumedAt DateTime?
+  session AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model AuthAbuseCounter {
+  key String @id
+  count Int @default(0)
+  expiresAt DateTime
+}
+
+model AuthSecurityEvent {
+  id String @id @default(cuid())
+  userId String?
+  kind String
+  createdAt DateTime @default(now())
+  @@index([userId, createdAt])
 }

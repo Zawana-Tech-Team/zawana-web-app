@@ -22,7 +22,7 @@ export async function verifyFirebaseIdToken(token: string): Promise<DecodedIdTok
   const app = configuredApp();
   if (!app)
     throw Object.assign(new Error('Firebase Authentication is not configured on the server.'), {
-      statusCode: 503
+      statusCode: 503, code: 'AUTH_UNAVAILABLE'
     });
   try {
     return await getAuth(app).verifyIdToken(token, true);
@@ -39,11 +39,11 @@ export async function verifyFirebaseIdToken(token: string): Promise<DecodedIdTok
       ].includes(String(code))
     ) {
       throw Object.assign(new Error('Invalid, expired, or revoked Firebase ID token.'), {
-        statusCode: 401
+        statusCode: 401, code: 'INVALID_PROOF'
       });
     }
     throw Object.assign(new Error('Firebase identity verification is temporarily unavailable.'), {
-      statusCode: 503
+      statusCode: 503, code: 'AUTH_UNAVAILABLE'
     });
   }
 }
@@ -52,7 +52,7 @@ export function firebaseAdminAuth() {
   const app = configuredApp();
   if (!app)
     throw Object.assign(new Error('Firebase Authentication is not configured on the server.'), {
-      statusCode: 503
+      statusCode: 503, code: 'AUTH_UNAVAILABLE'
     });
   return getAuth(app);
 }

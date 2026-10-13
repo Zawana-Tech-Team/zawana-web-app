@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { Role } from "@prisma/client";
+import type { AuthSession, Role } from "@prisma/client";
 import type { DecodedIdToken } from "firebase-admin/auth";
 
 export type AuthUser = {
@@ -13,5 +13,6 @@ export type AuthUser = {
 
 export type AuthRequest = Request & {
   user?: AuthUser;
+  authSession?: AuthSession;
   firebaseClaims?: DecodedIdToken;
 };

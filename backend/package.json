@@ -16,7 +16,11 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:validate": "prisma validate",
     "prisma:validate:postgres": "prisma validate --schema prisma/postgresql/schema.prisma",
-    "prisma:validate:sqlite": "prisma validate --schema prisma/schema.prisma"
+    "prisma:validate:sqlite": "prisma validate --schema prisma/schema.prisma",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "auth:audit": "tsx scripts/audit-auth-identities.ts",
+    "auth:migrate-local": "tsx scripts/apply-hybrid-auth-local.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -30,7 +34,7 @@
   "devDependencies": {
     "@types/cors": "latest",
     "@types/express": "latest",
-    "@types/node": "latest",
+    "@types/node": "^26.6.5",
     "prisma": "^6.19.3",
     "tsx": "latest",
     "typescript": "latest"
