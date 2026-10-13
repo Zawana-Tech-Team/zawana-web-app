@@ -12,7 +12,12 @@ import {
 } from 'react';
 
 export type AppLanguage = 'en' | 'my';
-type LanguageContextValue = { language: AppLanguage; locale: string; setLanguage: (language: AppLanguage) => void; t: (text: string) => string };
+type LanguageContextValue = {
+  language: AppLanguage;
+  locale: string;
+  setLanguage: (language: AppLanguage) => void;
+  t: (text: string) => string
+};
 
 const STORAGE_KEY = 'zawana_language';
 
@@ -84,7 +89,8 @@ const burmese: Record<string, string> = {
   'Upcoming bookings': 'လာမည့်ဘွတ်ကင်များ',
   'Upcoming': 'လာမည့်အစီအစဉ်များ',
   'No bookings match these filters': 'ဤစစ်ထုတ်မှုများနှင့်ကိုက်ညီသော ဘွတ်ကင်မရှိပါ',
-  'Try another date or clear a filter. New court rentals and private courses will appear here.': 'အခြားရက်စွဲကိုရွေးပါ သို့မဟုတ် စစ်ထုတ်မှုကိုရှင်းလင်းပါ။ ကွင်းငှားရမ်းမှုနှင့် သီးသန့်သင်တန်းအသစ်များကို ဤနေရာတွင်ပြသပါမည်။',
+  'Try another date or clear a filter. New court rentals and private courses will appear here.':
+    'အခြားရက်စွဲကိုရွေးပါ သို့မဟုတ် စစ်ထုတ်မှုကိုရှင်းလင်းပါ။ ကွင်းငှားရမ်းမှုနှင့် သီးသန့်သင်တန်းအသစ်များကို ဤနေရာတွင်ပြသပါမည်။',
   'Private Course': 'သီးသန့်သင်တန်း',
   'Private courses': 'သီးသန့်သင်တန်းများ',
   'Choose a course': 'သင်တန်းရွေးချယ်ပါ',
@@ -152,8 +158,10 @@ const burmese: Record<string, string> = {
   'Cancel booking': 'ဘွတ်ကင်ပယ်ဖျက်ရန်',
   'Cancelling…': 'ပယ်ဖျက်နေသည်…',
   'Waiting for coach': 'နည်းပြအတည်ပြုမှုကို စောင့်နေသည်',
-  'Waiting for coach confirmation. Your selected court and time are reserved.': 'နည်းပြအတည်ပြုမှုကို စောင့်နေပါသည်။ ရွေးချယ်ထားသောကွင်းနှင့်အချိန်ကို ကြိုတင်ထိန်းသိမ်းထားပါသည်။',
-  'Coach confirmed. Confirm this booking to complete it; payment is arranged at the venue.': 'နည်းပြကအတည်ပြုပြီးပါပြီ။ ဘွတ်ကင်ပြီးဆုံးရန် အတည်ပြုပါ။ ငွေပေးချေမှုကို နေရာတွင်ပြုလုပ်ရပါမည်။',
+  'Waiting for coach confirmation. Your selected court and time are reserved.':
+    'နည်းပြအတည်ပြုမှုကို စောင့်နေပါသည်။ ရွေးချယ်ထားသောကွင်းနှင့်အချိန်ကို ကြိုတင်ထိန်းသိမ်းထားပါသည်။',
+  'Coach confirmed. Confirm this booking to complete it; payment is arranged at the venue.':
+    'နည်းပြကအတည်ပြုပြီးပါပြီ။ ဘွတ်ကင်ပြီးဆုံးရန် အတည်ပြုပါ။ ငွေပေးချေမှုကို နေရာတွင်ပြုလုပ်ရပါမည်။',
   'Court reserved': 'ကွင်းကိုကြိုတင်ထိန်းသိမ်းထားသည်',
   'Requests': 'တောင်းဆိုမှုများ',
   'Schedule': 'အချိန်ဇယား',
@@ -182,17 +190,21 @@ const burmese: Record<string, string> = {
   'Confirm password': 'စကားဝှက်အတည်ပြုပါ',
   'Already have an account?': 'အကောင့်ရှိပြီးသားလား။',
   'New to Zawana?': 'Zawana ကိုအသစ်အသုံးပြုသူလား။',
-  'Badminton · Training · Recovery · Community': 'ကြက်တောင်ရိုက်ခြင်း · လေ့ကျင့်ရေး · ပြန်လည်သက်သာရေး · အသိုင်းအဝိုင်း',
+  'Badminton · Training · Recovery · Community':
+    'ကြက်တောင်ရိုက်ခြင်း · လေ့ကျင့်ရေး · ပြန်လည်သက်သာရေး · အသိုင်းအဝိုင်း',
   'The Zawana · Yangon': 'ဇဝန · ရန်ကုန်',
   'The people beside us': 'ကျွန်ုပ်တို့နှင့်အတူရှိသူများ',
   'Our Trusted Partners': 'ကျွန်ုပ်တို့၏ယုံကြည်ရသောမိတ်ဖက်များ',
-  'Together, we elevate performance and possibility.': 'အတူတကွ စွမ်းဆောင်ရည်နှင့် အခွင့်အလမ်းများကို မြှင့်တင်ကြပါစို့။',
+  'Together, we elevate performance and possibility.':
+    'အတူတကွ စွမ်းဆောင်ရည်နှင့် အခွင့်အလမ်းများကို မြှင့်တင်ကြပါစို့။',
   '01 · The arena': '၀၁ · အားကစားရုံ',
   'One arena.': 'အားကစားရုံတစ်ခု။',
   'Multiple ways to move.': 'လှုပ်ရှားနိုင်သည့်နည်းလမ်းများစွာ။',
-  'Every part of Zawana is designed to make training easier to start, easier to sustain and harder to outgrow.': 'Zawana ရှိနေရာတိုင်းကို လေ့ကျင့်မှုစတင်ရလွယ်ကူပြီး ဆက်လက်လုပ်ဆောင်နိုင်ကာ တိုးတက်မှုအတွက် သင့်လျော်အောင် ဖန်တီးထားပါသည်။',
+  'Every part of Zawana is designed to make training easier to start, easier to sustain and harder to outgrow.':
+    'Zawana ရှိနေရာတိုင်းကို လေ့ကျင့်မှုစတင်ရလွယ်ကူပြီး ဆက်လက်လုပ်ဆောင်နိုင်ကာ တိုးတက်မှုအတွက် သင့်လျော်အောင် ဖန်တီးထားပါသည်။',
   '02 · Performance': '၀၂ · စွမ်းဆောင်ရည်',
-  'Train with intention. Perform with confidence.': 'ရည်ရွယ်ချက်ရှိရှိ လေ့ကျင့်ပါ။ ယုံကြည်မှုရှိရှိ စွမ်းဆောင်ပါ။',
+  'Train with intention. Perform with confidence.':
+    'ရည်ရွယ်ချက်ရှိရှိ လေ့ကျင့်ပါ။ ယုံကြည်မှုရှိရှိ စွမ်းဆောင်ပါ။',
   '03 · Membership': '၀၃ · အသင်းဝင်မှု',
   'Choose your access.': 'သင့်အတွက်အစီအစဉ်ကို ရွေးချယ်ပါ။',
   '04 · Brand belief': '၀၄ · ကျွန်ုပ်တို့၏ယုံကြည်ချက်',
@@ -235,7 +247,8 @@ const burmese: Record<string, string> = {
   'Explore plan': 'အစီအစဉ်ကြည့်ရန်',
   'Elevate Your Game.': 'သင့်ကစားပုံကို မြှင့်တင်ပါ။',
   'Redefine Your Lifestyle.': 'သင့်ဘဝနေထိုင်မှုပုံစံကို ပြန်လည်သတ်မှတ်ပါ။',
-  'Discover a connected world of badminton, fitness, performance, recovery, and lifestyle at ZAWANA.': 'ZAWANA တွင် ကြက်တောင်ရိုက်ခြင်း၊ ကြံ့ခိုင်ရေး၊ စွမ်းဆောင်ရည်မြှင့်တင်ရေး၊ ပြန်လည်သက်သာရေးနှင့် လူနေမှုဘဝကို တစ်နေရာတည်းတွင် ခံစားလိုက်ပါ။',
+  'Discover a connected world of badminton, fitness, performance, recovery, and lifestyle at ZAWANA.':
+    'ZAWANA တွင် ကြက်တောင်ရိုက်ခြင်း၊ ကြံ့ခိုင်ရေး၊ စွမ်းဆောင်ရည်မြှင့်တင်ရေး၊ ပြန်လည်သက်သာရေးနှင့် လူနေမှုဘဝကို တစ်နေရာတည်းတွင် ခံစားလိုက်ပါ။',
   'Explore ZAWANA': 'ZAWANA ကိုလေ့လာရန်',
   'The Zawana': 'ဇဝန',
   'The Zawana · Front Office': 'ဇဝန · ရှေ့တန်းရုံး',
@@ -277,15 +290,18 @@ const burmese: Record<string, string> = {
   'Sign up': 'အကောင့်ဖွင့်ရန်',
   'Back to Zawana': 'Zawana သို့ပြန်သွားရန်',
   'Play with purpose. Grow together.': 'ရည်ရွယ်ချက်ရှိရှိကစားပါ။ အတူတကွတိုးတက်ပါ။',
-  'A premium training environment for players, athletes, and people who love to move.': 'ကစားသမားများ၊ အားကစားသမားများနှင့် လှုပ်ရှားမှုကိုနှစ်သက်သူများအတွက် ပရီမီယံလေ့ကျင့်ရေးပတ်ဝန်းကျင်။',
-  'Access your bookings, coaching, and membership.': 'သင့်ဘွတ်ကင်များ၊ နည်းပြသင်တန်းများနှင့် အသင်းဝင်မှုကို စီမံပါ။',
+  'A premium training environment for players, athletes, and people who love to move.':
+    'ကစားသမားများ၊ အားကစားသမားများနှင့် လှုပ်ရှားမှုကိုနှစ်သက်သူများအတွက် ပရီမီယံလေ့ကျင့်ရေးပတ်ဝန်းကျင်။',
+  'Access your bookings, coaching, and membership.':
+    'သင့်ဘွတ်ကင်များ၊ နည်းပြသင်တန်းများနှင့် အသင်းဝင်မှုကို စီမံပါ။',
   'Continue with Google': 'Google ဖြင့်ဆက်လက်ရန်',
   'Or with email': 'သို့မဟုတ် အီးမေးလ်ဖြင့်',
   'Show password': 'စကားဝှက်ပြရန်',
   'Hide password': 'စကားဝှက်ဖျောက်ရန်',
   'Using a local demo account?': 'စက်တွင်းစမ်းသပ်အကောင့်ကို အသုံးပြုနေပါသလား။',
   'Create your account': 'သင့်အကောင့်ဖွင့်ပါ',
-  'Book courts, find a coach, and manage your sessions.': 'ကွင်းဘွတ်ကင်လုပ်ပါ၊ နည်းပြရှာပါ၊ သင်တန်းများကိုစီမံပါ။',
+  'Book courts, find a coach, and manage your sessions.':
+    'ကွင်းဘွတ်ကင်လုပ်ပါ၊ နည်းပြရှာပါ၊ သင်တန်းများကိုစီမံပါ။',
   'Verify your email': 'အီးမေးလ်အတည်ပြုပါ',
   'Check your inbox.': 'သင့်အီးမေးလ်ဝင်စာကိုစစ်ဆေးပါ။',
   'Choose profile photo': 'ပရိုဖိုင်ဓာတ်ပုံရွေးချယ်ပါ',
@@ -302,7 +318,8 @@ const burmese: Record<string, string> = {
   'No results found': 'ရလဒ်မတွေ့ပါ',
   'No private courses': 'သီးသန့်သင်တန်းမရှိပါ',
   'No requests found': 'တောင်းဆိုမှုမတွေ့ပါ',
-  'Try a different status, coach or date range.': 'အခြားအခြေအနေ၊ နည်းပြ သို့မဟုတ် ရက်စွဲအပိုင်းအခြားကို ရွေးကြည့်ပါ။',
+  'Try a different status, coach or date range.':
+    'အခြားအခြေအနေ၊ နည်းပြ သို့မဟုတ် ရက်စွဲအပိုင်းအခြားကို ရွေးကြည့်ပါ။',
   'The arena': 'အားကစားရုံ',
   'Sessions': 'သင်တန်းအကြိမ်များ',
   'Today': 'ယနေ့',
@@ -316,12 +333,18 @@ const burmese: Record<string, string> = {
   'Send verification code': 'အတည်ပြုကုဒ်ပို့ရန်',
   'Verify and sign in': 'အတည်ပြုပြီးအကောင့်ဝင်ရန်',
   'Your next session starts here.': 'သင့်ရဲ့နောက်ထပ်လေ့ကျင့်မှုကို ဒီနေရာမှစတင်ပါ။',
-  'Badminton courts, performance gym, training studio and recovery services in one arena.': 'ကြက်တောင်ရိုက်ကွင်းများ၊ စွမ်းဆောင်ရည်မြှင့်တင်ရေးအားကစားရုံ၊ လေ့ကျင့်ရေးစတူဒီယိုနှင့် ပြန်လည်သက်သာရေးဝန်ဆောင်မှုများကို အားကစားရုံတစ်ခုတည်းတွင် ရရှိနိုင်ပါသည်။',
-  'Choose an access plan built around how you train.': 'သင့်လေ့ကျင့်မှုပုံစံနှင့်ကိုက်ညီသော အသင်းဝင်အစီအစဉ်ကို ရွေးချယ်ပါ။',
-  'Meet Zawana coaches across badminton, strength, conditioning and recovery.': 'ကြက်တောင်ရိုက်ခြင်း၊ ခွန်အား၊ ကြံ့ခိုင်မှုနှင့် ပြန်လည်သက်သာရေးဆိုင်ရာ Zawana နည်းပြများနှင့် မိတ်ဆက်ပါ။',
-  'Visit the arena or speak with the team about training.': 'အားကစားရုံသို့လာရောက်ပါ သို့မဟုတ် လေ့ကျင့်ရေးအကြောင်း အဖွဲ့နှင့်ဆွေးနွေးပါ။',
-  'Book a court or request a private course to add your next session.': 'လာမည့်သင်တန်းအတွက် ကွင်းဘွတ်ကင်လုပ်ပါ သို့မဟုတ် သီးသန့်သင်တန်းတောင်းဆိုပါ။',
-  'The court is no longer available for this time. Please choose another slot.': 'ဤအချိန်တွင် ကွင်းမရရှိနိုင်တော့ပါ။ အခြားအချိန်ကိုရွေးချယ်ပါ။',
+  'Badminton courts, performance gym, training studio and recovery services in one arena.':
+    'ကြက်တောင်ရိုက်ကွင်းများ၊ စွမ်းဆောင်ရည်မြှင့်တင်ရေးအားကစားရုံ၊ လေ့ကျင့်ရေးစတူဒီယိုနှင့် ပြန်လည်သက်သာရေးဝန်ဆောင်မှုများကို အားကစားရုံတစ်ခုတည်းတွင် ရရှိနိုင်ပါသည်။',
+  'Choose an access plan built around how you train.':
+    'သင့်လေ့ကျင့်မှုပုံစံနှင့်ကိုက်ညီသော အသင်းဝင်အစီအစဉ်ကို ရွေးချယ်ပါ။',
+  'Meet Zawana coaches across badminton, strength, conditioning and recovery.':
+    'ကြက်တောင်ရိုက်ခြင်း၊ ခွန်အား၊ ကြံ့ခိုင်မှုနှင့် ပြန်လည်သက်သာရေးဆိုင်ရာ Zawana နည်းပြများနှင့် မိတ်ဆက်ပါ။',
+  'Visit the arena or speak with the team about training.':
+    'အားကစားရုံသို့လာရောက်ပါ သို့မဟုတ် လေ့ကျင့်ရေးအကြောင်း အဖွဲ့နှင့်ဆွေးနွေးပါ။',
+  'Book a court or request a private course to add your next session.':
+    'လာမည့်သင်တန်းအတွက် ကွင်းဘွတ်ကင်လုပ်ပါ သို့မဟုတ် သီးသန့်သင်တန်းတောင်းဆိုပါ။',
+  'The court is no longer available for this time. Please choose another slot.':
+    'ဤအချိန်တွင် ကွင်းမရရှိနိုင်တော့ပါ။ အခြားအချိန်ကိုရွေးချယ်ပါ။',
   'Could not load your badminton dashboard.': 'သင့်ကြက်တောင်ရိုက်ဒက်ရှ်ဘုတ်ကို ဖွင့်မရပါ။',
   'Could not load bookings.': 'ဘွတ်ကင်များကို ဖွင့်မရပါ။',
   'Could not update this booking.': 'ဤဘွတ်ကင်ကို ပြင်ဆင်မရပါ။',
@@ -398,10 +421,14 @@ const burmese: Record<string, string> = {
   'Upcoming course': 'လာမည့်သင်တန်း',
   'Upcoming session': 'လာမည့်သင်တန်းအကြိမ်',
   'Coach confirmed your private course': 'နည်းပြက သင့်သီးသန့်သင်တန်းကို အတည်ပြုပြီးပါပြီ',
-  'Your coach has confirmed your private course.': 'သင့်နည်းပြက သီးသန့်သင်တန်းကို အတည်ပြုပြီးပါပြီ။',
-  'Unfortunately, the selected coach is unavailable for this time.': 'ရွေးချယ်ထားသောအချိန်တွင် နည်းပြမရရှိနိုင်ပါ။',
-  'No coach is available at this time. Choose another slot.': 'ဤအချိန်တွင် နည်းပြမရရှိနိုင်ပါ။ အခြားအချိန်ရွေးချယ်ပါ။',
-  'No coach with a linked coach account is available for this slot. Please choose another time or ask an administrator to link the coach account in Coach Management.': 'ဤအချိန်အတွက် ချိတ်ဆက်ထားသောနည်းပြအကောင့် မရှိပါ။ အခြားအချိန်ရွေးချယ်ပါ သို့မဟုတ် စီမံခန့်ခွဲသူထံ ဆက်သွယ်ပါ။',
+  'Your coach has confirmed your private course.':
+    'သင့်နည်းပြက သီးသန့်သင်တန်းကို အတည်ပြုပြီးပါပြီ။',
+  'Unfortunately, the selected coach is unavailable for this time.':
+    'ရွေးချယ်ထားသောအချိန်တွင် နည်းပြမရရှိနိုင်ပါ။',
+  'No coach is available at this time. Choose another slot.':
+    'ဤအချိန်တွင် နည်းပြမရရှိနိုင်ပါ။ အခြားအချိန်ရွေးချယ်ပါ။',
+  'No coach with a linked coach account is available for this slot. Please choose another time or ask an administrator to link the coach account in Coach Management.':
+    'ဤအချိန်အတွက် ချိတ်ဆက်ထားသောနည်းပြအကောင့် မရှိပါ။ အခြားအချိန်ရွေးချယ်ပါ သို့မဟုတ် စီမံခန့်ခွဲသူထံ ဆက်သွယ်ပါ။',
   'Court 01': 'ကွင်း ၀၁',
   'Court 02': 'ကွင်း ၀၂',
   'Court 03': 'ကွင်း ၀၃',
@@ -448,30 +475,36 @@ const burmese: Record<string, string> = {
   'No active badminton package': 'အသုံးပြုနေသော ကြက်တောင်ရိုက်ပက်ကေ့ချ် မရှိပါ',
   'TODAY': 'ယနေ့',
   'Nothing scheduled today': 'ယနေ့အစီအစဉ်မရှိပါ',
-  'Book a court or a private session when you’re ready.': 'အဆင်သင့်ဖြစ်သည့်အခါ ကွင်း သို့မဟုတ် သီးသန့်သင်တန်းကို ဘွတ်ကင်လုပ်ပါ။',
+  'Book a court or a private session when you’re ready.':
+    'အဆင်သင့်ဖြစ်သည့်အခါ ကွင်း သို့မဟုတ် သီးသန့်သင်တန်းကို ဘွတ်ကင်လုပ်ပါ။',
   'UP NEXT': 'နောက်လာမည့်အစီအစဉ်',
   'Your schedule': 'သင့်အချိန်ဇယား',
   'All bookings': 'ဘွတ်ကင်အားလုံး',
   'Pay at badminton front desk': 'ကြက်တောင်ရိုက်ရှေ့တန်းရုံးတွင် ပေးချေရန်',
   'No upcoming bookings': 'လာမည့်ဘွတ်ကင် မရှိသေးပါ',
-  'Choose a court or request a private course to add your next session.': 'လာမည့်သင်တန်းအတွက် ကွင်းရွေးပါ သို့မဟုတ် သီးသန့်သင်တန်းတောင်းဆိုပါ။',
+  'Choose a court or request a private course to add your next session.':
+    'လာမည့်သင်တန်းအတွက် ကွင်းရွေးပါ သို့မဟုတ် သီးသန့်သင်တန်းတောင်းဆိုပါ။',
   'Book court': 'ကွင်းဘွတ်ကင်လုပ်ရန်',
   'Next court rental': 'နောက်လာမည့်ကွင်းငှားရမ်းမှု',
   'Next private course': 'နောက်လာမည့်သီးသန့်သင်တန်း',
   'Explore': 'လေ့လာရန်',
   'Sessions left': 'ကျန်ရှိသောအကြိမ်',
   'Started': 'စတင်သည့်ရက်',
-  'Check-in uses one session. One check-in per day.': 'ဝင်ရောက်စာရင်းသွင်းမှုတစ်ကြိမ်လျှင် သင်တန်းအကြိမ်တစ်ကြိမ် အသုံးပြုပါမည်။ တစ်နေ့လျှင်တစ်ကြိမ်သာ စာရင်းသွင်းနိုင်ပါသည်။',
-  'Checked in. One session was used from your package.': 'စာရင်းသွင်းပြီးပါပြီ။ သင့်ပက်ကေ့ချ်မှ သင်တန်းတစ်ကြိမ် အသုံးပြုပြီးပါပြီ။',
+  'Check-in uses one session. One check-in per day.':
+    'ဝင်ရောက်စာရင်းသွင်းမှုတစ်ကြိမ်လျှင် သင်တန်းအကြိမ်တစ်ကြိမ် အသုံးပြုပါမည်။ တစ်နေ့လျှင်တစ်ကြိမ်သာ စာရင်းသွင်းနိုင်ပါသည်။',
+  'Checked in. One session was used from your package.':
+    'စာရင်းသွင်းပြီးပါပြီ။ သင့်ပက်ကေ့ချ်မှ သင်တန်းတစ်ကြိမ် အသုံးပြုပြီးပါပြီ။',
   'Check-in could not be completed.': 'ဝင်ရောက်စာရင်းသွင်းမှု မအောင်မြင်ပါ။',
   'RECENT ACTIVITY': 'လတ်တလောလုပ်ဆောင်ချက်များ',
-  'Your completed and past sessions will appear here.': 'ပြီးဆုံးသွားသော သို့မဟုတ် ယခင်သင်တန်းများကို ဤနေရာတွင်ပြသပါမည်။',
+  'Your completed and past sessions will appear here.':
+    'ပြီးဆုံးသွားသော သို့မဟုတ် ယခင်သင်တန်းများကို ဤနေရာတွင်ပြသပါမည်။',
   'NEEDS YOUR ATTENTION': 'သင့်အာရုံစိုက်မှုလိုအပ်သည်',
   'View notifications': 'အသိပေးချက်များကြည့်ရန်',
   'COURT RENTAL': 'ကွင်းငှားရမ်းခြင်း',
   'Live availability': 'လက်ရှိရရှိနိုင်မှု',
   'Choose your dates': 'ရက်စွဲများရွေးချယ်ပါ',
-  'Build one booking from different courts and times across multiple dates.': 'မတူညီသောရက်များ၊ ကွင်းများနှင့်အချိန်များအတွက် ဘွတ်ကင်တစ်ခုတည်း ပြုလုပ်နိုင်ပါသည်။',
+  'Build one booking from different courts and times across multiple dates.':
+    'မတူညီသောရက်များ၊ ကွင်းများနှင့်အချိန်များအတွက် ဘွတ်ကင်တစ်ခုတည်း ပြုလုပ်နိုင်ပါသည်။',
   'Mon': 'တနင်္လာ',
   'Tue': 'အင်္ဂါ',
   'Wed': 'ဗုဒ္ဓဟူး',
@@ -480,7 +513,8 @@ const burmese: Record<string, string> = {
   'Sat': 'စနေ',
   'Sun': 'တနင်္ဂနွေ',
   'Today / selected': 'ယနေ့ / ရွေးချယ်ထားသည်',
-  'Faded dates are past or fully booked': 'အရောင်ဖျော့သောရက်များသည် ကျော်လွန်သွားခြင်း သို့မဟုတ် အပြည့်ဘွတ်ကင်ဖြစ်နေခြင်းဖြစ်သည်',
+  'Faded dates are past or fully booked':
+    'အရောင်ဖျော့သောရက်များသည် ကျော်လွန်သွားခြင်း သို့မဟုတ် အပြည့်ဘွတ်ကင်ဖြစ်နေခြင်းဖြစ်သည်',
   'SELECT COURT & TIME': 'ကွင်းနှင့်အချိန်ရွေးချယ်ပါ',
   'selected for this date': 'ဤရက်စွဲအတွက် ရွေးချယ်ထားသည်',
   'Fully booked': 'ဘွတ်ကင်ပြည့်နေပါသည်',
@@ -490,7 +524,8 @@ const burmese: Record<string, string> = {
   'Confirming bookings…': 'ဘွတ်ကင်များအတည်ပြုနေသည်…',
   'Confirm all bookings': 'ဘွတ်ကင်အားလုံးအတည်ပြုရန်',
   'No sessions selected': 'သင်တန်းအချိန် မရွေးချယ်ရသေးပါ',
-  'Choose available times across any date in this month.': 'ဤလအတွင်း ရက်စွဲတစ်ခုခုမှ ရရှိနိုင်သောအချိန်များကို ရွေးချယ်ပါ။',
+  'Choose available times across any date in this month.':
+    'ဤလအတွင်း ရက်စွဲတစ်ခုခုမှ ရရှိနိုင်သောအချိန်များကို ရွေးချယ်ပါ။',
   'View booking history': 'ဘွတ်ကင်မှတ်တမ်းကြည့်ရန်',
   'Your court time is secured': 'ကွင်းအချိန်ကို အတည်ပြုပြီးပါပြီ',
   'Book more court time': 'ကွင်းအချိန်ထပ်မံဘွတ်ကင်လုပ်ရန်',
@@ -498,25 +533,31 @@ const burmese: Record<string, string> = {
   'Review checkout': 'ငွေပေးချေမှုကို စစ်ဆေးရန်',
   'Private course': 'သီးသန့်သင်တန်း',
   'Badminton coaching': 'ကြက်တောင်ရိုက်နည်းပြသင်တန်း',
-  'Choose a course, one of its assigned coaches, then select a court and an available time. The price shown is the course price. Court rentals and active reservations share the same availability calendar.': 'သင်တန်းတစ်ခုနှင့် သတ်မှတ်ထားသောနည်းပြကိုရွေးပါ။ ထို့နောက် ကွင်းနှင့်ရရှိနိုင်သောအချိန်ကို ရွေးချယ်ပါ။ ပြသထားသောဈေးနှုန်းမှာ သင်တန်းဈေးနှုန်းဖြစ်သည်။ ကွင်းငှားရမ်းမှုနှင့် လက်ရှိကြိုတင်ထိန်းသိမ်းမှုများအတွက် ရရှိနိုင်မှုတစ်ခုတည်းကို အသုံးပြုပါသည်။',
+  'Choose a course, one of its assigned coaches, then select a court and an available time. The price shown is the course price. Court rentals and active reservations share the same availability calendar.':
+    'သင်တန်းတစ်ခုနှင့် သတ်မှတ်ထားသောနည်းပြကိုရွေးပါ။ ထို့နောက် ကွင်းနှင့်ရရှိနိုင်သောအချိန်ကို ရွေးချယ်ပါ။ ပြသထားသောဈေးနှုန်းမှာ သင်တန်းဈေးနှုန်းဖြစ်သည်။ ကွင်းငှားရမ်းမှုနှင့် လက်ရှိကြိုတင်ထိန်းသိမ်းမှုများအတွက် ရရှိနိုင်မှုတစ်ခုတည်းကို အသုံးပြုပါသည်။',
   '01 · SELECT PRIVATE COURSE': '၀၁ · သီးသန့်သင်တန်းရွေးချယ်ပါ',
   'Badminton private coaching': 'ကြက်တောင်ရိုက်သီးသန့်နည်းပြသင်တန်း',
   'Private Training': 'သီးသန့်လေ့ကျင့်ရေး',
   '02 · CHOOSE COACH': '၀၂ · နည်းပြရွေးချယ်ပါ',
-  'These are the active badminton coaches assigned to': 'ဤသင်တန်းတွင် သတ်မှတ်ထားသော လက်ရှိကြက်တောင်ရိုက်နည်းပြများဖြစ်သည်',
-  'The course price is the same whichever assigned coach you choose.': 'သတ်မှတ်ထားသောနည်းပြ မည်သူကိုရွေးချယ်စေကာမူ သင်တန်းကြေးတူညီပါသည်။',
+  'These are the active badminton coaches assigned to':
+    'ဤသင်တန်းတွင် သတ်မှတ်ထားသော လက်ရှိကြက်တောင်ရိုက်နည်းပြများဖြစ်သည်',
+  'The course price is the same whichever assigned coach you choose.':
+    'သတ်မှတ်ထားသောနည်းပြ မည်သူကိုရွေးချယ်စေကာမူ သင်တန်းကြေးတူညီပါသည်။',
   'Badminton coach': 'ကြက်တောင်ရိုက်နည်းပြ',
   'Course price': 'သင်တန်းကြေး',
-  'No active badminton coach is assigned to this course yet. An administrator can assign coaches in Private Course Management.': 'ဤသင်တန်းအတွက် လက်ရှိနည်းပြမသတ်မှတ်ရသေးပါ။ စီမံခန့်ခွဲမှုမှ နည်းပြသတ်မှတ်ပေးနိုင်ပါသည်။',
+  'No active badminton coach is assigned to this course yet. An administrator can assign coaches in Private Course Management.':
+    'ဤသင်တန်းအတွက် လက်ရှိနည်းပြမသတ်မှတ်ရသေးပါ။ စီမံခန့်ခွဲမှုမှ နည်းပြသတ်မှတ်ပေးနိုင်ပါသည်။',
   '03 · SELECT COURT': '၀၃ · ကွင်းရွေးချယ်ပါ',
-  'Select a court to open dates and live time slots.': 'ရက်စွဲနှင့် လက်ရှိရရှိနိုင်သောအချိန်များကိုကြည့်ရန် ကွင်းရွေးပါ။',
+  'Select a court to open dates and live time slots.':
+    'ရက်စွဲနှင့် လက်ရှိရရှိနိုင်သောအချိန်များကိုကြည့်ရန် ကွင်းရွေးပါ။',
   'included with course': 'သင်တန်းကြေးတွင် ပါဝင်သည်',
   'Choose time': 'အချိန်ရွေးချယ်ပါ',
   'BOOKING SUMMARY': 'ဘွတ်ကင်အကျဉ်းချုပ်',
   'Badminton Private Course': 'ကြက်တောင်ရိုက်သီးသန့်သင်တန်း',
   'Sending request…': 'တောင်းဆိုမှု ပို့နေသည်…',
   'Request private course': 'သီးသန့်သင်တန်းတောင်းဆိုရန်',
-  'This sends a request to your selected coach. Your court and time stay reserved while the coach reviews it. If accepted, you will have 24 hours to pay and confirm the course.': 'ရွေးချယ်ထားသောနည်းပြထံ တောင်းဆိုမှုကို ပို့မည်ဖြစ်သည်။ နည်းပြစစ်ဆေးနေစဉ် ကွင်းနှင့်အချိန်ကို ထိန်းသိမ်းထားပါမည်။ လက်ခံပါက သင်တန်းအတည်ပြုရန် ၂၄ နာရီအတွင်း ပေးချေရပါမည်။',
+  'This sends a request to your selected coach. Your court and time stay reserved while the coach reviews it. If accepted, you will have 24 hours to pay and confirm the course.':
+    'ရွေးချယ်ထားသောနည်းပြထံ တောင်းဆိုမှုကို ပို့မည်ဖြစ်သည်။ နည်းပြစစ်ဆေးနေစဉ် ကွင်းနှင့်အချိန်ကို ထိန်းသိမ်းထားပါမည်။ လက်ခံပါက သင်တန်းအတည်ပြုရန် ၂၄ နာရီအတွင်း ပေးချေရပါမည်။',
   '04 · DATE & TIME': '၀၄ · ရက်စွဲနှင့်အချိန်',
   'Choose date & time': 'ရက်စွဲနှင့်အချိန်ရွေးချယ်ပါ',
   'Loading availability…': 'ရရှိနိုင်မှုကို စစ်ဆေးနေသည်…',
@@ -529,7 +570,8 @@ const burmese: Record<string, string> = {
   'Go to package check-in': 'ပက်ကေ့ချ်စာရင်းသွင်းရန်သွားပါ',
   'Package purchase history': 'ပက်ကေ့ချ်ဝယ်ယူမှုမှတ်တမ်း',
   'Available badminton packages': 'ရရှိနိုင်သော ကြက်တောင်ရိုက်ပက်ကေ့ချ်များ',
-  'Compare sessions, validity and price, then activate the package for your badminton visits.': 'သင်တန်းအကြိမ်၊ သက်တမ်းနှင့်ဈေးနှုန်းကို နှိုင်းယှဉ်ပြီး ပက်ကေ့ချ်ကို အသုံးပြုရန်ဖွင့်ပါ။',
+  'Compare sessions, validity and price, then activate the package for your badminton visits.':
+    'သင်တန်းအကြိမ်၊ သက်တမ်းနှင့်ဈေးနှုန်းကို နှိုင်းယှဉ်ပြီး ပက်ကေ့ချ်ကို အသုံးပြုရန်ဖွင့်ပါ။',
   'Coming Soon': 'မကြာမီလာမည်',
   'Valid for': 'သက်တမ်း',
   'days': 'ရက်',
@@ -546,25 +588,34 @@ const burmese: Record<string, string> = {
   'Training Studio': 'လေ့ကျင့်ရေးစတူဒီယို',
   'Cut Lab': 'Cut Lab ဆံပင်ညှပ်ဆိုင်',
   'Revive Clinic': 'Revive ဆေးခန်း',
-  'From social games to junior classes and national-level training, our courts are built for every level of play.': 'မိတ်ဆွေများနှင့်ကစားခြင်းမှ လူငယ်သင်တန်းနှင့် အမျိုးသားအဆင့်လေ့ကျင့်မှုအထိ အဆင့်တိုင်းအတွက် ကွင်းများကို ပြင်ဆင်ထားပါသည်။',
-  'Train with purpose through strength, conditioning, and performance-focused programs designed to make you better.': 'သင့်စွမ်းဆောင်ရည်တိုးတက်စေရန် ခွန်အား၊ ကြံ့ခိုင်မှုနှင့် စွမ်းဆောင်ရည်အခြေပြုအစီအစဉ်များဖြင့် ရည်ရွယ်ချက်ရှိရှိ လေ့ကျင့်ပါ။',
-  'Move, sweat, and learn with Zumba, kickboxing, Taekwondo, functional training, yoga, and more.': 'Zumba၊ kickboxing၊ တိုက်ကွမ်ဒို၊ လုပ်ဆောင်နိုင်စွမ်းလေ့ကျင့်ရေးနှင့် ယောဂတို့ဖြင့် လှုပ်ရှား၊ ချွေးထွက်ပြီး သင်ယူလိုက်ပါ။',
-  'Stay sharp with professional barbering, styling, and grooming in a dedicated space built for your look.': 'သင့်စတိုင်အတွက် သီးသန့်ပြင်ဆင်ထားသောနေရာတွင် ကျွမ်းကျင်ဆံပင်ညှပ်ခြင်းနှင့် အလှပြင်ဝန်ဆောင်မှုကို ရယူပါ။',
-  'Refuel your body, grab a coffee, or relax while you wait. Your space to recharge between sessions.': 'အစားအသောက်ဖြည့်တင်းပါ၊ ကော်ဖီသောက်ပါ သို့မဟုတ် စောင့်ဆိုင်းနေစဉ် အနားယူပါ။ သင်တန်းများကြား အားပြန်ဖြည့်ရန်နေရာဖြစ်ပါသည်။',
-  'From everyday aches to sports injuries, get the care, recovery, and treatment you need to get moving again.': 'နေ့စဉ်ကိုက်ခဲမှုမှ အားကစားဒဏ်ရာအထိ ပြန်လည်လှုပ်ရှားနိုင်ရန်လိုအပ်သော စောင့်ရှောက်မှုနှင့် ကုသမှုကို ရယူပါ။',
+  'From social games to junior classes and national-level training, our courts are built for every level of play.':
+    'မိတ်ဆွေများနှင့်ကစားခြင်းမှ လူငယ်သင်တန်းနှင့် အမျိုးသားအဆင့်လေ့ကျင့်မှုအထိ အဆင့်တိုင်းအတွက် ကွင်းများကို ပြင်ဆင်ထားပါသည်။',
+  'Train with purpose through strength, conditioning, and performance-focused programs designed to make you better.':
+    'သင့်စွမ်းဆောင်ရည်တိုးတက်စေရန် ခွန်အား၊ ကြံ့ခိုင်မှုနှင့် စွမ်းဆောင်ရည်အခြေပြုအစီအစဉ်များဖြင့် ရည်ရွယ်ချက်ရှိရှိ လေ့ကျင့်ပါ။',
+  'Move, sweat, and learn with Zumba, kickboxing, Taekwondo, functional training, yoga, and more.':
+    'Zumba၊ kickboxing၊ တိုက်ကွမ်ဒို၊ လုပ်ဆောင်နိုင်စွမ်းလေ့ကျင့်ရေးနှင့် ယောဂတို့ဖြင့် လှုပ်ရှား၊ ချွေးထွက်ပြီး သင်ယူလိုက်ပါ။',
+  'Stay sharp with professional barbering, styling, and grooming in a dedicated space built for your look.':
+    'သင့်စတိုင်အတွက် သီးသန့်ပြင်ဆင်ထားသောနေရာတွင် ကျွမ်းကျင်ဆံပင်ညှပ်ခြင်းနှင့် အလှပြင်ဝန်ဆောင်မှုကို ရယူပါ။',
+  'Refuel your body, grab a coffee, or relax while you wait. Your space to recharge between sessions.':
+    'အစားအသောက်ဖြည့်တင်းပါ၊ ကော်ဖီသောက်ပါ သို့မဟုတ် စောင့်ဆိုင်းနေစဉ် အနားယူပါ။ သင်တန်းများကြား အားပြန်ဖြည့်ရန်နေရာဖြစ်ပါသည်။',
+  'From everyday aches to sports injuries, get the care, recovery, and treatment you need to get moving again.':
+    'နေ့စဉ်ကိုက်ခဲမှုမှ အားကစားဒဏ်ရာအထိ ပြန်လည်လှုပ်ရှားနိုင်ရန်လိုအပ်သော စောင့်ရှောက်မှုနှင့် ကုသမှုကို ရယူပါ။',
   'Train with intention.': 'ရည်ရွယ်ချက်ရှိရှိ လေ့ကျင့်ပါ။',
   'Perform with confidence.': 'ယုံကြည်မှုရှိရှိ စွမ်းဆောင်ပါ။',
-  'From court time to strength and conditioning, the Zawana experience connects the training floor, the coach and the athlete.': 'ကွင်းလေ့ကျင့်မှုမှ ခွန်အားနှင့်ကြံ့ခိုင်မှုအထိ Zawana အတွေ့အကြုံသည် လေ့ကျင့်ရေးနေရာ၊ နည်းပြနှင့် အားကစားသမားတို့ကို ချိတ်ဆက်ပေးပါသည်။',
+  'From court time to strength and conditioning, the Zawana experience connects the training floor, the coach and the athlete.':
+    'ကွင်းလေ့ကျင့်မှုမှ ခွန်အားနှင့်ကြံ့ခိုင်မှုအထိ Zawana အတွေ့အကြုံသည် လေ့ကျင့်ရေးနေရာ၊ နည်းပြနှင့် အားကစားသမားတို့ကို ချိတ်ဆက်ပေးပါသည်။',
   'Assessment-led': 'အကဲဖြတ်ချက်အခြေပြု',
   'Coach-guided': 'နည်းပြလမ်းညွှန်မှုဖြင့်',
   'Performance-minded': 'စွမ်းဆောင်ရည်ကို ဦးစားပေးသော',
   'Community-first': 'အသိုင်းအဝိုင်းကို ဦးစားပေးသော',
   'MMK / month': 'ကျပ် / လ',
-  'Community updates are temporarily unavailable.': 'အသိုင်းအဝိုင်းအပ်ဒိတ်များကို ယာယီမရရှိနိုင်ပါ။',
+  'Community updates are temporarily unavailable.':
+    'အသိုင်းအဝိုင်းအပ်ဒိတ်များကို ယာယီမရရှိနိုင်ပါ။',
   'Community · What’s happening': 'အသိုင်းအဝိုင်း · လက်ရှိအစီအစဉ်များ',
   'Train. Learn.': 'လေ့ကျင့်ပါ။ သင်ယူပါ။',
   'Be part of it.': 'ပါဝင်လိုက်ပါ။',
-  'Discover the latest programs, events, workshops and opportunities happening at Zawana.': 'Zawana တွင်ကျင်းပမည့် နောက်ဆုံးအစီအစဉ်များ၊ ပွဲများ၊ သင်တန်းများနှင့် အခွင့်အလမ်းများကို ရှာဖွေပါ။',
+  'Discover the latest programs, events, workshops and opportunities happening at Zawana.':
+    'Zawana တွင်ကျင်းပမည့် နောက်ဆုံးအစီအစဉ်များ၊ ပွဲများ၊ သင်တန်းများနှင့် အခွင့်အလမ်းများကို ရှာဖွေပါ။',
   'View all': 'အားလုံးကြည့်ရန်',
   'Featured': 'အထူးဖော်ပြချက်',
   'Zawana Community': 'Zawana အသိုင်းအဝိုင်း',
@@ -573,8 +624,10 @@ const burmese: Record<string, string> = {
   'Visit the arena': 'အားကစားရုံသို့လာရောက်ရန်',
   'See upcoming programs': 'လာမည့်အစီအစဉ်များကြည့်ရန်',
   'Stay on top of the desk': 'လုပ်ငန်းအပ်ဒိတ်များကို အမြဲသိရှိထားပါ',
-  'Bookings, memberships and personal updates.': 'ဘွတ်ကင်များ၊ အသင်းဝင်မှုများနှင့် ကိုယ်ရေးအပ်ဒိတ်များ။',
-  'Client bookings, assessments and training updates.': 'ဖောက်သည်ဘွတ်ကင်များ၊ အကဲဖြတ်ချက်များနှင့် လေ့ကျင့်ရေးအပ်ဒိတ်များ။',
+  'Bookings, memberships and personal updates.':
+    'ဘွတ်ကင်များ၊ အသင်းဝင်မှုများနှင့် ကိုယ်ရေးအပ်ဒိတ်များ။',
+  'Client bookings, assessments and training updates.':
+    'ဖောက်သည်ဘွတ်ကင်များ၊ အကဲဖြတ်ချက်များနှင့် လေ့ကျင့်ရေးအပ်ဒိတ်များ။',
   'Important updates from across Zawana operations.': 'Zawana လုပ်ငန်းများမှ အရေးကြီးအပ်ဒိတ်များ။',
   'No unread notifications': 'မဖတ်ရသေးသောအသိပေးချက် မရှိပါ',
   'Everything currently needs no attention.': 'လက်ရှိတွင် အာရုံစိုက်ရန်မရှိပါ။',
@@ -588,10 +641,14 @@ const burmese: Record<string, string> = {
   'No doctor notifications': 'ဆရာဝန်အသိပေးချက် မရှိပါ',
   'Confirm request': 'တောင်းဆိုမှုအတည်ပြုရန်',
   'Confirming…': 'အတည်ပြုနေသည်…',
-  'Request accepted. The member can now confirm the booking.': 'တောင်းဆိုမှုကို လက်ခံပြီးပါပြီ။ အဖွဲ့ဝင်သည် ယခုဘွတ်ကင်ကို အတည်ပြုနိုင်ပါပြီ။',
-  'Request declined; the reservation was released.': 'တောင်းဆိုမှုကို ငြင်းပယ်ပြီး ကြိုတင်ထိန်းသိမ်းမှုကို လွှတ်ပေးလိုက်ပါပြီ။',
-  'Booking confirmed. Payment is due at the venue.': 'ဘွတ်ကင်အတည်ပြုပြီးပါပြီ။ နေရာတွင် ငွေပေးချေရပါမည်။',
-  'Booking cancelled and the reservation released.': 'ဘွတ်ကင်ပယ်ဖျက်ပြီး ကြိုတင်ထိန်းသိမ်းမှုကို လွှတ်ပေးလိုက်ပါပြီ။',
+  'Request accepted. The member can now confirm the booking.':
+    'တောင်းဆိုမှုကို လက်ခံပြီးပါပြီ။ အဖွဲ့ဝင်သည် ယခုဘွတ်ကင်ကို အတည်ပြုနိုင်ပါပြီ။',
+  'Request declined; the reservation was released.':
+    'တောင်းဆိုမှုကို ငြင်းပယ်ပြီး ကြိုတင်ထိန်းသိမ်းမှုကို လွှတ်ပေးလိုက်ပါပြီ။',
+  'Booking confirmed. Payment is due at the venue.':
+    'ဘွတ်ကင်အတည်ပြုပြီးပါပြီ။ နေရာတွင် ငွေပေးချေရပါမည်။',
+  'Booking cancelled and the reservation released.':
+    'ဘွတ်ကင်ပယ်ဖျက်ပြီး ကြိုတင်ထိန်းသိမ်းမှုကို လွှတ်ပေးလိုက်ပါပြီ။',
   'admin': 'စီမံခန့်ခွဲသူ',
   'owner': 'ပိုင်ရှင်',
   'member': 'အဖွဲ့ဝင်',
@@ -604,7 +661,9 @@ const burmese: Record<string, string> = {
   'cafe fo': 'ကဖေးရှေ့တန်းရုံး',
 };
 
-const burmeseCaseInsensitive = new Map(Object.entries(burmese).map(([key, value]) => [key.toLocaleLowerCase(), value]));
+const burmeseCaseInsensitive = new Map(
+  Object.entries(burmese).map(([key, value]) => [key.toLocaleLowerCase(), value])
+);
 
 function readSavedLanguage(): AppLanguage {
   try {
@@ -629,27 +688,30 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const t = useCallback((text: string) => {
-    if (language !== 'my') return text;
-    const leading = text.match(/^\s*/)?.[0] ?? '';
-    const trailing = text.match(/\s*$/)?.[0] ?? '';
-    const key = text.trim();
-    if (!key) return text;
+  const t = useCallback(
+    (text: string) => {
+      if (language !== 'my') return text;
+      const leading = text.match(/^\s*/)?.[0] ?? '';
+      const trailing = text.match(/\s*$/)?.[0] ?? '';
+      const key = text.trim();
+      if (!key) return text;
 
-    let translated = burmese[key] ?? burmeseCaseInsensitive.get(key.toLocaleLowerCase());
-    if (!translated) {
-      const unread = key.match(/^(\d+) unread$/i);
-      const sessions = key.match(/^(\d+) sessions? today$/i);
-      const welcome = key.match(/^Welcome back,\s*(.+)$/i);
-      const cartCount = key.match(/^(\d+) items? in cart$/i);
-      if (unread) translated = `မဖတ်ရသေးသော ${unread[1]} ခု`;
-      else if (sessions) translated = `ယနေ့သင်တန်း ${sessions[1]} ကြိမ်`;
-      else if (welcome) translated = `ပြန်လည်ကြိုဆိုပါသည်၊ ${welcome[1]}`;
-      else if (cartCount) translated = `စျေးခြင်းထဲတွင် ပစ္စည်း ${cartCount[1]} ခု`;
-    }
+      let translated = burmese[key] ?? burmeseCaseInsensitive.get(key.toLocaleLowerCase());
+      if (!translated) {
+        const unread = key.match(/^(\d+) unread$/i);
+        const sessions = key.match(/^(\d+) sessions? today$/i);
+        const welcome = key.match(/^Welcome back,\s*(.+)$/i);
+        const cartCount = key.match(/^(\d+) items? in cart$/i);
+        if (unread) translated = `မဖတ်ရသေးသော ${unread[1]} ခု`;
+        else if (sessions) translated = `ယနေ့သင်တန်း ${sessions[1]} ကြိမ်`;
+        else if (welcome) translated = `ပြန်လည်ကြိုဆိုပါသည်၊ ${welcome[1]}`;
+        else if (cartCount) translated = `စျေးခြင်းထဲတွင် ပစ္စည်း ${cartCount[1]} ခု`;
+      }
 
-    return `${leading}${translated ?? key}${trailing}`;
-  }, [language]);
+      return `${leading}${translated ?? key}${trailing}`;
+    },
+    [language]
+  );
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -661,7 +723,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, [language]);
 
   const locale = language === 'my' ? 'my-MM' : 'en-US';
-  const value = useMemo(() => ({ language, locale, setLanguage, t }), [language, locale, setLanguage, t]);
+  const value = useMemo(
+    () => ({ language, locale, setLanguage, t }),
+    [language, locale, setLanguage, t]
+  );
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
@@ -678,7 +743,25 @@ function localizeNode(node: ReactNode, t: (text: string) => string): ReactNode {
 
   const props = node.props as Record<string, unknown>;
   const nextProps: Record<string, unknown> = {};
-  for (const prop of ['aria-label', 'aria-description', 'alt', 'label', 'placeholder', 'title', 'body', 'description', 'message', 'subtitle', 'sub', 'eyebrow', 'helperText', 'emptyText', 'actionLabel', 'confirmLabel', 'cancelLabel']) {
+  for (const prop of [
+    'aria-label',
+    'aria-description',
+    'alt',
+    'label',
+    'placeholder',
+    'title',
+    'body',
+    'description',
+    'message',
+    'subtitle',
+    'sub',
+    'eyebrow',
+    'helperText',
+    'emptyText',
+    'actionLabel',
+    'confirmLabel',
+    'cancelLabel'
+  ]) {
     if (typeof props[prop] === 'string') nextProps[prop] = t(props[prop] as string);
   }
   if ('children' in props) nextProps.children = localizeNode(props.children as ReactNode, t);
@@ -692,14 +775,31 @@ export function LocalizedTree({ children }: { children: ReactNode }) {
 
 export function LanguageSwitcher({ className = '' }: { className?: string }) {
   const { language, setLanguage, t } = useLanguage();
-  const base = 'min-h-9 rounded-lg px-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold';
+  const base =
+    'min-h-9 rounded-lg px-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold';
 
   return (
-    <div role="group" aria-label={t('Language')} className={`inline-flex items-center gap-0.5 rounded-xl border border-zawana-border bg-white p-1 ${className}`}>
-      <button type="button" aria-label={t('Switch to English')} aria-pressed={language === 'en'} onClick={() => setLanguage('en')} className={`${base} ${language === 'en' ? 'bg-zawana-950 text-white' : 'text-zawana-600 hover:bg-zawana-800'}`}>
+    <div
+      role="group"
+      aria-label={t('Language')}
+      className={`inline-flex items-center gap-0.5 rounded-xl border border-zawana-border bg-white p-1 ${className}`}
+    >
+      <button
+        type="button"
+        aria-label={t('Switch to English')}
+        aria-pressed={language === 'en'}
+        onClick={() => setLanguage('en')}
+        className={`${base} ${language === 'en' ? 'bg-zawana-950 text-white' : 'text-zawana-600 hover:bg-zawana-800'}`}
+      >
         EN
       </button>
-      <button type="button" aria-label={t('Switch to Burmese')} aria-pressed={language === 'my'} onClick={() => setLanguage('my')} className={`${base} ${language === 'my' ? 'bg-zawana-950 text-white' : 'text-zawana-600 hover:bg-zawana-800'}`}>
+      <button
+        type="button"
+        aria-label={t('Switch to Burmese')}
+        aria-pressed={language === 'my'}
+        onClick={() => setLanguage('my')}
+        className={`${base} ${language === 'my' ? 'bg-zawana-950 text-white' : 'text-zawana-600 hover:bg-zawana-800'}`}
+      >
         မြန်မာ
       </button>
     </div>

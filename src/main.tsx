@@ -8,4 +8,18 @@ import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { OperationsProvider } from './context/OperationsContext';
 import { LanguageProvider } from './context/LanguageContext';
-createRoot(document.getElementById('root')!).render(<StrictMode><BrowserRouter><AuthProvider><AppProvider><OperationsProvider><LanguageProvider><App/></LanguageProvider></OperationsProvider></AppProvider></AuthProvider></BrowserRouter></StrictMode>);
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppProvider>
+          <OperationsProvider>
+            <LanguageProvider>
+              <App />
+            </LanguageProvider>
+          </OperationsProvider>
+        </AppProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  </StrictMode>
+);

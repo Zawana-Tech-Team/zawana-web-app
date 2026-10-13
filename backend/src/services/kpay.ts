@@ -44,11 +44,17 @@ export async function createKPayCheckout(input: KPayCheckoutInput): Promise<KPay
   } catch {
     throw new KPayUnavailableError("Could not reach the KPay checkout service. Please retry.");
   }
-  const body = await response.json().catch(() => null) as Partial<KPayCheckout> | null;
+  const body =await response.json().catch(() => null) as Partial<KPayCheckout> | null;
   if (!response.ok || !body?.providerReference || (!body.checkoutUrl && !body.qrCode)) {
-    throw new KPayUnavailableError("KPay could not start this payment. No booking or package was activated.");
+    throw new KPayUnavailableError(
+      "KPay could not start this payment. No booking or package was activated."
+    );
   }
-  return { providerReference: body.providerReference, checkoutUrl: body.checkoutUrl || "", qrCode: body.qrCode };
+  return {
+    providerReference: body.providerReference,
+    checkoutUrl: body.checkoutUrl || "",
+    qrCode: body.qrCode
+  };
 }
 
 export function verifyKPaySignature(rawBody: Buffer, supplied: string | undefined): boolean {
@@ -56,10 +62,19 @@ export function verifyKPaySignature(rawBody: Buffer, supplied: string | undefine
   if (!secret || !supplied) return false;
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest();
   let received: Buffer;
-  try { received = Buffer.from(supplied.replace(/^sha256=/i, ""), "hex"); } catch { return false; }
+  try {
+    received = Buffer.from(supplied.replace(/^sha256=/i, ""), "hex");
+  } catch {
+    return false;
+  }
   return received.length === expected.length && crypto.timingSafeEqual(received, expected);
 }
 
 export function kpayIsConfigured() {
-  return Boolean(process.env.KPAY_CHECKOUT_ADAPTER_URL && process.env.KPAY_ADAPTER_API_KEY && process.env.KPAY_WEBHOOK_SECRET && process.env.KPAY_CALLBACK_URL);
+  return Boolean(
+    process.env.KPAY_CHECKOUT_ADAPTER_URL &&
+    process.env.KPAY_ADAPTER_API_KEY &&
+    process.env.KPAY_WEBHOOK_SECRET &&
+    process.env.KPAY_CALLBACK_URL
+  );
 }

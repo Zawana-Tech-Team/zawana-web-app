@@ -1,1 +1,37 @@
-{"name":"zawana-arena","private":true,"version":"1.0.0","type":"module","scripts":{"dev":"vite","build":"tsc -b && vite build","preview":"vite preview","api":"npm --prefix backend run dev","api:seed":"npm --prefix backend run prisma:seed"},"dependencies":{"@react-three/drei":"^10.7.9","@react-three/fiber":"^9.8.1","@tailwindcss/vite":"latest","@vitejs/plugin-react":"latest","date-fns":"latest","firebase":"12.19.0","framer-motion":"latest","lucide-react":"latest","react":"^19.3.0","react-dom":"^19.3.0","react-router-dom":"latest","recharts":"latest","tailwindcss":"latest","three":"^0.186.1","vite":"latest"},"devDependencies":{"@types/react":"^19.3.0","@types/react-dom":"^19.3.0","@types/three":"^0.186.0","typescript":"^7.0.2"}}
+{
+  "name": "zawana-arena",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "api": "npm --prefix backend run dev",
+    "api:seed": "npm --prefix backend run prisma:seed"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.1",
+    "@tailwindcss/vite": "latest",
+    "@vitejs/plugin-react": "latest",
+    "date-fns": "latest",
+    "firebase": "12.19.0",
+    "framer-motion": "latest",
+    "lucide-react": "latest",
+    "prisma": "^8.0.0-rc.22",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "latest",
+    "recharts": "latest",
+    "tailwindcss": "latest",
+    "three": "^0.186.1",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -8,8 +8,15 @@ import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { get } from '../api';
 import {
-  LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
-  BarChart, Bar
+  LineChart,
+  Line,
+  ResponsiveContainer,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  BarChart,
+  Bar
 } from 'recharts';
 import OptimizedImage from '../components/OptimizedImage';
 import PartnersCarousel from '../components/home/PartnersCarousel';
@@ -19,152 +26,208 @@ import { LanguageSwitcher, LocalizedTree } from '../context/LanguageContext';
 
 const HeroScene = lazy(() => import('../components/home/HeroScene'));
 
-export function Home(){
-  const [publishedContent,setPublishedContent]=useState<any[]>([]);
-  const [contentError,setContentError]=useState(false);
-  const [mobileMenuOpen,setMobileMenuOpen]=useState(false);
-  useEffect(()=>{
-    let active=true;
-    const loadPublishedContent=()=>{
+export function Home() {
+  const [publishedContent, setPublishedContent] = useState<any[]>([]);
+  const [contentError, setContentError] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const loadPublishedContent = () => {
       get<any[]>('/content')
-        .then(items=>{if(active){setPublishedContent(items.slice(0,3));setContentError(false)}})
-        .catch(()=>{if(active)setContentError(true)});
+        .then(items => {
+          if (active) {
+            setPublishedContent(items.slice(0, 3));
+            setContentError(false)
+          }
+        })
+        .catch(() => {
+          if (active) setContentError(true)
+        });
     };
-    const handleVisibility=()=>{if(document.visibilityState==='visible')loadPublishedContent()};
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadPublishedContent()
+    };
     loadPublishedContent();
-    window.addEventListener('focus',loadPublishedContent);
-    document.addEventListener('visibilitychange',handleVisibility);
-    return()=>{
-      active=false;
-      window.removeEventListener('focus',loadPublishedContent);
-      document.removeEventListener('visibilitychange',handleVisibility);
+    window.addEventListener('focus', loadPublishedContent);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', loadPublishedContent);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  },[]);
+  }, []);
   const facilities = [
-  {
-    name: 'Badminton Courts',
-    image: '/facilities/court.webp',
-    purpose:
-      'From social games to junior classes and national-level training, our courts are built for every level of play.',
-  },
-  {
-    name: 'High Performance Gym',
-    image: '/facilities/gym.webp',
-    purpose:
-      'Train with purpose through strength, conditioning, and performance-focused programs designed to make you better.',
-  },
-  {
-    name: 'Training Studio',
-    image: '/facilities/gx-studio.webp',
-    purpose:
-      'Move, sweat, and learn with Zumba, kickboxing, Taekwondo, functional training, yoga, and more.',
-  },
-  {
-    name: 'Cut Lab',
-    image: '/facilities/cutlab.webp',
-    purpose:
-      'Stay sharp with professional barbering, styling, and grooming in a dedicated space built for your look.',
-  },
-  {
-    name: 'Zawana Cafe',
-    image: '/facilities/cafe.webp',
-    purpose:
-      'Refuel your body, grab a coffee, or relax while you wait. Your space to recharge between sessions.',
-  },
-  {
-    name: 'Revive Clinic',
-    image: '/facilities/revive.webp',
-    purpose:
-      'From everyday aches to sports injuries, get the care, recovery, and treatment you need to get moving again.',
-  },
-];
+    {
+      name: 'Badminton Courts',
+      image: '/facilities/court.webp',
+      purpose:
+        'From social games to junior classes and national-level training, our courts are built for every level of play.',
+    },
+    {
+      name: 'High Performance Gym',
+      image: '/facilities/gym.webp',
+      purpose:
+        'Train with purpose through strength, conditioning, and performance-focused programs designed to make you better.',
+    },
+    {
+      name: 'Training Studio',
+      image: '/facilities/gx-studio.webp',
+      purpose:
+        'Move, sweat, and learn with Zumba, kickboxing, Taekwondo, functional training, yoga, and more.',
+    },
+    {
+      name: 'Cut Lab',
+      image: '/facilities/cutlab.webp',
+      purpose:
+        'Stay sharp with professional barbering, styling, and grooming in a dedicated space built for your look.',
+    },
+    {
+      name: 'Zawana Cafe',
+      image: '/facilities/cafe.webp',
+      purpose:
+        'Refuel your body, grab a coffee, or relax while you wait. Your space to recharge between sessions.',
+    },
+    {
+      name: 'Revive Clinic',
+      image: '/facilities/revive.webp',
+      purpose:
+        'From everyday aches to sports injuries, get the care, recovery, and treatment you need to get moving again.',
+    },
+  ];
 
-  return <LocalizedTree><div className="overflow-hidden bg-white text-zawana-950">
-    <header className="absolute left-0 right-0 top-0 z-30 mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 md:px-10">
-      <Logo/>
-      <nav className="hidden items-center gap-8 text-[11px] font-extrabold uppercase tracking-[.18em] text-zawana-500 lg:flex">
-        <a href="#arena" className="transition hover:text-zawana-950">The Arena</a>
-        <a href="#membership" className="transition hover:text-zawana-950">Membership</a>
-        <a href="#performance" className="transition hover:text-zawana-950">Performance</a>
-        <a href="#community" className="transition hover:text-zawana-950">Community</a>
-      </nav>
-      <div className="flex items-center gap-2">
-        <LanguageSwitcher />
-        <Link to="/login" className="hidden rounded-full px-4 py-2.5 text-sm font-bold text-zawana-950 sm:block">Log in</Link>
-        <button type="button" aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'} aria-expanded={mobileMenuOpen} aria-controls="home-mobile-navigation" onClick={()=>setMobileMenuOpen(open=>!open)} className="grid h-10 w-10 place-items-center rounded-xl border border-zawana-border bg-white text-zawana-600 transition hover:bg-zawana-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold lg:hidden">
-          {mobileMenuOpen ? <X size={18}/> : <Menu size={18}/>}
-        </button>
-        <Link to="/signup"><Button><span><span className="sm:hidden">Join</span><span className="hidden sm:inline">Join Zawana</span></span></Button></Link>
-      </div>
-      <nav id="home-mobile-navigation" aria-label="Mobile navigation" className={`absolute left-4 right-4 top-[72px] z-40 rounded-2xl border border-zawana-border bg-white p-2 shadow-xl lg:hidden ${mobileMenuOpen ? 'block' : 'hidden'}`}>
-        {[["#arena","The Arena"],["#membership","Membership"],["#performance","Performance"],["#community","Community"]].map(([href,label])=><a key={href} href={href} onClick={()=>setMobileMenuOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-zawana-600 transition hover:bg-zawana-gold-soft hover:text-zawana-950">{label}</a>)}
-        <Link to="/login" onClick={()=>setMobileMenuOpen(false)} className="mt-1 flex min-h-11 items-center border-t border-zawana-border px-3 text-sm font-semibold text-zawana-accent">Log in</Link>
-      </nav>
-    </header>
+  return <LocalizedTree>
+    <div className="overflow-hidden bg-white text-zawana-950">
+      <header className="absolute left-0 right-0 top-0 z-30 mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 md:px-10">
+        <Logo />
+        <nav className="hidden items-center gap-8 text-[11px] font-extrabold uppercase tracking-[.18em] text-zawana-500 lg:flex">
+          <a href="#arena" className="transition hover:text-zawana-950">The Arena</a>
+          <a href="#membership" className="transition hover:text-zawana-950">Membership</a>
+          <a href="#performance" className="transition hover:text-zawana-950">Performance</a>
+          <a href="#community" className="transition hover:text-zawana-950">Community</a>
+        </nav>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+          <Link
+            to="/login"
+            className="hidden rounded-full px-4 py-2.5 text-sm font-bold text-zawana-950 sm:block"
+          >Log in</Link>
+          <button
+            type="button"
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="home-mobile-navigation"
+            onClick={() => setMobileMenuOpen(open => !open)}
+            className="grid h-10 w-10 place-items-center rounded-xl border border-zawana-border bg-white text-zawana-600 transition hover:bg-zawana-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold lg:hidden"
+          >
+            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+          <Link to="/signup">
+            <Button>
+              <span>
+                <span className="sm:hidden">Join</span>
+                <span className="hidden sm:inline">Join Zawana</span>
+              </span>
+            </Button>
+          </Link>
+        </div>
+        <nav
+          id="home-mobile-navigation"
+          aria-label="Mobile navigation"
+          className={`absolute left-4 right-4 top-[72px] z-40 rounded-2xl border border-zawana-border bg-white p-2 shadow-xl lg:hidden ${mobileMenuOpen ? 'block' : 'hidden'}`}
+        >
+          {[
+            ["#arena", "The Arena"],
+            ["#membership", "Membership"],
+            ["#performance", "Performance"],
+            ["#community", "Community"]
+          ].map(([href, label]) =>
+            <a
+              key={href}
+              href={href}
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-zawana-600 transition hover:bg-zawana-gold-soft hover:text-zawana-950"
+            >
+              {label}
+            </a>
+          )}
+          <Link
+            to="/login"
+            onClick={() => setMobileMenuOpen(false)}
+            className="mt-1 flex min-h-11 items-center border-t border-zawana-border px-3 text-sm font-semibold text-zawana-accent"
+          >Log in</Link>
+        </nav>
+      </header>
 
-    <main>
-      <section className="relative overflow-hidden border-b border-zawana-border bg-white pt-24 md:pt-28">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_18%,rgba(198,163,74,.09),transparent_32%),linear-gradient(180deg,#fff_60%,#FAFAFA)]" />
-        <div className="relative mx-auto max-w-[1440px] px-5 pb-12 md:px-10 md:pb-16">
-          <div className="grid min-w-0 items-center gap-8 lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)] lg:gap-12">
-            <div className="min-w-0 max-w-[670px] py-5 md:py-10">
-              <p className="eyebrow text-zawana-accent">The Zawana · Yangon</p>
-              <div className="gold-rule mt-5" />
-              <h1 className="mt-6 max-w-[760px] text-balance text-[clamp(3rem,6vw,6rem)] font-black leading-[.98] tracking-[-.075em] text-zawana-950">
+      <main>
+        <section className="relative overflow-hidden border-b border-zawana-border bg-white pt-24 md:pt-28">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_18%,rgba(198,163,74,.09),transparent_32%),linear-gradient(180deg,#fff_60%,#FAFAFA)]"
+          />
+          <div className="relative mx-auto max-w-[1440px] px-5 pb-12 md:px-10 md:pb-16">
+            <div className="grid min-w-0 items-center gap-8 lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)] lg:gap-12">
+              <div className="min-w-0 max-w-[670px] py-5 md:py-10">
+                <p className="eyebrow text-zawana-accent">The Zawana · Yangon</p>
+                <div className="gold-rule mt-5" />
+                <h1 className="mt-6 max-w-[760px] text-balance text-[clamp(3rem,6vw,6rem)] font-black leading-[.98] tracking-[-.075em] text-zawana-950">
                 Elevate Your Game.
                 <br />
-                <span className="text-zawana-accent">Redefine Your Lifestyle.</span>
-              </h1>
-              <p className="mt-6 max-w-[570px] text-base leading-7 text-zawana-600 md:text-lg md:leading-8">
+                  <span className="text-zawana-accent">Redefine Your Lifestyle.</span>
+                </h1>
+                <p className="mt-6 max-w-[570px] text-base leading-7 text-zawana-600 md:text-lg md:leading-8">
                 Discover a connected world of badminton, fitness, performance, recovery, and lifestyle at ZAWANA.
               </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link to="/facilities"><Button><span>Explore ZAWANA <ArrowRight size={16} /></span></Button></Link>
-                <Link to="/book"><Button variant="secondary">Book a Court</Button></Link>
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link to="/facilities">
+                    <Button>
+                      <span>Explore ZAWANA <ArrowRight size={16} />
+                      </span>
+                    </Button>
+                  </Link>
+                  <Link to="/book">
+                    <Button variant="secondary">Book a Court</Button>
+                  </Link>
+                </div>
+                <p className="mt-7 text-xs font-medium tracking-wide text-zawana-500">Badminton · Training · Recovery · Community</p>
               </div>
-              <p className="mt-7 text-xs font-medium tracking-wide text-zawana-500">Badminton · Training · Recovery · Community</p>
-            </div>
 
-            <figure className="relative mx-auto w-full min-w-0 max-w-[700px] rounded-[30px] border border-zawana-950/[.06] bg-[#f6f4ed] p-1 shadow-[0_18px_54px_rgba(23,25,28,.08)] lg:my-4">
-              <HeroSceneBoundary fallback={<HeroFallback />}>
-                <Suspense fallback={<HeroFallback />}>
-                  <HeroScene />
-                </Suspense>
-              </HeroSceneBoundary>
-              <figcaption className="pointer-events-none absolute right-5 top-5 z-10 rounded-full border border-white/80 bg-white/80 px-3 py-2 text-[10px] font-semibold uppercase tracking-[.14em] text-zawana-600 shadow-sm backdrop-blur sm:right-6 sm:top-6">
+              <figure className="relative mx-auto w-full min-w-0 max-w-[700px] rounded-[30px] border border-zawana-950/[.06] bg-[#f6f4ed] p-1 shadow-[0_18px_54px_rgba(23,25,28,.08)] lg:my-4">
+                <HeroSceneBoundary fallback={<HeroFallback />}>
+                  <Suspense fallback={<HeroFallback />}>
+                    <HeroScene />
+                  </Suspense>
+                </HeroSceneBoundary>
+                <figcaption className="pointer-events-none absolute right-5 top-5 z-10 rounded-full border border-white/80 bg-white/80 px-3 py-2 text-[10px] font-semibold uppercase tracking-[.14em] text-zawana-600 shadow-sm backdrop-blur sm:right-6 sm:top-6">
                 Zawana Badminton Arena
               </figcaption>
-            </figure>
+              </figure>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <PartnersCarousel />
-   
-      <section
-        id="arena"
-        className="mx-auto max-w-[1440px] px-5 py-20 md:px-10 md:py-28"
-      >
-        <div className="max-w-3xl">
-          <p className="eyebrow text-zawana-gold">01 · The arena</p>
+        <PartnersCarousel />
 
-          <h2 className="mt-4 text-4xl font-black tracking-[-.06em] md:text-6xl">
+        <section id="arena" className="mx-auto max-w-[1440px] px-5 py-20 md:px-10 md:py-28">
+          <div className="max-w-3xl">
+            <p className="eyebrow text-zawana-gold">01 · The arena</p>
+
+            <h2 className="mt-4 text-4xl font-black tracking-[-.06em] md:text-6xl">
             One arena.
             <br />
             Multiple ways to move.
           </h2>
 
-          <p className="mt-5 max-w-2xl text-base leading-7 text-zawana-500 md:text-lg">
+            <p className="mt-5 max-w-2xl text-base leading-7 text-zawana-500 md:text-lg">
             Every part of Zawana is designed to make training easier to start,
             easier to sustain and harder to outgrow.
           </p>
-        </div>
+          </div>
 
-        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {facilities.map((facility, index) => (
-            <Card
-              key={facility.name}
-              className="
+          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {facilities.map((facility, index) => (
+              <Card
+                key={facility.name}
+                className="
                 group relative overflow-hidden p-0
                 min-h-[300px] md:min-h-[320px]
                 border-0
@@ -173,16 +236,16 @@ export function Home(){
                 transition-transform duration-300
                 hover:-translate-y-1
               "
-            >
-              {/* Image */}
-              <OptimizedImage
-                src={facility.image}
-                alt=""
-                loading={index < 3 ? "eager" : "lazy"}
-                decoding="async"
-                fetchPriority={index === 0 ? "high" : "auto"}
-                sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                className="
+              >
+                {/* Image */}
+                <OptimizedImage
+                  src={facility.image}
+                  alt=""
+                  loading={index < 3 ? "eager" : "lazy"}
+                  decoding="async"
+                  fetchPriority={index === 0 ? "high" : "auto"}
+                  sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                  className="
                   absolute inset-0
                   h-full w-full
                   object-cover
@@ -190,185 +253,238 @@ export function Home(){
                   transition-transform duration-500
                   group-hover:scale-[1.02]
                 "
-              />
+                />
 
-              {/* Lightweight overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
+                {/* Lightweight overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
 
-              {/* Content */}
-              <div className="relative flex min-h-[300px] md:min-h-[320px] flex-col justify-end p-6 md:p-7 text-white">
-                <div
-                  className="
+                {/* Content */}
+                <div className="relative flex min-h-[300px] md:min-h-[320px] flex-col justify-end p-6 md:p-7 text-white">
+                  <div
+                    className="
                     mb-5 h-1 w-10
                     bg-zawana-gold
                     transition-all duration-300
                     group-hover:w-14
                   "
-                />
+                  />
 
-                <h3 className="text-xl font-black tracking-[-.03em] md:text-2xl">
-                  {facility.name}
-                </h3>
+                  <h3 className="text-xl font-black tracking-[-.03em] md:text-2xl">
+                    {facility.name}
+                  </h3>
 
-                <p className="mt-2 max-w-sm text-sm leading-6 text-white/60">
-                  {facility.purpose}
-                </p>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section id="performance" className="bg-zawana-950 px-5 py-24 text-white md:px-10 md:py-28">
-        <div className="mx-auto grid max-w-[1440px] gap-14 lg:grid-cols-[1.05fr_.95fr] lg:items-end">
-          <div>
-            <p className="eyebrow text-zawana-gold">02 · Performance</p>
-            <h2 className="mt-5 text-4xl font-black tracking-[-.06em] md:text-7xl">Train with intention.<br/><span className="text-zawana-gold">Perform with confidence.</span></h2>
-            <p className="mt-7 max-w-xl text-base leading-7 text-white/65 md:text-lg">From court time to strength and conditioning, the Zawana experience connects the training floor, the coach and the athlete.</p>
-            <div className="mt-9 flex flex-wrap gap-3">
-              <Link to="/training"><Button>See training</Button></Link>
-              <Link to="/coaches"><Button variant="secondary">Meet the coaches</Button></Link>
-            </div>
+                  <p className="mt-2 max-w-sm text-sm leading-6 text-white/60">
+                    {facility.purpose}
+                  </p>
+                </div>
+              </Card>
+            ))}
           </div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[28px] border border-zawana-950/10 bg-zawana-950/10">
-            <div className="bg-zawana-950/5 p-6 md:p-8"><p className="text-4xl font-black">01</p><p className="mt-3 text-sm font-bold text-white/70">Assessment-led</p></div>
-            <div className="bg-zawana-950/5 p-6 md:p-8"><p className="text-4xl font-black">02</p><p className="mt-3 text-sm font-bold text-white/70">Coach-guided</p></div>
-            <div className="bg-zawana-950/5 p-6 md:p-8"><p className="text-4xl font-black">03</p><p className="mt-3 text-sm font-bold text-white/70">Performance-minded</p></div>
-            <div className="bg-zawana-gold p-6 text-zawana-950 md:p-8"><p className="text-4xl font-black">04</p><p className="mt-3 text-sm font-bold">Community-first</p></div>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section id="membership" className="sport-grid border-b border-zawana-950/8 px-5 py-24 md:px-10 md:py-32">
-        <div className="mx-auto max-w-[1440px]">
-          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+        <section
+          id="performance"
+          className="bg-zawana-950 px-5 py-24 text-white md:px-10 md:py-28"
+        >
+          <div className="mx-auto grid max-w-[1440px] gap-14 lg:grid-cols-[1.05fr_.95fr] lg:items-end">
             <div>
-              <p className="eyebrow text-zawana-gold">03 · Membership</p>
-              <h2 className="mt-4 text-4xl font-black tracking-[-.06em] md:text-6xl">Choose your access.</h2>
+              <p className="eyebrow text-zawana-gold">02 · Performance</p>
+              <h2 className="mt-5 text-4xl font-black tracking-[-.06em] md:text-7xl">Train with intention.<br />
+                <span className="text-zawana-gold">Perform with confidence.</span>
+              </h2>
+              <p className="mt-7 max-w-xl text-base leading-7 text-white/65 md:text-lg">From court time to strength and conditioning, the Zawana experience connects the training floor, the coach and the athlete.</p>
+              <div className="mt-9 flex flex-wrap gap-3">
+                <Link to="/training">
+                  <Button>See training</Button>
+                </Link>
+                <Link to="/coaches">
+                  <Button variant="secondary">Meet the coaches</Button>
+                </Link>
+              </div>
             </div>
-            <Link to="/memberships" className="text-sm font-extrabold uppercase tracking-[.16em] text-zawana-950"><span>Compare plans <ArrowRight className="ml-2 inline" size={16}/></span></Link>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[28px] border border-zawana-950/10 bg-zawana-950/10">
+              <div className="bg-zawana-950/5 p-6 md:p-8">
+                <p className="text-4xl font-black">01</p>
+                <p className="mt-3 text-sm font-bold text-white/70">Assessment-led</p>
+              </div>
+              <div className="bg-zawana-950/5 p-6 md:p-8">
+                <p className="text-4xl font-black">02</p>
+                <p className="mt-3 text-sm font-bold text-white/70">Coach-guided</p>
+              </div>
+              <div className="bg-zawana-950/5 p-6 md:p-8">
+                <p className="text-4xl font-black">03</p>
+                <p className="mt-3 text-sm font-bold text-white/70">Performance-minded</p>
+              </div>
+              <div className="bg-zawana-gold p-6 text-zawana-950 md:p-8">
+                <p className="text-4xl font-black">04</p>
+                <p className="mt-3 text-sm font-bold">Community-first</p>
+              </div>
+            </div>
           </div>
-          <div className="mt-12 grid gap-5 lg:grid-cols-3">
-            {memberships.map((m,i)=><Card key={m.id} className={`${i===1?'border-zawana-gold shadow-[0_22px_60px_rgba(196,175,73,.15)]':''} p-7`}>
-              <div className="flex items-start justify-between gap-4"><h3 className="text-2xl font-black tracking-[-.04em]">{m.name}</h3>{i===1&&<Badge good>Popular</Badge>}</div>
-              <p className="mt-6 text-4xl font-black tracking-[-.06em]">{m.price.toLocaleString()} <span className="text-sm font-bold tracking-normal text-zawana-500">MMK / month</span></p>
-              <ul className="my-8 space-y-3">{m.features.map(f=><li key={f} className="flex gap-2 text-sm text-zawana-500"><Check size={16} className="mt-0.5 shrink-0 text-zawana-gold"/>{f}</li>)}</ul>
-              <Link to="/memberships"><Button variant={i===1?'primary':'secondary'} className="w-full">Explore plan</Button></Link>
-            </Card>)}
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section id="community" className="mx-auto max-w-[1440px] px-5 py-24 md:px-10 md:py-32">
-{contentError&&<p role="status" className="mb-5 rounded-2xl bg-zawana-900 p-4 text-sm text-zawana-500">Community updates are temporarily unavailable.</p>}
-{publishedContent.length > 0 && (
-  <section className="mb-24">
-    {/* Section Header */}
-    <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
-      <div>
-        <p className="eyebrow text-zawana-gold">
+        <section
+          id="membership"
+          className="sport-grid border-b border-zawana-950/8 px-5 py-24 md:px-10 md:py-32"
+        >
+          <div className="mx-auto max-w-[1440px]">
+            <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+              <div>
+                <p className="eyebrow text-zawana-gold">03 · Membership</p>
+                <h2 className="mt-4 text-4xl font-black tracking-[-.06em] md:text-6xl">Choose your access.</h2>
+              </div>
+              <Link
+                to="/memberships"
+                className="text-sm font-extrabold uppercase tracking-[.16em] text-zawana-950"
+              >
+                <span>Compare plans <ArrowRight className="ml-2 inline" size={16} />
+                </span>
+              </Link>
+            </div>
+            <div className="mt-12 grid gap-5 lg:grid-cols-3">
+              {memberships.map((m, i) =>
+                <Card
+                  key={m.id}
+                  className={`${i === 1 ? 'border-zawana-gold shadow-[0_22px_60px_rgba(196,175,73,.15)]' : ''} p-7`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <h3 className="text-2xl font-black tracking-[-.04em]">{m.name}</h3>
+                    {i === 1 && <Badge good>Popular</Badge>}
+                  </div>
+                  <p className="mt-6 text-4xl font-black tracking-[-.06em]">
+                    {m.price.toLocaleString()} <span className="text-sm font-bold tracking-normal text-zawana-500">MMK / month</span>
+                  </p>
+                  <ul className="my-8 space-y-3">
+                    {m.features.map(f =>
+                      <li key={f} className="flex gap-2 text-sm text-zawana-500">
+                        <Check size={16} className="mt-0.5 shrink-0 text-zawana-gold" />
+                        {f}
+                      </li>)}
+                  </ul>
+                  <Link to="/memberships">
+                    <Button variant={i === 1 ? 'primary' : 'secondary'} className="w-full">Explore plan</Button>
+                  </Link>
+                </Card>)}
+            </div>
+          </div>
+        </section>
+
+        <section id="community" className="mx-auto max-w-[1440px] px-5 py-24 md:px-10 md:py-32">
+          {contentError &&
+            <p
+              role="status"
+              className="mb-5 rounded-2xl bg-zawana-900 p-4 text-sm text-zawana-500"
+            >Community updates are temporarily unavailable.</p>}
+          {publishedContent.length > 0 && (
+            <section className="mb-24">
+              {/* Section Header */}
+              <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+                <div>
+                  <p className="eyebrow text-zawana-gold">
           Community · What's happening
         </p>
 
-        <h2 className="mt-4 max-w-3xl text-4xl font-black tracking-[-.06em] md:text-6xl">
+                  <h2 className="mt-4 max-w-3xl text-4xl font-black tracking-[-.06em] md:text-6xl">
           Train. Learn.
           <br />
-          <span className="text-zawana-gold">Be part of it.</span>
-        </h2>
+                    <span className="text-zawana-gold">Be part of it.</span>
+                  </h2>
 
-        <p className="mt-5 max-w-2xl text-base leading-7 text-zawana-500 md:text-lg">
+                  <p className="mt-5 max-w-2xl text-base leading-7 text-zawana-500 md:text-lg">
           Discover the latest programs, events, workshops and opportunities
           happening at Zawana.
         </p>
-      </div>
+                </div>
 
-      <Link
-        to="/community"
-        className="group inline-flex items-center text-sm font-extrabold uppercase tracking-[.16em] text-zawana-950"
-      >
-        <span>View all<ArrowRight
-          className="ml-2 transition-transform duration-300 group-hover:translate-x-1"
-          size={16}
-        /></span>
-      </Link>
-    </div>
+                <Link
+                  to="/community"
+                  className="group inline-flex items-center text-sm font-extrabold uppercase tracking-[.16em] text-zawana-950"
+                >
+                  <span>View all<ArrowRight
+                      className="ml-2 transition-transform duration-300 group-hover:translate-x-1"
+                      size={16}
+                    />
+                  </span>
+                </Link>
+              </div>
 
-    {/* Featured CMS Grid */}
-    <div className="mt-12 grid gap-5 lg:grid-cols-[1.45fr_.55fr]">
-      {/* FEATURED ITEM */}
-      {publishedContent[0] && (
-        <Card className="group relative min-h-[520px] overflow-hidden rounded-[32px] border-0 bg-zawana-950 p-0">
-          <OptimizedImage
-            src={publishedContent[0].image}
-            alt={publishedContent[0].title}
-            loading="eager"
-            className="
+              {/* Featured CMS Grid */}
+              <div className="mt-12 grid gap-5 lg:grid-cols-[1.45fr_.55fr]">
+                {/* FEATURED ITEM */}
+                {publishedContent[0] && (
+                  <Card className="group relative min-h-[520px] overflow-hidden rounded-[32px] border-0 bg-zawana-950 p-0">
+                    <OptimizedImage
+                      src={publishedContent[0].image}
+                      alt={publishedContent[0].title}
+                      loading="eager"
+                      className="
               absolute inset-0
               h-full w-full
               object-cover
               transition-transform duration-700
               group-hover:scale-[1.04]
             "
-            />
+                    />
 
-            {/* Image Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-zawana-950 via-zawana-950/55 to-transparent" />
+                    {/* Image Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-zawana-950 via-zawana-950/55 to-transparent" />
 
-            {/* Top Badge */}
-            <div className="absolute left-6 top-6 md:left-8 md:top-8">
-              <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.16em] text-white backdrop-blur-md">
+                    {/* Top Badge */}
+                    <div className="absolute left-6 top-6 md:left-8 md:top-8">
+                      <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.16em] text-white backdrop-blur-md">
                 Featured
               </span>
-            </div>
+                    </div>
 
-            {/* Content */}
-            <div className="relative flex h-full flex-col justify-end p-6 text-white md:p-8 lg:p-10">
-              <div className="max-w-2xl">
-                <p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-zawana-gold">
+                    {/* Content */}
+                    <div className="relative flex h-full flex-col justify-end p-6 text-white md:p-8 lg:p-10">
+                      <div className="max-w-2xl">
+                        <p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-zawana-gold">
                   Zawana Community
                 </p>
 
-                <h3 className="mt-3 text-3xl font-black leading-[1.05] tracking-[-.05em] md:text-5xl">
-                  {publishedContent[0].title}
-                </h3>
+                        <h3 className="mt-3 text-3xl font-black leading-[1.05] tracking-[-.05em] md:text-5xl">
+                          {publishedContent[0].title}
+                        </h3>
 
-                <p className="mt-4 max-w-xl text-sm leading-6 text-white/65 md:text-base">
-                  {publishedContent[0].description}
-                </p>
+                        <p className="mt-4 max-w-xl text-sm leading-6 text-white/65 md:text-base">
+                          {publishedContent[0].description}
+                        </p>
 
-                <div className="mt-7 flex flex-wrap gap-3">
-                  {publishedContent[0].googleFormLink && (
-                    <a
-                      href={publishedContent[0].googleFormLink}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Button>
-                        <span>Register Now <ArrowRight className="ml-2" size={16} /></span>
-                      </Button>
-                    </a>
-                  )}
+                        <div className="mt-7 flex flex-wrap gap-3">
+                          {publishedContent[0].googleFormLink && (
+                            <a
+                              href={publishedContent[0].googleFormLink}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <Button>
+                                <span>Register Now <ArrowRight className="ml-2" size={16} />
+                                </span>
+                              </Button>
+                            </a>
+                          )}
 
-                  <Link to="/community">
-                    <Button
-                      variant="secondary"
-                      className="border-white/20 bg-white/10 text-white hover:bg-white hover:text-zawana-950"
-                    >
+                          <Link to="/community">
+                            <Button
+                              variant="secondary"
+                              className="border-white/20 bg-white/10 text-white hover:bg-white hover:text-zawana-950"
+                            >
                       Learn More
                     </Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
 
-        {/* SECONDARY ITEMS */}
-        <div className="grid gap-5">
-          {publishedContent.slice(1, 3).map((item) => (
-            <Card
-              key={item.id}
-              className="
+                {/* SECONDARY ITEMS */}
+                <div className="grid gap-5">
+                  {publishedContent.slice(1, 3).map((item) => (
+                    <Card
+                      key={item.id}
+                      className="
                 group
                 relative
                 overflow-hidden
@@ -378,41 +494,41 @@ export function Home(){
                 p-0
                 min-h-[250px]
               "
-            >
-              <OptimizedImage
-                src={item.image}
-                alt={item.title}
-                loading="lazy"
-                className="
+                    >
+                      <OptimizedImage
+                        src={item.image}
+                        alt={item.title}
+                        loading="lazy"
+                        className="
                   absolute inset-0
                   h-full w-full
                   object-cover
                   transition-transform duration-500
                   group-hover:scale-[1.04]
                 "
-              />
+                      />
 
-              <div className="absolute inset-0 bg-gradient-to-t from-zawana-950 via-zawana-950/65 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-zawana-950 via-zawana-950/65 to-transparent" />
 
-              <div className="relative flex h-full flex-col justify-end p-6 text-white md:p-7">
-                <p className="text-[9px] font-extrabold uppercase tracking-[.2em] text-zawana-gold">
+                      <div className="relative flex h-full flex-col justify-end p-6 text-white md:p-7">
+                        <p className="text-[9px] font-extrabold uppercase tracking-[.2em] text-zawana-gold">
                   Zawana Community
                 </p>
 
-                <h3 className="mt-2 text-xl font-black leading-tight tracking-[-.03em] md:text-2xl">
-                  {item.title}
-                </h3>
+                        <h3 className="mt-2 text-xl font-black leading-tight tracking-[-.03em] md:text-2xl">
+                          {item.title}
+                        </h3>
 
-                <p className="mt-2 line-clamp-2 text-sm leading-5 text-white/60">
-                  {item.description}
-                </p>
+                        <p className="mt-2 line-clamp-2 text-sm leading-5 text-white/60">
+                          {item.description}
+                        </p>
 
-                {item.googleFormLink && (
-                  <a
-                    href={item.googleFormLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="
+                        {item.googleFormLink && (
+                          <a
+                            href={item.googleFormLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="
                       group/link
                       mt-5
                       inline-flex
@@ -424,51 +540,65 @@ export function Home(){
                       tracking-[.16em]
                       text-white
                     "
-                  >
+                          >
                     Register Now
                     <ArrowRight
-                      size={14}
-                      className="ml-2 transition-transform duration-300 group-hover/link:translate-x-1"
-                    />
-                  </a>
-                )}
+                              size={14}
+                              className="ml-2 transition-transform duration-300 group-hover/link:translate-x-1"
+                            />
+                          </a>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </section>
-  )}
+            </section>
+          )}
 
-
-        <div className="grid gap-12 lg:grid-cols-[.85fr_1.15fr] lg:items-center">
-          <div>
-            <p className="eyebrow text-zawana-gold">04 · Brand belief</p>
-            <div className="gold-rule mt-5"/>
-            <h2 className="mt-6 text-5xl font-black tracking-[-.07em] md:text-7xl">Passion first.<br/>Profit last.</h2>
-            <p className="mt-6 max-w-lg text-base leading-7 text-zawana-500">Zawana exists to create a stronger sporting culture in Myanmar and to give players the environment they need to grow.</p>
+          <div className="grid gap-12 lg:grid-cols-[.85fr_1.15fr] lg:items-center">
+            <div>
+              <p className="eyebrow text-zawana-gold">04 · Brand belief</p>
+              <div className="gold-rule mt-5" />
+              <h2 className="mt-6 text-5xl font-black tracking-[-.07em] md:text-7xl">Passion first.<br />Profit last.</h2>
+              <p className="mt-6 max-w-lg text-base leading-7 text-zawana-500">Zawana exists to create a stronger sporting culture in Myanmar and to give players the environment they need to grow.</p>
+            </div>
+            <div className="relative overflow-hidden rounded-[34px] bg-zawana-900 p-8 md:p-12">
+              <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full border border-zawana-gold/30" />
+              <div className="absolute right-10 top-10 h-20 w-20 rounded-full border border-zawana-gold/25" />
+              <p className="max-w-2xl text-2xl font-black leading-tight tracking-[-.04em] md:text-4xl">“We are here to nurture talent, build community and help Myanmar athletes step onto a bigger stage.”</p>
+              <div className="mt-10 flex items-center justify-between border-t border-zawana-950/10 pt-5 text-xs font-extrabold uppercase tracking-[.16em] text-zawana-500">
+                <span>The Zawana</span>
+                <span>Est. 2022</span>
+              </div>
+            </div>
           </div>
-          <div className="relative overflow-hidden rounded-[34px] bg-zawana-900 p-8 md:p-12">
-            <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full border border-zawana-gold/30"/>
-            <div className="absolute right-10 top-10 h-20 w-20 rounded-full border border-zawana-gold/25"/>
-            <p className="max-w-2xl text-2xl font-black leading-tight tracking-[-.04em] md:text-4xl">“We are here to nurture talent, build community and help Myanmar athletes step onto a bigger stage.”</p>
-            <div className="mt-10 flex items-center justify-between border-t border-zawana-950/10 pt-5 text-xs font-extrabold uppercase tracking-[.16em] text-zawana-500"><span>The Zawana</span><span>Est. 2022</span></div>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="px-5 pb-10 md:px-10 md:pb-14">
-        <div className="mx-auto max-w-[1440px] overflow-hidden rounded-[34px] bg-zawana-950 px-6 py-12 text-white md:px-12 md:py-14">
-          <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
-            <div><p className="eyebrow text-zawana-gold">Ready when you are</p><h2 className="mt-4 max-w-2xl text-4xl font-black tracking-[-.06em] md:text-6xl">Your next session starts here.</h2></div>
-            <Link to="/book"><Button><span>Book at Zawana <ArrowRight className="ml-2" size={16}/></span></Button></Link>
+        <section className="px-5 pb-10 md:px-10 md:pb-14">
+          <div className="mx-auto max-w-[1440px] overflow-hidden rounded-[34px] bg-zawana-950 px-6 py-12 text-white md:px-12 md:py-14">
+            <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
+              <div>
+                <p className="eyebrow text-zawana-gold">Ready when you are</p>
+                <h2 className="mt-4 max-w-2xl text-4xl font-black tracking-[-.06em] md:text-6xl">Your next session starts here.</h2>
+              </div>
+              <Link to="/book">
+                <Button>
+                  <span>Book at Zawana <ArrowRight className="ml-2" size={16} />
+                  </span>
+                </Button>
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
 
-    <footer className="border-t border-zawana-950/8 px-5 py-9 md:px-10">
-      <div className="mx-auto flex max-w-[1440px] flex-col justify-between gap-5 md:flex-row md:items-center"><Logo/><p className="text-xs font-semibold text-zawana-500">© 2026 THE ZAWANA · PLAY. TRAIN. PERFORM.</p></div>
-    </footer>
-  </div></LocalizedTree>
+      <footer className="border-t border-zawana-950/8 px-5 py-9 md:px-10">
+        <div className="mx-auto flex max-w-[1440px] flex-col justify-between gap-5 md:flex-row md:items-center">
+          <Logo />
+          <p className="text-xs font-semibold text-zawana-500">© 2026 THE ZAWANA · PLAY. TRAIN. PERFORM.</p>
+        </div>
+      </footer>
+    </div>
+  </LocalizedTree>
 }

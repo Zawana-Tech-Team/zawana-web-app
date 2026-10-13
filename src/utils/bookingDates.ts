@@ -10,7 +10,11 @@ export function shiftDateKey(value: string, days: number): string {
   return localDateKey(date);
 }
 
-export function formatBookingDate(value: string, options: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" }, locale = document.documentElement.lang === 'my' ? 'my-MM' : 'en-US'): string {
+export function formatBookingDate(
+  value: string,
+  options: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" },
+  locale = document.documentElement.lang === 'my' ? 'my-MM' : 'en-US'
+): string {
   const [year, month, day] = value.split("-").map(Number);
   return new Intl.DateTimeFormat(locale, options).format(new Date(year, month - 1, day));
 }

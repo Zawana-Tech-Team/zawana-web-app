@@ -7,10 +7,23 @@ import { classes, courts, memberships, products, revenue, performance } from '..
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import {
-  LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
-  BarChart, Bar
+  LineChart,
+  Line,
+  ResponsiveContainer,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  BarChart,
+  Bar
 } from 'recharts';
 import OptimizedImage from '../components/OptimizedImage';
 import { LanguageSwitcher } from '../context/LanguageContext';
 
-export function Generic({title,body}:{title:string;body:string}){return <Page title={title} eyebrow="Zawana" actions={<LanguageSwitcher/>}><Card className="p-8"><p className="max-w-2xl text-zawana-500">{body}</p></Card></Page>}
+export function Generic({ title, body }: { title: string; body: string }) {
+  return <Page title={title} eyebrow="Zawana" actions={<LanguageSwitcher />}>
+    <Card className="p-8">
+      <p className="max-w-2xl text-zawana-500">{body}</p>
+    </Card>
+  </Page>
+}

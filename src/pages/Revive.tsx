@@ -1,17 +1,8 @@
 import { useState } from 'react';
-import {
-  CalendarDays,
-  Check,
-  Clock3,
-  HeartPulse,
-  X,
+import { CalendarDays, Check, Clock3, HeartPulse, X,
 } from 'lucide-react';
 
-import {
-  Badge,
-  Button,
-  Card,
-  Page,
+import { Badge, Button, Card, Page,
 } from '../components/UI';
 
 import { useApp } from '../context/AppContext';
@@ -64,20 +55,13 @@ const practitioners = [
   },
 ];
 
-const timeSlots = [
-  '10:00 AM',
-  '11:30 AM',
-  '1:00 PM',
-  '2:00 PM',
-  '4:30 PM',
-  '6:00 PM',
+const timeSlots = ['10:00 AM', '11:30 AM', '1:00 PM', '2:00 PM', '4:30 PM', '6:00 PM',
 ];
 
 export function Revive() {
   const { addReviveBooking, reviveBookings } = useApp();
 
-  const [selectedService, setSelectedService] =
-    useState<(typeof services)[number] | null>(null);
+  const [selectedService, setSelectedService] = useState<(typeof services)[number] | null>(null);
 
   const [submitted, setSubmitted] = useState(false);
 
@@ -95,8 +79,7 @@ export function Revive() {
 
     const practitioner =
       practitioners.find(
-        (item) => item.name === form.practitioner
-      ) ?? practitioners[0];
+        (item) => item.name === form.practitioner) ?? practitioners[0];
 
     addReviveBooking({
       memberId: 'u1',
@@ -116,10 +99,7 @@ export function Revive() {
   };
 
   return (
-    <Page
-      title="Revive Clinic"
-      eyebrow="Recover deliberately"
-    >
+    <Page title="Revive Clinic" eyebrow="Recover deliberately">
       {submitted && (
         <div className="mb-6 flex items-center justify-between rounded-2xl border border-zawana-accent/30 bg-zawana-accent/10 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -149,23 +129,17 @@ export function Revive() {
               <HeartPulse size={20} />
             </div>
 
-            <h3 className="mt-4 text-xl font-black">
-              {service.name}
-            </h3>
+            <h3 className="mt-4 text-xl font-black">{service.name}</h3>
 
             <p className="mt-2 text-sm text-zawana-500">
               Professional recovery support for training
               and performance.
             </p>
 
-            <p className="mt-5 text-lg font-black">
-              {service.price.toLocaleString()} MMK
+            <p className="mt-5 text-lg font-black">{service.price.toLocaleString()} MMK
             </p>
 
-            <Button
-              className="mt-5 w-full"
-              onClick={() => setSelectedService(service)}
-            >
+            <Button className="mt-5 w-full" onClick={() => setSelectedService(service)}>
               Book service
             </Button>
           </Card>
@@ -173,8 +147,7 @@ export function Revive() {
       </div>
 
       {reviveBookings.filter(
-        (booking) => booking.memberId === 'u1'
-      ).length > 0 && (
+        (booking) => booking.memberId === 'u1').length > 0 && (
         <Card className="mt-8 overflow-hidden">
           <div className="border-b border-zawana-950/10 p-5">
             <p className="text-xs font-black tracking-widest text-zawana-accent">
@@ -204,9 +177,7 @@ export function Revive() {
                   </div>
 
                   <Badge>
-                    {booking.status === 'pending'
-                      ? 'Awaiting confirmation'
-                      : booking.status}
+                    {booking.status === 'pending' ? 'Awaiting confirmation' : booking.status}
                   </Badge>
                 </div>
               ))}
@@ -224,8 +195,7 @@ export function Revive() {
                 </p>
 
                 <h2 className="mt-1 text-2xl font-black">
-                  Book {selectedService.name}
-                </h2>
+                  Book {selectedService.name}</h2>
               </div>
 
               <button onClick={() => setSelectedService(null)}>
@@ -233,10 +203,7 @@ export function Revive() {
               </button>
             </div>
 
-            <form
-              onSubmit={submitBooking}
-              className="mt-6 space-y-5"
-            >
+            <form onSubmit={submitBooking} className="mt-6 space-y-5">
               <label className="block text-sm font-bold">
                 Practitioner
 
@@ -251,9 +218,7 @@ export function Revive() {
                   className="mt-2 w-full rounded-xl border border-zawana-950/10 bg-white p-3"
                 >
                   {practitioners.map((person) => (
-                    <option key={person.name}>
-                      {person.name}
-                    </option>
+                    <option key={person.name}>{person.name}</option>
                   ))}
                 </select>
               </label>
@@ -321,11 +286,7 @@ export function Revive() {
               </label>
 
               <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setSelectedService(null)}
-                >
+                <Button type="button" variant="secondary" onClick={() => setSelectedService(null)}>
                   Cancel
                 </Button>
 

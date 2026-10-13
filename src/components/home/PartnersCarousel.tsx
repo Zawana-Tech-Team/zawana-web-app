@@ -40,7 +40,11 @@ function LogoLink({ partner }: { partner: (typeof partners)[number] }) {
         decoding="async"
         className="max-h-16 w-full max-w-[190px] object-contain opacity-80 transition duration-300 group-hover:scale-[1.03] group-hover:opacity-100 sm:max-h-[72px]"
       />
-      <ArrowUpRight size={14} aria-hidden="true" className="absolute right-4 top-3 text-zawana-400 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100" />
+      <ArrowUpRight
+        size={14}
+        aria-hidden="true"
+        className="absolute right-4 top-3 text-zawana-400 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100"
+      />
     </a>
   );
 }
@@ -60,11 +64,17 @@ export default function PartnersCarousel() {
   };
 
   return (
-    <section aria-labelledby="trusted-partners-heading" className="mt-14 border-y border-zawana-border bg-white py-10 sm:mt-16 sm:py-12">
+    <section
+      aria-labelledby="trusted-partners-heading"
+      className="mt-14 border-y border-zawana-border bg-white py-10 sm:mt-16 sm:py-12"
+    >
       <div className="mx-auto max-w-[1440px] px-5 md:px-10">
         <div className="text-center">
           <p className="eyebrow text-zawana-accent">The people beside us</p>
-          <h2 id="trusted-partners-heading" className="mt-3 text-2xl font-bold tracking-[-.04em] text-zawana-950 sm:text-3xl">
+          <h2
+            id="trusted-partners-heading"
+            className="mt-3 text-2xl font-bold tracking-[-.04em] text-zawana-950 sm:text-3xl"
+          >
             Our Trusted Partners
           </h2>
           <p className="mt-2 text-sm leading-6 text-zawana-500 sm:text-base">
@@ -78,14 +88,31 @@ export default function PartnersCarousel() {
           onTouchEnd={resumeAfterTouch}
           onTouchCancel={resumeAfterTouch}
         >
-          <div className="partners-marquee__track" style={{ animationDuration: `${partners.length * 8}s` }}>
+          <div
+            className="partners-marquee__track"
+            style={{ animationDuration: `${partners.length * 8}s` }}
+          >
             <div className="partners-marquee__group" aria-label="Partner websites">
-              {partners.map(partner => <LogoLink key={partner.name} partner={partner} />)}
+              {partners.map(partner =>
+                <LogoLink key={partner.name} partner={partner} />
+              )}
             </div>
-            <div className="partners-marquee__group partners-marquee__group--duplicate" aria-hidden="true">
+            <div
+              className="partners-marquee__group partners-marquee__group--duplicate"
+              aria-hidden="true"
+            >
               {partners.map(partner => (
-                <div key={partner.name} className="flex h-24 w-[190px] shrink-0 items-center justify-center px-5 sm:h-28 sm:w-[230px]">
-                  <img src={partner.logo} alt="" loading="lazy" decoding="async" className="max-h-16 w-full max-w-[190px] object-contain opacity-80 sm:max-h-[72px]" />
+                <div
+                  key={partner.name}
+                  className="flex h-24 w-[190px] shrink-0 items-center justify-center px-5 sm:h-28 sm:w-[230px]"
+                >
+                  <img
+                    src={partner.logo}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="max-h-16 w-full max-w-[190px] object-contain opacity-80 sm:max-h-[72px]"
+                  />
                 </div>
               ))}
             </div>

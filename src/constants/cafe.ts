@@ -8,8 +8,15 @@ export const CAFE_LOCATIONS = [
 ] as const;
 
 export const CAFE_PAYMENT_METHODS = ["CASH", "ONLINE"] as const;
-export const CAFE_ORDER_STATUSES = ["NEW", "PREPARING", "READY", "DELIVERING", "COMPLETED", "CANCELLED"] as const;
+export const CAFE_ORDER_STATUSES = [
+  "NEW",
+  "PREPARING",
+  "READY",
+  "DELIVERING",
+  "COMPLETED",
+  "CANCELLED"
+] as const;
 
-export type CafeLocation = typeof CAFE_LOCATIONS[number];
-export type CafePaymentMethod = typeof CAFE_PAYMENT_METHODS[number];
-export type CafeOrderStatus = typeof CAFE_ORDER_STATUSES[number];
+export type CafeLocation =typeof CAFE_LOCATIONS[number];
+export type CafePaymentMethod =typeof CAFE_PAYMENT_METHODS[number];
+export type CafeOrderStatus =typeof CAFE_ORDER_STATUSES[number];

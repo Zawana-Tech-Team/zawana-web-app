@@ -1,24 +1,13 @@
-import type {
-  NextFunction,
-  Request,
-  Response,
+import type { NextFunction, Request, Response,
 } from "express";
 
-export function notFound(
-  _req: Request,
-  res: Response
-) {
+export function notFound(_req: Request, res: Response) {
   return res.status(404).json({
     message: "Route not found",
   });
 }
 
-export function errorHandler(
-  err: any,
-  _req: Request,
-  res: Response,
-  _next: NextFunction
-) {
+export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction) {
   console.error(err);
 
   if (err?.name === "ZodError") {
@@ -30,8 +19,7 @@ export function errorHandler(
 
   if (err?.code === "P2002") {
     return res.status(409).json({
-      message:
-        "A record with that unique value already exists",
+      message: "A record with that unique value already exists",
     });
   }
 

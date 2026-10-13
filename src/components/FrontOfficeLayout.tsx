@@ -203,7 +203,9 @@ export default function FrontOfficeLayout({
                 {isGym ? 'Gym Front Office' : 'Revive Clinic Front Office'}
               </p>
               <p className="mt-0.5 truncate text-sm font-bold text-zawana-950">
-                {isGym ? 'Membership, check-ins & attendance' : 'Appointments, doctors & customer care'}
+                {isGym
+                  ? 'Membership, check-ins & attendance'
+                  : 'Appointments, doctors & customer care'}
               </p>
             </div>
           </div>
@@ -228,9 +230,7 @@ export default function FrontOfficeLayout({
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1500px] px-5 py-7 lg:px-8 lg:py-9">
-          {children}
-        </main>
+        <main className="mx-auto max-w-[1500px] px-5 py-7 lg:px-8 lg:py-9">{children}</main>
 
         <footer className="border-t border-zawana-950/8 bg-white px-5 py-4 lg:px-8">
           <div className="flex items-center gap-2 text-xs font-bold text-zawana-500">

@@ -155,6 +155,7 @@ Use Firebase auth for deployed environments, PostgreSQL schema/client scripts fo
 - **Client login mode mismatch:** ensure root `VITE_AUTH_MODE` matches backend `AUTH_MODE`, then restart Vite and the API.
 - **Database auth startup error:** check that `DATABASE_URL` is a local `file:` URL, `NODE_ENV` is not `production`, and `JWT_SECRET` is at least 32 characters.
 - **Firebase token verification error:** verify the Firebase project ID and Admin credentials/ADC, and confirm the web client and API use the same project.
+- **SQLite migration P3018 / table already exists:** older API versions created tables without recording Prisma migrations. Back up the database, compare its schema against a temporary database built from the migration history, and reconcile missing schema changes while preserving records. Only after verifying the schema, use `prisma migrate resolve --applied <migration-name>` for changes already present. Generating the client does not repair migration history. Do not reset a database containing records.
 - **Prisma client/schema mismatch:** run the matching generate command for the selected schema, then restart the API.
 - **Route returns 404:** check `backend/src/server.ts` and the router mounts there. `backend/src/app.ts` is currently not started by package scripts.
 - **CORS failure:** set `CLIENT_URL` to the exact client origin(s), comma-separated when needed.

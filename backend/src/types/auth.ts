@@ -7,11 +7,11 @@ export type AuthUser = {
   role: Role;
   email: string;
   name: string;
-  phone?: string|null;
-  avatar?: string|null;
+  phone?: string | null;
+  avatar?: string | null;
 };
 
 export type AuthRequest = Request & {
   user?: AuthUser;
-  firebaseClaims?:DecodedIdToken;
+  firebaseClaims?: DecodedIdToken;
 };

@@ -9,9 +9,26 @@ const router = Router();
 router.get(
   "/",
   auth,
-  asyncRoute(async (req: AuthRequest, res: { json: (arg0: { id: string; link: string | null; createdAt: Date; type: string | null; userId: string | null; title: string; body: string; read: boolean; audience: string | null; }[]) => void; }) => {
-    const list =
-      await prisma.notification.findMany({
+  asyncRoute(
+    async (
+      req: AuthRequest,
+      res: {
+        json: (
+          arg0: {
+            id: string;
+            link: string | null;
+            createdAt: Date;
+            type: string | null;
+            userId: string | null;
+            title: string;
+            body: string;
+            read: boolean;
+            audience: string | null;
+          }[]
+        ) => void;
+      }
+    ) => {
+      const list = await prisma.notification.findMany({
         where: {
           OR: [
             { userId: req.user!.id },
@@ -28,21 +45,39 @@ router.get(
         orderBy: { createdAt: "desc" },
       });
 
-    res.json(list);
-  })
+      res.json(list);
+    }
+  )
 );
 
 router.patch(
   "/:id/read",
   auth,
-  asyncRoute(async (req: { params: { id: any; }; }, res: { json: (arg0: { id: string; userId: string | null; title: string; body: string; read: boolean; link: string | null; audience: string | null; type: string | null; createdAt: Date; }) => void; }) => {
-    res.json(
-      await prisma.notification.update({
-        where: { id: req.params.id },
-        data: { read: true },
-      })
-    );
-  })
+  asyncRoute(
+    async (
+      req: { params: { id: any; }; },
+      res: {
+        json: (arg0: {
+          id: string;
+          userId: string | null;
+          title: string;
+          body: string;
+          read: boolean;
+          link: string | null;
+          audience: string | null;
+          type: string | null;
+          createdAt: Date;
+        }) => void;
+      }
+    ) => {
+      res.json(
+        await prisma.notification.update({
+          where: { id: req.params.id },
+          data: { read: true },
+        })
+      );
+    }
+  )
 );
 
 export default router;

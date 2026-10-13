@@ -1,4 +1,11 @@
-export type Pagination = { page: number; limit: number; total: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
+export type Pagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean
+};
 
 export function readPagination(query: Record<string, unknown>) {
   return {
@@ -10,5 +17,12 @@ export function readPagination(query: Record<string, unknown>) {
 
 export function paginationMetadata(page: number, limit: number, total: number): Pagination {
   const totalPages = Math.ceil(total / limit);
-  return { page, limit, total, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 && total > 0 };
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPreviousPage: page > 1 && total > 0
+  };
 }

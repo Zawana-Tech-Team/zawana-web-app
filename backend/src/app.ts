@@ -23,9 +23,7 @@ import analyticsRoutes from "./routes/analytics.js";
 import storeRoutes from "./routes/store.js";
 import menuRoutes from "./routes/menu.js";
 
-import {
-  notFound,
-  errorHandler,
+import { notFound, errorHandler,
 } from "./middleware/errorHandler.js";
 
 const app = express();

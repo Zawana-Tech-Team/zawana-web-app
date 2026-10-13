@@ -1,10 +1,6 @@
-import type {
-  NextFunction,
-  Request,
-  Response,
+import type { NextFunction, Request, Response,
 } from "express";
 
 export const asyncRoute =
-  (fn: (...args: any[]) => any) =>
-  (req: Request, res: Response, next: NextFunction) =>
+  (fn: (...args: any[]) => any) => (req: Request, res: Response, next: NextFunction) =>
     Promise.resolve(fn(req, res, next)).catch(next);

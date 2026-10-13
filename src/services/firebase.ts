@@ -15,9 +15,13 @@ const config = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 };
 
-export const firebaseConfigured = Boolean(config.apiKey && config.authDomain && config.projectId && config.appId);
+export const firebaseConfigured = Boolean(
+  config.apiKey && config.authDomain && config.projectId && config.appId
+);
 export const firebaseAuth: Auth | null = firebaseConfigured
   ? getAuth(getApps().length ? getApp() : initializeApp(config))
   : null;
 export const googleProvider = new GoogleAuthProvider();
-export const firebaseReady = firebaseAuth ? setPersistence(firebaseAuth, browserLocalPersistence) : Promise.resolve();
+export const firebaseReady = firebaseAuth
+  ? setPersistence(firebaseAuth, browserLocalPersistence)
+  : Promise.resolve();

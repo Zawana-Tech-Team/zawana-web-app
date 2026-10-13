@@ -1,7 +1,10 @@
 /** Lightweight visual used while the 3D scene loads and when WebGL is unavailable. */
 export default function HeroFallback() {
   return (
-    <div aria-hidden="true" className="absolute inset-0 overflow-hidden rounded-[30px] bg-[#f4f2eb]">
+    <div
+      aria-hidden="true"
+      className="absolute inset-0 overflow-hidden rounded-[30px] bg-[#f4f2eb]"
+    >
       <img
         src="/facilities/court.webp"
         alt=""

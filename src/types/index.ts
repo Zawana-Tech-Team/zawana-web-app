@@ -36,7 +36,17 @@ export type Booking = {
   date: string;
   time: string;
   location: string;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'PENDING_COACH_CONFIRMATION' | 'AWAITING_PAYMENT' | 'CONFIRMED' | 'COACH_DECLINED' | 'CANCELLED' | 'COMPLETED' | 'EXPIRED';
+  status: 'pending'
+    | 'confirmed'
+    | 'completed'
+    | 'cancelled'
+    | 'PENDING_COACH_CONFIRMATION'
+    | 'AWAITING_PAYMENT'
+    | 'CONFIRMED'
+    | 'COACH_DECLINED'
+    | 'CANCELLED'
+    | 'COMPLETED'
+    | 'EXPIRED';
   paymentStatus?: 'pending' | 'paid' | 'refunded';
   price: number;
   meta?: string;
@@ -64,12 +74,7 @@ export type Membership = {
 };
 
 export type NotificationAudience =
-  | 'member'
-  | 'coach'
-  | 'admin'
-  | 'gym_fo'
-  | 'clinic_fo'
-  | 'all';
+  | 'member' | 'coach' | 'admin' | 'gym_fo' | 'clinic_fo' | 'all';
 
 export type NotificationType =
   | 'booking'
@@ -117,12 +122,7 @@ export type MetricPoint = {
 };
 
 export type ReviveBookingStatus =
-  | 'pending'
-  | 'confirmed'
-  | 'rejected'
-  | 'checked_in'
-  | 'completed'
-  | 'cancelled';
+  | 'pending' | 'confirmed' | 'rejected' | 'checked_in' | 'completed' | 'cancelled';
 
 export type ReviveBooking = {
   id: string;
@@ -140,13 +140,28 @@ export type ReviveBooking = {
   createdAt: string;
 };
 
-export type Status = 'active' | 'inactive' | 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'overdue' | 'paid' | 'partially_paid';
+export type Status = 'active'
+  | 'inactive'
+  | 'pending'
+  | 'confirmed'
+  | 'completed'
+  | 'cancelled'
+  | 'overdue'
+  | 'paid'
+  | 'partially_paid';
 
 export type BookingStatus =
-  | 'pending' | 'confirmed' | 'completed' | 'cancelled'
-  | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
-  | 'PENDING_COACH_CONFIRMATION' | 'AWAITING_PAYMENT'
-  | 'COACH_DECLINED' | 'EXPIRED';
+  | 'pending'
+  | 'confirmed'
+  | 'completed'
+  | 'cancelled'
+  | 'CONFIRMED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'PENDING_COACH_CONFIRMATION'
+  | 'AWAITING_PAYMENT'
+  | 'COACH_DECLINED'
+  | 'EXPIRED';
 
 export type Transaction = {
   id: string;
@@ -212,7 +227,13 @@ export type MembershipRecord = {
   lastCheckIn?: string;
   sessionsTotal: number;
   sessionsRemaining: number;
-  checkIns?: { id:string; date:string; time:string; sessionsUsed:number; note?:string|null }[];
+  checkIns?: {
+    id: string;
+    date: string;
+    time: string;
+    sessionsUsed: number;
+    note?: string | null
+  }[];
 };
 
 export type CourtBooking = {
@@ -241,7 +262,6 @@ export type Appointment = {
   notes?: string;
   paymentStatus: 'paid' | 'pending';
 };
-
 
 export type ManagedCourt = {
   id: string;
@@ -285,9 +305,16 @@ export type InventoryTransaction = {
   date: string;
 };
 
-
 export type ProductCategory = { id: string; name: string; active: boolean };
-export type CafeMenuItem = { id: string; name: string; category: string; description: string; price: number; available: boolean; imageUrl?: string | null };
+export type CafeMenuItem = {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  price: number;
+  available: boolean;
+  imageUrl?: string | null
+};
 
 export type StoreProduct = Product & {
   sku: string;
@@ -308,7 +335,7 @@ export type StoreOrder = {
   paid: number;
   dueDate?: string;
   status: 'pending' | 'partially_paid' | 'paid' | 'overdue';
-  items: { productId: string; quantity: number; name?:string; price?:number }[];
+  items: { productId: string; quantity: number; name?: string; price?: number }[];
   paymentMethod?: 'Cash' | 'KPay' | 'Pay Later' | 'Pay Online';
   itemSummary?: string;
 };
@@ -330,7 +357,18 @@ export type CafeOrder = {
   discount?: number;
   tax?: number;
   total?: number;
-  status: 'NEW' | 'PREPARING' | 'READY' | 'DELIVERING' | 'COMPLETED' | 'CANCELLED' | 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  status: 'NEW'
+    | 'PREPARING'
+    | 'READY'
+    | 'DELIVERING'
+    | 'COMPLETED'
+    | 'CANCELLED'
+    | 'pending'
+    | 'confirmed'
+    | 'preparing'
+    | 'ready'
+    | 'completed'
+    | 'cancelled';
 };
 
 export type ContentItem = {

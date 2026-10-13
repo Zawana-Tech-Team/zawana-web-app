@@ -61,17 +61,23 @@ function Feather({ angle, color }: { angle: number; color: string }) {
   const ribs = useMemo(createFeatherRibs, []);
   const rachis = useMemo(() => new THREE.CylinderGeometry(0.0055, 0.003, 1.24, 5), []);
   const rachisRotation = useMemo(
-    () => new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0),
-      new THREE.Vector3(0, 1.12, 0.56).normalize(),
-    ),
+    () =>
+      new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(0, 1.12, 0.56).normalize(),
+      ),
     [],
   );
 
   return (
     <group rotation={[0, angle, 0]}>
       <mesh geometry={vane} castShadow={false} receiveShadow={false}>
-        <meshStandardMaterial color={color} roughness={0.62} metalness={0.015} side={THREE.DoubleSide} />
+        <meshStandardMaterial
+          color={color}
+          roughness={0.62}
+          metalness={0.015}
+          side={THREE.DoubleSide}
+        />
       </mesh>
       <mesh geometry={rachis} position={[0, 0.32, 0.41]} quaternion={rachisRotation}>
         <meshStandardMaterial color="#c8cbc5" roughness={0.72} />
@@ -101,16 +107,19 @@ function createCorkSpeckles() {
 function Shuttlecock({ compact, reducedMotion }: { compact: boolean; reducedMotion: boolean }) {
   const group = useRef<THREE.Group>(null);
   const featherCount = compact ? 12 : 16;
-  const corkProfile = useMemo(() => [
-    new THREE.Vector2(0, -0.82),
-    new THREE.Vector2(0.085, -0.79),
-    new THREE.Vector2(0.15, -0.70),
-    new THREE.Vector2(0.19, -0.53),
-    new THREE.Vector2(0.185, -0.35),
-    new THREE.Vector2(0.145, -0.23),
-    new THREE.Vector2(0.105, -0.19),
-    new THREE.Vector2(0, -0.19),
-  ], []);
+  const corkProfile = useMemo(
+    () => [
+      new THREE.Vector2(0, -0.82),
+      new THREE.Vector2(0.085, -0.79),
+      new THREE.Vector2(0.15, -0.70),
+      new THREE.Vector2(0.19, -0.53),
+      new THREE.Vector2(0.185, -0.35),
+      new THREE.Vector2(0.145, -0.23),
+      new THREE.Vector2(0.105, -0.19),
+      new THREE.Vector2(0, -0.19),
+    ],
+    []
+  );
   const corkSpeckles = useMemo(createCorkSpeckles, []);
 
   useFrame((state: RootState, delta) => {
@@ -162,7 +171,12 @@ function Scene({ compact, reducedMotion }: { compact: boolean; reducedMotion: bo
       {reducedMotion ? (
         <Shuttlecock compact={compact} reducedMotion />
       ) : (
-        <Float speed={0.65} floatIntensity={0.13} rotationIntensity={0.035} floatingRange={[-0.04, 0.04]}>
+        <Float
+          speed={0.65}
+          floatIntensity={0.13}
+          rotationIntensity={0.035}
+          floatingRange={[-0.04, 0.04]}
+        >
           <Shuttlecock compact={compact} reducedMotion={false} />
         </Float>
       )}
@@ -183,7 +197,9 @@ export default function HeroScene() {
   useEffect(() => {
     const element = wrapper.current;
     if (!element) return;
-    const observer = new IntersectionObserver(([entry]) => setIsInView(entry.isIntersecting), { threshold: 0.05 });
+    const observer = new IntersectionObserver(([entry]) => setIsInView(entry.isIntersecting), {
+      threshold: 0.05
+    });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -227,7 +243,11 @@ export default function HeroScene() {
   const pixelRatio = compact ? 1.15 : Math.min(window.devicePixelRatio || 1, 1.5);
 
   return (
-    <div ref={wrapper} aria-hidden="true" className="relative isolate h-[350px] w-full overflow-hidden rounded-[30px] sm:h-[430px] lg:h-[540px]">
+    <div
+      ref={wrapper}
+      aria-hidden="true"
+      className="relative isolate h-[350px] w-full overflow-hidden rounded-[30px] sm:h-[430px] lg:h-[540px]"
+    >
       <HeroFallback />
       <Canvas
         camera={{ position: [0, 0, 4.25], fov: 39, near: 0.1, far: 50 }}

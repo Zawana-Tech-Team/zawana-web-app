@@ -3,7 +3,7 @@ export { Dashboard } from './Dashboard';
 export { CourtBooking } from './CourtBooking';
 export { Bookings } from './Bookings';
 export { Book } from "./Book"
-export {CoachBooking} from './CoachBooking'
+export { CoachBooking } from './CoachBooking'
 export { Membership } from './Membership';
 export { Performance } from './Performance';
 export { Training } from './Training';
