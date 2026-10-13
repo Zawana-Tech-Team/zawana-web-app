@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Minus, Plus, ShoppingBag } from 'lucide-react';
-import { Badge, Button, Card, Page } from '../components/UI';
+import { Badge, Button, Card, Empty, Page } from '../components/UI';
+import ServiceIntro from '../components/ServiceIntro';
 import { useOperations } from '../context/OperationsContext';
 import { post } from '../api';
 import { CAFE_LOCATIONS } from '../constants/cafe';
@@ -45,12 +46,14 @@ export function CafeCustomer() {
     }
   };
   return <Page title="Zawana Cafe" eyebrow="Order from the arena">
+    <ServiceIntro image="cafe" label="REFUEL / RECONNECT" title="A moment between the moments." body="Coffee, good company, and a place to recharge between sessions." />
     <div className="mb-6 flex flex-wrap gap-3">
       <Badge good>Fresh menu</Badge>
       <Badge>Payment status shown clearly</Badge>
     </div>
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {!menu.some(item => item.available) && <div className="sm:col-span-2 xl:col-span-3"><Empty title="No menu items available" body="Please check back or speak with the cafe team." /></div>}
         {menu
           .filter(item => item.available)
           .map(item =>

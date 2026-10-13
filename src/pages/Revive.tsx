@@ -6,6 +6,7 @@ import { Badge, Button, Card, Page,
 } from '../components/UI';
 
 import { useApp } from '../context/AppContext';
+import ServiceIntro from '../components/ServiceIntro';
 
 const services = [
   {
@@ -100,6 +101,7 @@ export function Revive() {
 
   return (
     <Page title="Revive Clinic" eyebrow="Recover deliberately">
+      <ServiceIntro image="revive" label="CARE / RECOVERY" title="Come back stronger." body="Give recovery the space it deserves, on and off the court." />
       {submitted && (
         <div className="mb-6 flex items-center justify-between rounded-2xl border border-zawana-accent/30 bg-zawana-accent/10 px-5 py-4">
           <div className="flex items-center gap-3">

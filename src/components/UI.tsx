@@ -1,22 +1,23 @@
 import type { ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Info, X } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Info, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { LocalizedTree, useLanguage } from '../context/LanguageContext';
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="zawana-app-logo flex items-center gap-3">
       <img
         src="/brand/zawana-logo-square.png"
         alt="The Zawana"
-        className={`${compact ? 'h-10 w-10' : 'h-11 w-11'} shrink-0 object-contain`}
-        width={44}
-        height={44}
+        className={`${compact ? 'h-10 w-10' : 'h-14 w-14'} shrink-0 object-contain`}
+        width={compact ? 40 : 56}
+        height={compact ? 40 : 56}
       />
       {!compact && (
         <div className="hidden leading-none sm:block">
-          <span className="block text-[14px] font-extrabold tracking-[.1em] text-zawana-950">THE ZAWANA</span>
-          <span className="mt-1.5 block text-[9px] font-semibold tracking-[.2em] text-zawana-500">BADMINTON ARENA</span>
+          <span className="block text-[9px] font-semibold tracking-[.16em] text-zawana-950">THE ART OF</span>
+          <span className="mt-1.5 block text-[9px] font-semibold tracking-[.16em] text-zawana-500">PERFORMANCE</span>
         </div>
       )}
     </div>
@@ -41,7 +42,7 @@ export function Button({ children, variant = 'primary', className = '', ...props
 
   return (
     <button
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${variantClass} ${className}`}
+      className={`zawana-button zawana-button--${variant} inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${variantClass} ${className}`}
       {...props}
     >
       {children}
@@ -52,7 +53,7 @@ export function Button({ children, variant = 'primary', className = '', ...props
 export function Card({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-2xl border border-zawana-border bg-white shadow-[0_1px_2px_rgba(23,25,28,.035)] ${className}`}
+      className={`zawana-card rounded-2xl border border-zawana-border bg-white shadow-[0_1px_2px_rgba(23,25,28,.035)] ${className}`}
     >
       {children}
     </div>
@@ -62,7 +63,7 @@ export function Card({ children, className = '' }: { children?: ReactNode; class
 export function Badge({ children, good = false }: { children: ReactNode; good?: boolean }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold leading-4 ${good ? 'bg-emerald-50 text-emerald-800' : 'bg-zawana-800 text-zawana-600'}`}
+      className={`zawana-badge inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold leading-4 ${good ? 'bg-emerald-50 text-emerald-800' : 'bg-zawana-800 text-zawana-600'}`}
     >
       {children}
     </span>
@@ -79,7 +80,7 @@ export function Stat({
   sub?: string
 }) {
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="zawana-stat p-5 sm:p-6">
       <p className="text-xs font-semibold tracking-wide text-zawana-500">{label}</p>
       <p className="mt-2 text-3xl font-bold tracking-tight text-zawana-950 tabular-nums">{value}</p>
       {sub && <p className="mt-1 text-sm leading-5 text-zawana-500">{sub}</p>}
@@ -179,9 +180,10 @@ export function Page({
       initial={reduceMotion ? false : { opacity: 0, y: 6 }}
       animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
       transition={{ duration: .2, ease: 'easeOut' }}
-      className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 md:px-8 md:py-8"
+      className="workspace-page mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 md:px-8 md:py-8"
     >
-      <div className="mb-6 flex flex-col justify-between gap-4 sm:mb-8 md:flex-row md:items-end">
+      <div className="workspace-page__trail"><span>THE ART OF PERFORMANCE</span><Link to="/">Back to the arena <ArrowUpRight size={13} aria-hidden="true" /></Link></div>
+      <div className="workspace-page__heading mb-6 flex flex-col justify-between gap-4 sm:mb-8 md:flex-row md:items-end">
         <div className="min-w-0">
           {eyebrow &&
             <p className="mb-2 text-xs font-bold uppercase tracking-[.16em] text-zawana-accent">

@@ -103,7 +103,7 @@ export function PrivateCourseAdmin() {
   const visibleItems = items.filter(c =>
     `${c.title} ${c.category} ${c.description || ''}`.toLowerCase().includes(query.toLowerCase())
   );
-  return <Page title="Private course management" eyebrow="Administration Â· Badminton">
+  return <Page title="Private course management" eyebrow="Administration · Badminton">
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 className="text-2xl font-black">Private courses</h2>
@@ -124,7 +124,7 @@ export function PrivateCourseAdmin() {
           onClick={() => setActiveTab(t)}
           className={`border-b-2 px-4 py-3 text-sm font-bold capitalize ${activeTab === t ? 'border-zawana-gold text-zawana-950' : 'border-transparent text-zawana-500'}`}
         >
-          {t === 'catalog' ? `Course catalog Â· ${items.length}` : 'Booking requests'}
+          {t === 'catalog' ? `Course catalog · ${items.length}` : 'Booking requests'}
         </button>
       )}
     </div>
@@ -288,7 +288,7 @@ export function PrivateCourseAdmin() {
                   onChange={e => setForm({ ...form, category: e.target.value })}
                 />
               </label>
-              <label className="text-xs font-bold">Duration Â· minutes<input
+              <label className="text-xs font-bold">Duration · minutes<input
                   className="mt-1 w-full"
                   type="number"
                   min={30}
@@ -299,7 +299,7 @@ export function PrivateCourseAdmin() {
                 />
               </label>
             </div>
-            <label className="block text-xs font-bold">Price Â· MMK<input
+            <label className="block text-xs font-bold">Price · MMK<input
                 className="mt-1 w-full"
                 type="number"
                 min={0}
@@ -418,7 +418,7 @@ export function PrivateCourseAdmin() {
                 onClick={save}
                 className="flex-1"
               >
-                {busy ? 'Savingâ€¦' : editing ? 'Save changes' : 'Create course'}
+                {busy ? 'Saving…' : editing ? 'Save changes' : 'Create course'}
               </Button>
               {editing &&
                 <Button variant="secondary" onClick={() => start()}>Cancel</Button>}

@@ -1,0 +1,654 @@
+/* Product workspaces share the public brand without inheriting its display-scale layout. */
+.zawana-workspace,
+.workspace-page,
+.zawana-auth {
+  --color-zawana-page: #f3f1ea;
+  --color-zawana-surface-muted: #f7f6f0;
+  --color-zawana-900: #f7f6f0;
+  --color-zawana-800: #eeeee6;
+  --color-zawana-border: #dddfd5;
+  --color-zawana-accent: #3b395f;
+  --color-zawana-gold: #c4af49;
+  --color-zawana-purple: #dfce75;
+  --color-zawana-gold-soft: #f3edcf;
+  font-family: Gotham, 'Avenir Next', Inter, 'Myanmar Text', 'Segoe UI', sans-serif;
+  color: #17191c;
+}
+.zawana-workspace {
+  background: #f3f1ea;
+}
+.workspace-main {
+  min-width: 0;
+}
+.info-header {
+  max-width: 1600px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 28px 32px;
+  border-bottom: 1px solid #dddfd5;
+}
+.info-header nav {
+  display: flex;
+  gap: 26px;
+  font-size: 12px;
+}
+.info-join {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  background: #c4af49;
+  color: #17191c;
+  padding: 15px 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.info-footer {
+  max-width: 1600px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 30px 32px;
+  border-top: 1px solid #dddfd5;
+  font-size: 10px;
+  color: #535e4d;
+}
+.info-footer > a {
+  display: inline-flex;
+  gap: 12px;
+}
+.info-contact > h2 {
+  font-size: clamp(28px, 3vw, 40px);
+  margin-block: 26px;
+  font-weight: 550;
+}
+.info-contact address {
+  font-style: normal;
+  font-size: 14px;
+  line-height: 1.9;
+  margin-bottom: 24px;
+}
+.info-contact > a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  font-size: 13px;
+}
+.info-contact > .info-join {
+  display: inline-flex;
+  margin-top: 26px;
+}
+.info-contact-photo {
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 360px;
+}
+.info-contact-photo > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+@media (max-width: 767px) {
+  .info-header {
+    padding: 20px 16px;
+    gap: 20px;
+  }
+  .info-header nav {
+    order: 3;
+    width: 100%;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 11px;
+  }
+  .info-footer {
+    padding-inline: 16px;
+  }
+}
+.workspace-header {
+  background: rgb(243 241 234 / 95%);
+  height: 80px;
+}
+.workspace-header > div:first-of-type p:first-child {
+  letter-spacing: 0.16em;
+  font-size: 9px;
+}
+.workspace-header .zawana-app-logo img {
+  width: 40px;
+  height: 40px;
+}
+.workspace-sidebar {
+  --color-zawana-950: #f3f1ea;
+  --color-zawana-900: #222724;
+  --color-zawana-800: #272d28;
+  --color-zawana-600: #c7cbbf;
+  --color-zawana-500: #a5ab9e;
+  --color-zawana-400: #929b88;
+  --color-zawana-border: #343b33;
+  --color-zawana-accent: #c4af49;
+  --color-zawana-gold-soft: #333528;
+  background: #161c18;
+  color: #f3f1ea;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #4a5144 transparent;
+}
+.workspace-sidebar > div:first-child {
+  min-height: 80px;
+}
+.workspace-sidebar .zawana-app-logo {
+  gap: 14px;
+}
+.workspace-sidebar nav a {
+  border-radius: 7px;
+  font-size: 12px;
+  min-height: 46px;
+  font-weight: 500;
+}
+.workspace-sidebar nav a[aria-current='page'] {
+  background: #333528;
+  color: #e1d27b;
+}
+.workspace-sidebar nav a:not([aria-current='page']):hover {
+  background: #272d28;
+  color: #fff;
+}
+.workspace-sidebar nav a[aria-current='page']::before {
+  background: #c4af49;
+}
+.workspace-sidebar button {
+  border-radius: 7px;
+}
+.workspace-sidebar button.bg-white {
+  background: #222724;
+}
+.workspace-sidebar :focus-visible {
+  outline-color: #c4af49;
+  outline-offset: 3px;
+}
+.workspace-page {
+  padding-top: 28px;
+  padding-bottom: 48px;
+  min-width: 0;
+}
+.workspace-page__trail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  border-bottom: 1px solid #dddfd5;
+  padding-bottom: 18px;
+  margin-bottom: 28px;
+}
+.workspace-page__trail > span {
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: #686b60;
+}
+.workspace-page__trail > a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  font-size: 11px;
+  color: #4c5146;
+}
+.workspace-page__heading {
+  padding-bottom: 8px;
+}
+.workspace-page__heading h1 {
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.055em;
+}
+.workspace-page__heading > div > p {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+.workspace-page .zawana-card,
+.zawana-auth .zawana-card {
+  border-radius: 12px;
+  box-shadow: 0 3px 14px rgb(24 32 21 / 3%);
+}
+.workspace-page .zawana-button,
+.zawana-auth .zawana-button {
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 12px 18px;
+  box-shadow: none;
+}
+.workspace-page .zawana-button--primary,
+.zawana-auth .zawana-button--primary {
+  background: #c4af49;
+  border-color: #c4af49;
+  color: #17191c;
+}
+.workspace-page .zawana-button--primary:hover,
+.zawana-auth .zawana-button--primary:hover {
+  background: #dfce75;
+  border-color: #dfce75;
+}
+.workspace-page .zawana-button--secondary,
+.zawana-auth .zawana-button--secondary {
+  border-color: #cbd0c0;
+}
+.workspace-page .zawana-button--secondary:hover,
+.zawana-auth .zawana-button--secondary:hover {
+  background: #f3f1ea;
+}
+.workspace-page .zawana-badge {
+  font-size: 10px;
+  padding: 5px 9px;
+  letter-spacing: 0.01em;
+}
+.workspace-page .zawana-stat {
+  position: relative;
+  padding: 24px;
+  min-height: 146px;
+  overflow: hidden;
+  border-top: 2px solid #c4af49;
+}
+.workspace-page .zawana-stat > p:first-child {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+.workspace-page .zawana-stat > p:nth-child(2) {
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 550;
+  letter-spacing: -0.04em;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+.workspace-page .zawana-stat > p:nth-child(3) {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.workspace-page .grid > .zawana-stat:first-child {
+  background: #20281f;
+  color: #f3f1ea;
+  border-color: #20281f;
+  border-top-color: #c4af49;
+}
+.workspace-page .grid > .zawana-stat:first-child > p {
+  color: #bcc3b0;
+}
+.workspace-page .grid > .zawana-stat:first-child > p:nth-child(2) {
+  color: #f3f1ea;
+}
+.workspace-page :is(input:not([type='checkbox']):not([type='radio']), select, textarea),
+.zawana-auth :is(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  border-radius: 7px;
+  border-color: #cbd0c0;
+  font-size: 13px;
+  min-height: 44px;
+}
+.workspace-page :is(input, select, textarea):focus,
+.zawana-auth :is(input, select, textarea):focus {
+  border-color: #a69234;
+  box-shadow: 0 0 0 3px rgb(196 175 73 / 18%);
+}
+.workspace-page input[type='checkbox'],
+.workspace-page input[type='radio'],
+.zawana-auth input[type='checkbox'] {
+  accent-color: #96862e;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+.workspace-page input.sr-only,
+.zawana-auth input.sr-only {
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+.workspace-page table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.workspace-page table thead {
+  background: #f7f7f0;
+}
+.workspace-page table th {
+  color: #5a6052;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding-block: 16px;
+  border-bottom: 1px solid #dddfd5;
+}
+.workspace-page table td {
+  border-bottom: 1px solid #eeeee6;
+  padding-block: 16px;
+}
+.workspace-page table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.workspace-page table tbody tr:hover,
+.workspace-page table tbody tr:focus-within {
+  background: #fafaf4;
+}
+.workspace-page h2 {
+  letter-spacing: -0.035em;
+}
+.workspace-cover-wrap {
+  max-width: 1600px;
+  margin-inline: auto;
+  padding: 30px 32px 0;
+}
+.workspace-cover {
+  position: relative;
+  overflow: hidden;
+  background: #1c251d;
+  color: #f3f1ea;
+  min-height: 250px;
+  border-radius: 12px;
+}
+.workspace-cover__image {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 65%;
+  height: 100%;
+  object-fit: cover;
+}
+.workspace-cover__shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #1c251d 15%, rgb(28 37 29 / 94%) 40%, rgb(28 37 29 / 25%) 75%);
+}
+.workspace-cover__copy {
+  position: relative;
+  z-index: 1;
+  padding: 30px 36px;
+  max-width: 680px;
+}
+.workspace-cover__copy > p {
+  font-size: 9px;
+  color: #dfce75;
+  letter-spacing: 0.18em;
+  font-weight: 500;
+  margin: 0;
+}
+.workspace-cover__copy > h2 {
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.055em;
+  margin: 20px 0 15px;
+}
+.workspace-cover__copy > span {
+  display: block;
+  max-width: 460px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #c4cbba;
+}
+.workspace-cover__copy > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 11px;
+  min-height: 36px;
+  margin-top: 15px;
+  border-bottom: 1px solid rgb(255 255 255 / 30%);
+}
+.workspace-cover__signature {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+}
+.zawana-auth {
+  background: #f3f1ea;
+}
+.auth-editorial {
+  position: relative;
+  padding: 40px;
+  background: #161c18;
+  overflow: hidden;
+}
+.auth-editorial__brand {
+  position: relative;
+  z-index: 2;
+  color: white;
+}
+.auth-editorial__brand .text-zawana-950,
+.auth-editorial__brand .text-zawana-500 {
+  color: #f3f1ea;
+}
+.auth-editorial__photo {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  margin: 0;
+  border-radius: 0;
+}
+.auth-editorial__photo > img {
+  opacity: 0.65;
+}
+.auth-editorial__photo figcaption {
+  bottom: 120px;
+  max-width: 500px;
+}
+.auth-editorial__photo h2 {
+  font-size: clamp(42px, 4.7vw, 78px);
+  font-weight: 750;
+  letter-spacing: -0.065em;
+  line-height: 1.05;
+}
+.auth-editorial__photo .eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+}
+.auth-editorial__photo figcaption > p:last-child {
+  max-width: 340px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.auth-editorial__location {
+  position: absolute;
+  left: 40px;
+  right: 40px;
+  bottom: 35px;
+  z-index: 2;
+  color: #c4cbba;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  border-top: 1px solid rgb(255 255 255 / 20%);
+  padding-top: 22px;
+}
+.auth-form-panel {
+  padding-block: 60px;
+}
+.auth-form-panel h1 {
+  font-size: clamp(36px, 3.8vw, 56px);
+  font-weight: 650;
+  letter-spacing: -0.06em;
+  line-height: 1.1;
+}
+.auth-form-panel .eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+.auth-form-panel label {
+  font-size: 11px;
+  font-weight: 600;
+}
+.booking-option__image {
+  position: relative;
+  height: 270px;
+  overflow: hidden;
+}
+.booking-option__image > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+.booking-option:hover .booking-option__image > img {
+  transform: scale(1.035);
+}
+.booking-option__image > span {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  background: #c4af49;
+  color: #17191c;
+}
+.booking-option__category {
+  color: #3b395f;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+.booking-option h2 {
+  font-size: clamp(26px, 3vw, 36px);
+  line-height: 1.1;
+  font-weight: 550;
+  margin-top: 16px;
+}
+.booking-option__action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #dddfd5;
+  padding-top: 22px;
+  margin-top: 26px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.service-intro {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  min-height: 240px;
+  margin-bottom: 32px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #20281f;
+  color: #f3f1ea;
+}
+.service-intro > div {
+  padding: 30px;
+  align-self: center;
+}
+.service-intro > div > p {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: #dfce75;
+}
+.service-intro h2 {
+  font-size: clamp(26px, 3vw, 42px);
+  font-weight: 600;
+  line-height: 1.08;
+  margin: 16px 0;
+}
+.service-intro > div > span {
+  display: block;
+  max-width: 400px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #c4cbba;
+}
+.service-intro > img {
+  width: 100%;
+  height: 100%;
+  max-height: 290px;
+  object-fit: cover;
+}
+.service-intro--revive {
+  background: #e8e9df;
+  color: #1c251d;
+}
+.service-intro--revive > div > p {
+  color: #3b395f;
+}
+.service-intro--revive > div > span {
+  color: #535e4d;
+}
+@media (max-width: 767px) {
+  .service-intro {
+    grid-template-columns: 1fr;
+  }
+  .service-intro > img {
+    height: 200px;
+  }
+  .service-intro > div {
+    padding: 26px;
+  }
+  .booking-option__image {
+    height: 240px;
+  }
+}
+@media (max-width: 767px) {
+  .workspace-header {
+    height: 72px;
+  }
+  .workspace-page {
+    padding-top: 20px;
+  }
+  .workspace-page__trail {
+    margin-bottom: 24px;
+    padding-bottom: 14px;
+  }
+  .workspace-page__trail > span {
+    font-size: 7px;
+    letter-spacing: 0.1em;
+  }
+  .workspace-page__trail > a {
+    font-size: 10px;
+  }
+  .workspace-cover-wrap {
+    padding: 20px 16px 0;
+  }
+  .workspace-cover {
+    min-height: 260px;
+  }
+  .workspace-cover__copy {
+    padding: 28px 24px;
+  }
+  .workspace-cover__copy > h2 {
+    max-width: 270px;
+  }
+  .workspace-cover__copy > span {
+    max-width: 270px;
+  }
+  .workspace-cover__image {
+    width: 100%;
+    opacity: 0.5;
+  }
+  .workspace-cover__shade {
+    background: linear-gradient(90deg, rgb(28 37 29 / 93%), rgb(28 37 29 / 55%));
+  }
+  .workspace-cover__signature {
+    display: none;
+  }
+  .workspace-page .zawana-stat {
+    padding: 20px;
+    min-height: 130px;
+  }
+  .auth-form-panel {
+    padding-block: 28px 48px;
+  }
+}
