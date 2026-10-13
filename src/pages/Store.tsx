@@ -1,23 +1,8 @@
-import type { ReactNode, FormEvent } from 'react';
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, ShoppingBag, Search } from 'lucide-react';
-import { Button, Card, Badge, Page, Stat, Logo, Empty } from '../components/UI';
-import { classes, courts, memberships, products, revenue, performance } from '../data';
-import { useAuth } from '../context/AuthContext';
+import { ShoppingBag} from 'lucide-react';
+import { Button, Card, Page} from '../components/UI';
+import { products} from '../data';
 import { useApp } from '../context/AppContext';
-import {
-  LineChart,
-  Line,
-  ResponsiveContainer,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  BarChart,
-  Bar
-} from 'recharts';
-import OptimizedImage from '../components/OptimizedImage';
+
 
 export function Store() {
   const { cart, addToCart } = useApp();
