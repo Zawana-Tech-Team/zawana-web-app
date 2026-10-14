@@ -10,7 +10,7 @@ export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="zawana-app-logo flex items-center gap-3" data-compact={compact}>
       <img
-        src="/brand/zawana-logo-transparent.png"
+        src="/logo.png"
         alt="The Zawana crowned-lion logo and official wordmark"
         className={`${compact ? 'h-11 w-11' : 'h-[72px] w-[72px]'} shrink-0 object-contain`}
         width={compact ? 44 : 72}

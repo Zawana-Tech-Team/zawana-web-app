@@ -208,7 +208,6 @@ input[type='checkbox'], input[type='radio'] { accent-color: #8a792b; width: 17px
 .workspace-sidebar .zawana-app-logo img {
   border-radius: 0;
   box-shadow: none;
-  filter: brightness(0) saturate(100%) invert(74%) sepia(36%) saturate(610%) hue-rotate(8deg) brightness(95%) contrast(89%);
 }
 .workspace-header .zawana-app-logo img { width: 48px; height: 48px; }
 .auth-editorial__brand .zawana-app-logo img { width: 96px; height: 96px; }
@@ -216,5 +215,3 @@ input[type='checkbox'], input[type='radio'] { accent-color: #8a792b; width: 17px
   .zawana-app-logo:not([data-compact='true']) img { width: 64px; height: 64px; }
   .workspace-header .zawana-app-logo img { width: 48px; height: 48px; }
 }
-
-.auth-editorial__brand .zawana-app-logo img { filter: brightness(0) saturate(100%) invert(74%) sepia(36%) saturate(610%) hue-rotate(8deg) brightness(95%) contrast(89%); }

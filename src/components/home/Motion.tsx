@@ -272,7 +272,7 @@ export function PageLoader() {
           transition={{ duration: 0.35, ease }}
         >
           <motion.img
-            src="/brand/zawana-logo-transparent.png"
+            src="/logo.png"
             width={108}
             height={108}
             alt=""
