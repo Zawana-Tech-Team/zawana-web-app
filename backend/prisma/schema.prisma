@@ -754,3 +754,13 @@ model AuthSecurityEvent {
   createdAt DateTime @default(now())
   @@index([userId, createdAt])
 }
+
+// Retry receipts are committed atomically with the bookings. No payment transaction.
+model BookingSubmission {
+  userId String
+  key String
+  payloadHash String
+  bookingIds String
+  createdAt DateTime @default(now())
+  @@id([userId, key])
+}

@@ -23,6 +23,8 @@ import { createKPayCheckout, kpayIsConfigured, verifyKPaySignature } from "./ser
 import { prisma } from "./lib/prisma.js";
 import { toSafeAppUser } from "./services/userSerializer.js";
 import { registerBookingQueryRoutes } from "./routes/bookingQueries.js";
+import { createCourtBooking } from "./services/courtBooking.js";
+import { createCourtBookingRoutes } from "./routes/courtBooking.js";
 import { isDateKey } from "./utils/dateKeys.js";
 import { asyncRoute } from "./utils/asyncRoute.js";
 import { isStoredImageUrl } from "./services/mediaStorage.js";
@@ -75,6 +77,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/cafe", cafeRoutes);
 app.use("/api", gymTrainingRoutes);
+app.use("/api", createCourtBookingRoutes(prisma, expirePrivateCourseReservations));
 
 const businessTimeZone = process.env.BUSINESS_TIME_ZONE || "Asia/Yangon";
 const businessNow = () => {
@@ -1999,7 +2002,7 @@ app.post(
         price: z.number().int().nonnegative().optional(),
         courtId: z.string().optional(),
         coachId: z.string().optional(),
-        meta: z.string().optional(),
+        meta: z.string().max(200).optional(),
         paymentStatus: z.enum(["pending", "paid", "refunded"]).optional()
       })
       .parse(req.body);
@@ -2025,189 +2028,12 @@ app.post(
       return !!x && !!y && x.start < y.end && y.start < x.end
     };
     if (b.kind === "court") {
-      const requested =(b.bookings ||
-        b.slots?.map(s => ({ date: b.date || "", ...s })) ||
-        ((b.courtId && b.time && b.date)? [{ date: b.date, courtId: b.courtId, time: b.time }] : []));
-      if (!requested.length)
-        return res.status(400).json({ message: "Choose at least one court and time slot." });
-      const invalidDates = requested.filter(s => !isDateKey(s.date));
-      if (invalidDates.length)
-        return res.status(400).json({ message: "Each booking must have a valid date." });
-      if (requested.some(s => s.date < today()))
-        return res
-          .status(400)
-          .json({ message: "Choose today or a future date for every session." });
-      const ids = [...new Set(requested.map(s => s.courtId))],
-        courts = await prisma.court.findMany({ where: { id: { in: ids } } }),
-        courtById = new Map(courts.map(c => [c.id, c]));
-      const invalid: any[] = [],
-        seen: any[] = [];
-      for (const item of requested) {
-        const r = range(item.time),
-          court = courtById.get(item.courtId);
-        let reason = "";
-        if (!r || r.end - r.start !== 60 || r.start < 360 || r.end > 1260 || r.start % 60 !== 0)
-          reason = "Choose one-hour slots between 6:00 AM and 9:00 PM.";
-        else if (item.date === today() && r.start <= businessNow().hour * 60 + businessNow().minute)
-          reason = "This time has already passed.";
-        else if (!court) reason = "Court not found.";
-        else if (court.status !== "available")
-          reason = `${court.name} is currently ${court.status}.`;
-        else if (
-          seen.some(s => s.date === item.date && s.courtId === item.courtId && s.time === item.time)
-        )
-          reason = "This slot is selected more than once.";
-        else if (
-          seen.some(
-            s => s.date === item.date && s.courtId === item.courtId && overlaps(s.time, item.time)
-          )
-        )
-          reason = "The selected slots overlap.";
-        if (reason) invalid.push({ ...item, courtName: court?.name || item.courtId, reason });
-        seen.push(item);
-      }
-      if (invalid.length)
-        return res
-          .status(409)
-          .json({ message: "Review the unavailable slot(s) and try again.", conflicts: invalid });
-      const created = await prisma.$transaction(async tx => {
-        for (const id of [...ids].sort())
-          await rawExec(tx, `UPDATE "Court" SET status=status WHERE id=?`, id);
-        const dates = [...new Set(requested.map(s => s.date))];
-        const [overrides, currentCourts, existing, blocks, holidays] = await Promise.all([
-          tx.courtDateOverride.findMany({ where: { date: { in: dates } } }),
-          tx.court.findMany({ where: { id: { in: ids } } }),
-          tx.booking.findMany({
-            where: { date: { in: dates }, courtId: { in: ids }, status: { in: occupyingStatuses } },
-            select: { date: true, courtId: true, time: true }
-          }),
-          tx.courtBlock.findMany({
-            where: {
-              courtId: { in: ids },
-              active: true,
-              OR: [{ date: { in: dates } }, { dayOfWeek: { not: null } }]
-            }
-          }),
-          tx.holidayRate.findMany({ where: { date: { in: dates }, active: true } })
-        ]);
-        const currentById = new Map(currentCourts.map(c => [c.id, c])),
-          overrideByDate = new Map(overrides.map(x => [x.date, x])),
-          holidayByDate = new Map(holidays.map(x => [x.date, x])),
-          conflicts: any[] = [];
-        for (const item of requested) {
-          const r = range(item.time),
-            court = currentById.get(item.courtId);
-          const override = overrideByDate.get(item.date),
-            dow = new Date(`${item.date}T00:00:00`).getDay();
-          const dateBlocks = blocks.filter(
-            x =>
-              x.courtId === item.courtId &&
-              (x.date === item.date || (override?.type !== "open" && x.dayOfWeek === dow))
-          );
-          let reason = "";
-          if (override?.type === "closed") reason = `Courts are closed on ${item.date}.`;
-          else if (!court || court.status !== "available")
-            reason = court
-              ? `${court.name} is no longer available.`
-              : "Court is no longer available.";
-          else if (
-            r &&
-            item.date === today() &&
-            r.start <= businessNow().hour * 60 + businessNow().minute
-          )
-            reason = "This time has already passed.";
-          else if (
-            existing.some(
-              x =>
-                x.date === item.date && x.courtId === item.courtId && overlaps(x.time, item.time)
-            )
-          )
-            reason = "This slot was just booked by someone else.";
-          else if (dateBlocks.some(x => overlaps(`${x.start} — ${x.end}`, item.time)))
-            reason = "This slot is reserved for a class or facility block.";
-          if (reason) conflicts.push({ ...item, courtName: court?.name || item.courtId, reason });
-        }
-        if (conflicts.length)
-          throw Object.assign(
-            new Error(
-              "One or more selected slots are no longer available. No bookings were created."
-            ),
-            { statusCode: 409, conflicts }
-          );
-        const rows = [];
-        for (const item of requested) {
-          const court = currentById.get(item.courtId)!,
-            r = range(item.time)!,
-            holiday = holidayByDate.get(item.date);
-          const price = holiday ? holiday.price : court.price + (r.start >= 900 ? 5000 : 0);
-          const row = await tx.booking.create({
-            data: {
-              kind: "court",
-              title: court.name,
-              date: item.date,
-              time: item.time,
-              location: b.location || "Zawana Badminton Arena",
-              courtId: court.id,
-              price,
-              code: code("ZW"),
-              userId: req.user!.id,
-              status: "CONFIRMED",
-              paymentStatus: "pending",
-              reservationExpiresAt: null
-            }
-          });
-          await tx.notification.create({
-            data: {
-              userId: req.user!.id,
-              title: "Court booking confirmed",
-              body: `${court.name} · ${item.date} · ${item.time}.`,
-              link: "/bookings",
-              audience: "member",
-              type: "booking",
-              icon: "calendar",
-              entityType: "booking",
-              entityId: row.id
-            }
-          });
-          await tx.notification.create({
-            data: {
-              userId: null,
-              title: "New court booking",
-              body: `${req.user!.name} · ${court.name} · ${item.date} · ${item.time}.`,
-              link: "/badminton-fo/bookings",
-              audience: "badminton_fo",
-              type: "booking",
-              icon: "calendar",
-              actionLabel: "View bookings",
-              entityType: "booking",
-              entityId: row.id
-            }
-          });
-          await tx.notification.create({
-            data: {
-              userId: null,
-              title: "New badminton booking",
-              body: `${req.user!.name} · ${court.name} · ${item.date} · ${item.time}.`,
-              link: "/admin/bookings",
-              audience: "admin",
-              type: "booking",
-              icon: "calendar",
-              actionLabel: "View bookings",
-              entityType: "booking",
-              entityId: row.id
-            }
-          });
-          rows.push(row);
-        }
-        return rows;
-      });
-      return res
-        .status(201)
-        .json({
-          booking: created[0],
-          bookings: created,
-          totalPrice: created.reduce((sum, row) => sum + row.price, 0)
-        });
+      if (!["member", "admin", "badminton_fo"].includes(req.user!.role))
+        return res.status(403).json({message: "This account cannot reserve badminton courts."});
+      const keyHeader = req.get("Idempotency-Key");
+      const key = keyHeader ? z.string().uuid().parse(keyHeader) : undefined;
+      const created = await createCourtBooking(prisma, req.user!, b, key);
+      return res.status(201).json(created);
     }
     if (!b.date || !isDateKey(b.date))
       return res.status(400).json({ message: "Choose a valid booking date." });
@@ -5512,6 +5338,7 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       .status(409)
       .json({ message: "This record is linked to existing history and cannot be removed." });
   if (
+    /COURT_OVERLAP|Booking_no_overlap|23P01/i.test(String(err?.message || "")) ||
     err?.code === "P2034" ||
     err?.code === "P1008" ||
     /SQLITE_BUSY|database is locked/i.test(String(err?.message || ""))
