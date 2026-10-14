@@ -29,13 +29,15 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            backend/pnpm-lock.yaml
 
       - name: Install root dependencies
         run: pnpm install --frozen-lockfile --prod=false
 
       - name: Install backend dependencies
-        run: pnpm --dir backend install --prod=false
+        run: pnpm --dir backend install --frozen-lockfile --prod=false
 
       - name: Verify Prisma CLI
         working-directory: backend
@@ -50,6 +52,18 @@ jobs:
       - name: Validate PostgreSQL schema
         working-directory: backend
         run: pnpm exec prisma validate --schema prisma/postgresql/schema.prisma
+
+      - name: Generate SQLite Prisma Client
+        working-directory: backend
+        run: pnpm run prisma:generate
+        env:
+          DATABASE_URL: file:./dev.db
+
+      - name: Test Backend
+        working-directory: backend
+        run: pnpm test
+        env:
+          DATABASE_URL: file:./dev.db
 
       - name: Generate PostgreSQL Prisma Client
         working-directory: backend
