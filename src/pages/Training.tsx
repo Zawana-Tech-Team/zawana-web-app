@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, Badge, Page } from '../components/UI';
+import ServiceIntro from '../components/ServiceIntro';
 
 
 export function Training() {
@@ -12,6 +13,7 @@ export function Training() {
     ['FRI', 'Badminton', '90 min']
   ];
   return <Page title="Training program" eyebrow="Athlete performance">
+    <ServiceIntro image="gym" label="PERFORMANCE / TRAINING" title="Built for your better." body="Strength, conditioning, and a little more intention in every session." />
     <Card className="p-6">
       <div className="flex justify-between">
         <div>

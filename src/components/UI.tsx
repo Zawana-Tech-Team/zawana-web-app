@@ -1,22 +1,25 @@
+import { AnimatePresence } from 'framer-motion';
+import { pageEntrance, motionTokens } from '../design/motion';
 import type { ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Info, X } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Info, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { LocalizedTree, useLanguage } from '../context/LanguageContext';
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="zawana-app-logo flex items-center gap-3" data-compact={compact}>
       <img
-        src="/brand/zawana-logo-square.png"
-        alt="The Zawana"
-        className={`${compact ? 'h-10 w-10' : 'h-11 w-11'} shrink-0 object-contain`}
-        width={44}
-        height={44}
+        src="/logo.png"
+        alt="The Zawana crowned-lion logo and official wordmark"
+        className={`${compact ? 'h-11 w-11' : 'h-[72px] w-[72px]'} shrink-0 object-contain`}
+        width={compact ? 44 : 72}
+        height={compact ? 44 : 72}
       />
       {!compact && (
         <div className="hidden leading-none sm:block">
-          <span className="block text-[14px] font-extrabold tracking-[.1em] text-zawana-950">THE ZAWANA</span>
-          <span className="mt-1.5 block text-[9px] font-semibold tracking-[.2em] text-zawana-500">BADMINTON ARENA</span>
+          <span className="block text-[9px] font-semibold tracking-[.16em] text-zawana-950">THE ART OF</span>
+          <span className="mt-1.5 block text-[9px] font-semibold tracking-[.16em] text-zawana-500">PERFORMANCE</span>
         </div>
       )}
     </div>
@@ -27,9 +30,10 @@ type ButtonProps = {
   children: ReactNode;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   className?: string;
+  loading?: boolean;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>;
 
-export function Button({ children, variant = 'primary', className = '', ...props }: ButtonProps) {
+export function Button({ children, variant = 'primary', className = '', loading = false, disabled, ...props }: ButtonProps) {
   const variantClass = {
     primary:
       'border border-zawana-gold bg-zawana-gold text-zawana-950 shadow-sm hover:border-zawana-purple hover:bg-zawana-purple',
@@ -41,9 +45,12 @@ export function Button({ children, variant = 'primary', className = '', ...props
 
   return (
     <button
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${variantClass} ${className}`}
+      className={`zawana-button zawana-button--${variant} inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${variantClass} ${className}`}
       {...props}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
     >
+      {loading && <span className="zawana-button__spinner" aria-hidden="true" />}
       {children}
     </button>
   );
@@ -52,7 +59,7 @@ export function Button({ children, variant = 'primary', className = '', ...props
 export function Card({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-2xl border border-zawana-border bg-white shadow-[0_1px_2px_rgba(23,25,28,.035)] ${className}`}
+      className={`zawana-card rounded-2xl border border-zawana-border bg-white shadow-[0_1px_2px_rgba(23,25,28,.035)] ${className}`}
     >
       {children}
     </div>
@@ -62,7 +69,7 @@ export function Card({ children, className = '' }: { children?: ReactNode; class
 export function Badge({ children, good = false }: { children: ReactNode; good?: boolean }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold leading-4 ${good ? 'bg-emerald-50 text-emerald-800' : 'bg-zawana-800 text-zawana-600'}`}
+      className={`zawana-badge inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold leading-4 ${good ? 'bg-emerald-50 text-emerald-800' : 'bg-zawana-800 text-zawana-600'}`}
     >
       {children}
     </span>
@@ -79,12 +86,39 @@ export function Stat({
   sub?: string
 }) {
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="zawana-stat p-5 sm:p-6">
       <p className="text-xs font-semibold tracking-wide text-zawana-500">{label}</p>
-      <p className="mt-2 text-3xl font-bold tracking-tight text-zawana-950 tabular-nums">{value}</p>
+      <p className="mt-2 text-3xl font-bold tracking-tight text-zawana-950 tabular-nums"><StatValue value={value} /></p>
       {sub && <p className="mt-1 text-sm leading-5 text-zawana-500">{sub}</p>}
     </Card>
   );
+}
+
+function StatValue({ value }: { value: string | number }) {
+  const reduced = useReducedMotion();
+  return <AnimatePresence initial={false} mode="popLayout">
+    <motion.span className="premium-stat-value" key={String(value)}
+      initial={reduced ? false : { opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+      exit={reduced ? undefined : { opacity: 0, y: -4 }}
+      transition={{ duration: motionTokens.popover, ease: motionTokens.ease }}>{value}</motion.span>
+  </AnimatePresence>;
+}
+
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`premium-skeleton ${className}`} aria-hidden="true" />;
+}
+
+export function PageSkeleton() {
+  return <div className="premium-loading" role="status" aria-label="Loading page">
+    <span className="sr-only">Loading page…</span>
+    <Skeleton className="h-3 w-28" /><Skeleton className="mt-4 h-8 w-2/3 max-w-sm" />
+    <div className="premium-loading__cards">{[0, 1, 2].map(i => <Card key={i} className="p-6">
+      <Skeleton className="h-3 w-24" /><Skeleton className="mt-5 h-8 w-20" /><Skeleton className="mt-4 h-3 w-3/4" />
+    </Card>)}</div>
+    <Card className="p-6"><Skeleton className="h-5 w-40" />
+      {[0, 1, 2, 3].map(i => <Skeleton key={i} className="mt-5 h-10 w-full" />)}
+    </Card>
+  </div>;
 }
 
 export function Pagination({
@@ -176,12 +210,13 @@ export function Page({
 
   return (
     <motion.main
-      initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-      animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-      transition={{ duration: .2, ease: 'easeOut' }}
-      className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 md:px-8 md:py-8"
+      initial={reduceMotion ? false : "hidden"}
+      animate="visible"
+      variants={pageEntrance}
+      className="workspace-page mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 md:px-8 md:py-8"
     >
-      <div className="mb-6 flex flex-col justify-between gap-4 sm:mb-8 md:flex-row md:items-end">
+      <div className="workspace-page__trail"><span>THE ART OF PERFORMANCE</span><Link to="/">Back to the arena <ArrowUpRight size={13} aria-hidden="true" /></Link></div>
+      <div className="workspace-page__heading mb-6 flex flex-col justify-between gap-4 sm:mb-8 md:flex-row md:items-end">
         <div className="min-w-0">
           {eyebrow &&
             <p className="mb-2 text-xs font-bold uppercase tracking-[.16em] text-zawana-accent">
@@ -208,7 +243,7 @@ export function Empty({
   action?: ReactNode
 }) {
   return (
-    <Card className="p-8 text-center sm:p-10">
+    <Card className="premium-empty p-8 text-center sm:p-10">
       <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-zawana-gold-soft text-zawana-accent">
         <Info size={21} aria-hidden="true" />
       </div>
@@ -243,6 +278,7 @@ export function Toast({
       initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={reduceMotion ? undefined : { opacity: 0, y: 8 }}
+      transition={{ duration: motionTokens.popover, ease: motionTokens.ease }}
       role={type === 'error' ? 'alert' : 'status'}
       aria-live={type === 'error' ? 'assertive' : 'polite'}
       className="fixed bottom-4 right-4 z-[120] w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-zawana-border bg-white shadow-[0_18px_50px_rgba(23,25,28,.16)] sm:bottom-6 sm:right-6"

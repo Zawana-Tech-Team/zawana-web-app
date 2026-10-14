@@ -16,15 +16,17 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 export function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <LocalizedTree>
-      <div className="grid min-h-screen bg-white lg:grid-cols-[1.05fr_.95fr]">
+      <div className="zawana-auth grid min-h-screen bg-white lg:grid-cols-[1.05fr_.95fr]">
         <section
-          className="hidden min-h-screen flex-col bg-zawana-page p-7 lg:flex xl:p-10"
+          className="auth-editorial hidden min-h-screen flex-col bg-zawana-page p-7 lg:flex xl:p-10"
           aria-label="Zawana sports arena"
         >
-          <Logo />
-          <figure className="relative mt-8 min-h-[560px] flex-1 overflow-hidden rounded-[28px] bg-zawana-950">
+          <div className="auth-editorial__brand"><Logo /></div>
+          <figure className="auth-editorial__photo relative mt-8 min-h-[560px] flex-1 overflow-hidden rounded-[28px] bg-zawana-950">
             <img
-              src="/facilities/court.webp"
+              src="/facilities/responsive/court-1920.webp"
+              srcSet="/facilities/responsive/court-1280.webp 1280w, /facilities/responsive/court-1920.webp 1920w"
+              sizes="50vw"
               alt="Badminton courts at the Zawana arena"
               width={2896}
               height={2172}
@@ -37,14 +39,14 @@ export function AuthShell({ title, children }: { title: string; children: ReactN
             />
             <figcaption className="absolute inset-x-8 bottom-8 text-white xl:inset-x-10 xl:bottom-10">
               <p className="eyebrow text-zawana-gold">Badminton · Training · Recovery</p>
-              <h2 className="mt-4 max-w-xl text-5xl font-bold leading-[.98] tracking-[-.055em] xl:text-6xl">Play with purpose. Grow together.</h2>
+              <h2 className="mt-4 max-w-xl text-5xl font-bold leading-[.98] tracking-[-.055em] xl:text-6xl">YOUR NEXT LEVEL STARTS HERE.</h2>
               <p className="mt-5 max-w-lg text-sm leading-6 text-white/80">A premium training environment for players, athletes, and people who love to move.</p>
             </figcaption>
           </figure>
-          <p className="pt-5 text-xs font-medium text-zawana-500">Yangon · Est. 2022</p>
+          <p className="auth-editorial__location pt-5 text-xs font-medium text-zawana-500">YANGON, MYANMAR / THE ART OF PERFORMANCE</p>
         </section>
 
-        <section className="flex min-h-screen items-center justify-center px-5 py-8 sm:px-8 md:py-10">
+        <section className="auth-form-panel flex min-h-screen items-center justify-center px-5 py-8 sm:px-8 md:py-10">
           <div className="w-full max-w-md">
             <div className="mb-8 flex items-center justify-between gap-3 lg:hidden">
               <Logo />

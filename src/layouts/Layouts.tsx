@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { LayoutGroup } from 'framer-motion';
+import { WorkspaceNavLink } from '../components/Interactions';
+import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
@@ -26,6 +28,8 @@ import { Logo } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from '../components/NotificationBell';
 import { LanguageSwitcher, LocalizedTree, useLanguage } from '../context/LanguageContext';
+import WorkspaceCover from '../components/WorkspaceCover';
+import { useWorkspaceNavigation } from '../components/useWorkspaceNavigation';
 
 type SidebarItem = readonly [string, string, LucideIcon];
 
@@ -84,10 +88,11 @@ function SidebarLinks({
   onNavigate?: () => void
 }) {
   const { t } = useLanguage();
+  const navigationId = useId();
   return (
-    <>
+    <LayoutGroup id={navigationId}>
       {items.map(([to, label, Icon]) => (
-        <NavLink
+        <WorkspaceNavLink
           key={to}
           to={to}
           end={to === '/member' || to === '/coach' || to === '/admin'}
@@ -99,10 +104,10 @@ function SidebarLinks({
           }
         >
           <Icon size={18} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />
-          {!collapsed && <span className="truncate">{t(label)}</span>}
-        </NavLink>
+          <span className="workspace-nav-label truncate" data-collapsed={collapsed} aria-hidden={collapsed}>{t(label)}</span>
+        </WorkspaceNavLink>
       ))}
-    </>
+    </LayoutGroup>
   );
 }
 
@@ -146,24 +151,17 @@ export function AppLayout({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { drawerRef, triggerRef } = useWorkspaceNavigation(mobileOpen, setMobileOpen);
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const items = role === 'admin' ? admin : role === 'coach' ? coach : member;
 
-  useEffect(() => {
-    if (!mobileOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMobileOpen(false);
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [mobileOpen]);
-
   return (
     <LocalizedTree>
-      <div className="min-h-screen bg-zawana-page text-zawana-950">
+      <div className="zawana-workspace min-h-screen bg-zawana-page text-zawana-950">
+        <a href="#main-content" className="workspace-skip">{t('Skip to content')}</a>
         <aside
-          className={`fixed inset-y-0 left-0 z-40 hidden border-r border-zawana-border bg-white lg:block ${collapsed ? 'w-[76px]' : 'w-[260px]'}`}
+          className={`workspace-sidebar fixed inset-y-0 left-0 z-40 hidden border-r border-zawana-border bg-white lg:block ${collapsed ? 'w-[76px]' : 'w-[260px]'}`}
         >
           <div className="flex h-full flex-col px-3 py-4">
             <div
@@ -243,7 +241,9 @@ export function AppLayout({
 
         <div
           aria-hidden={!mobileOpen}
-          className={`fixed inset-0 z-50 bg-zawana-950/30 lg:hidden ${mobileOpen ? 'block' : 'hidden'}`}
+          inert={!mobileOpen}
+          data-open={mobileOpen}
+          className="workspace-mobile-backdrop fixed inset-0 z-50 bg-zawana-950/30 lg:hidden"
         >
           <button
             type="button"
@@ -252,9 +252,12 @@ export function AppLayout({
             className="absolute inset-0 z-0 h-full w-full cursor-default"
           />
           <aside
+            ref={drawerRef}
             id="member-mobile-navigation"
+            role={mobileOpen ? 'dialog' : undefined}
+            aria-modal={mobileOpen ? true : undefined}
             aria-label="Mobile navigation"
-            className="relative z-10 flex h-full w-[min(320px,88vw)] flex-col bg-white p-4 shadow-2xl"
+            className="workspace-sidebar relative z-10 flex h-full w-[min(320px,88vw)] flex-col bg-white p-4 shadow-2xl"
           >
             <div className="flex h-12 items-center justify-between px-1">
               <Logo />
@@ -294,9 +297,10 @@ export function AppLayout({
           </aside>
         </div>
 
-        <div className={`min-h-screen ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[260px]'}`}>
-          <header className="sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-zawana-border bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+        <div className={`workspace-main min-h-screen ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[260px]'}`}>
+          <header className="workspace-header sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-zawana-border bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
             <button
+              ref={triggerRef}
               type="button"
               aria-label={t('Open navigation')}
               aria-expanded={mobileOpen}
@@ -331,7 +335,7 @@ export function AppLayout({
               </NavLink>
             </div>
           </header>
-          <div id="main-content">{children}</div>
+          <div id="main-content" tabIndex={-1}><WorkspaceCover role={role} />{children}</div>
         </div>
       </div>
     </LocalizedTree>

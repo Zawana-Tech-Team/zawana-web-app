@@ -1,3 +1,7 @@
+import { useDialog } from '../components/Interactions';
+import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
+import { motionTokens } from '../design/motion';
+import { Select } from '../components/Select';
 import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
@@ -32,13 +36,22 @@ function Modal({
   children: React.ReactNode;
   onClose: () => void
 }) {
-  return <div
-    className="fixed inset-0 z-[100] flex items-center justify-center bg-zawana-950/55 p-4 backdrop-blur-md"
+  const dialogRef = useDialog(onClose);
+  const reduced = useReducedMotion();
+  return <motion.div
+    initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    transition={{ duration: motionTokens.popover }}
+    className="premium-dialog-backdrop fixed inset-0 z-[100] flex items-center justify-center bg-zawana-950/55 p-4"
     onMouseDown={e => {
       if (e.target === e.currentTarget) onClose()
     }}
   >
-    <div className="w-full max-w-2xl overflow-hidden rounded-[30px] border border-white/50 bg-white shadow-[0_35px_100px_rgba(29,27,71,.28)]">
+    <motion.div
+      ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
+      initial={reduced ? false : { opacity: 0, y: 16, scale: .98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .99 }}
+      transition={reduced ? { duration: 0 } : motionTokens.spring}
+      className="premium-dialog-panel premium-dialog-panel--control w-full max-w-2xl overflow-hidden rounded-[30px] border border-white/50 bg-white shadow-[0_35px_100px_rgba(29,27,71,.28)]">
       <div className="relative overflow-hidden bg-zawana-950 px-6 py-5 text-white">
         <div className="absolute -right-12 -top-16 h-40 w-40 rounded-full border border-zawana-gold/30" />
         <div className="relative flex items-start justify-between gap-4">
@@ -48,6 +61,7 @@ function Modal({
             {subtitle && <p className="mt-1 text-sm text-white/55">{subtitle}</p>}
           </div>
           <button
+            type="button" aria-label="Close dialog"
             onClick={onClose}
             className="grid h-10 w-10 place-items-center rounded-full bg-white/10 hover:bg-white/20"
           >
@@ -56,8 +70,8 @@ function Modal({
         </div>
       </div>
       <div className="max-h-[75vh] overflow-y-auto p-6">{children}</div>
-    </div>
-  </div>
+    </motion.div>
+  </motion.div>
 }
 
 const Field = ({ label, ...p }: any) =>
@@ -68,7 +82,7 @@ const Field = ({ label, ...p }: any) =>
 const SelectField = ({ label, children, ...p }: any) =>
   <label className="block space-y-1.5 text-sm">
     <span className="text-[11px] font-black uppercase tracking-wider text-zawana-500">{label}</span>
-    <select {...p}>{children}</select>
+    <Select {...p}>{children}</Select>
   </label>;
 
 function ConfirmDelete({
@@ -208,7 +222,7 @@ export function AdminManagement({ section }: { section: Section }) {
       </Button>
     }
   >
-    {notice && <Toast message={notice} onClose={() => setNotice("")} />}
+    <AnimatePresence>{notice && <Toast message={notice} onClose={() => setNotice("")} />}</AnimatePresence>
     <div className="mb-6 flex flex-col gap-3 md:flex-row">
       <div className="relative flex-1">
         <Search size={16} className="absolute left-4 top-3.5 text-zawana-500" />
@@ -292,7 +306,7 @@ export function AdminManagement({ section }: { section: Section }) {
       onPage={setPage}
     />
 
-    {open &&
+    <AnimatePresence>{open &&
       <Modal
         title={`${editing ? "Edit" : "Create"} ${section === "courts" ? "court" : "coach"}`}
         subtitle={
@@ -405,9 +419,9 @@ export function AdminManagement({ section }: { section: Section }) {
             {saving ? "Saving…" : editing ? "Save changes" : "Create record"}
           </Button>
         </div>
-      </Modal>}
-    {deleting &&
-      <ConfirmDelete name={deleting.name} onCancel={() => setDeleting(null)} onConfirm={remove} />}
+      </Modal>}</AnimatePresence>
+    <AnimatePresence>{deleting &&
+      <ConfirmDelete name={deleting.name} onCancel={() => setDeleting(null)} onConfirm={remove} />}</AnimatePresence>
   </Page>
 }
 

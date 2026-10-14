@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
+import { useInView } from 'framer-motion';
 
 const partners = [
   {
@@ -51,7 +52,11 @@ function LogoLink({ partner }: { partner: (typeof partners)[number] }) {
 
 export default function PartnersCarousel() {
   const [touchPaused, setTouchPaused] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+  const inView = useInView(sectionRef);
   const resumeTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(resumeTimer.current), []);
 
   const pauseForTouch = () => {
     window.clearTimeout(resumeTimer.current);
@@ -65,8 +70,9 @@ export default function PartnersCarousel() {
 
   return (
     <section
+      ref={sectionRef}
       aria-labelledby="trusted-partners-heading"
-      className="mt-14 border-y border-zawana-border bg-white py-10 sm:mt-16 sm:py-12"
+      className="partners-section mt-14 border-y border-zawana-border bg-white py-10 sm:mt-16 sm:py-12"
     >
       <div className="mx-auto max-w-[1440px] px-5 md:px-10">
         <div className="text-center">
@@ -82,6 +88,9 @@ export default function PartnersCarousel() {
           </p>
         </div>
 
+        <button type="button" aria-pressed={paused} onClick={() => setPaused(value => !value)} className="mx-auto mt-4 block min-h-11 border-b border-zawana-border px-3 text-xs text-zawana-600 focus-visible:outline-2 focus-visible:outline-zawana-gold">
+          {paused ? 'Resume partner animation' : 'Pause partner animation'}
+        </button>
         <div
           className={`partners-marquee relative mt-7 ${touchPaused ? 'partners-marquee--touch-paused' : ''}`}
           onTouchStart={pauseForTouch}
@@ -90,7 +99,7 @@ export default function PartnersCarousel() {
         >
           <div
             className="partners-marquee__track"
-            style={{ animationDuration: `${partners.length * 8}s` }}
+            style={{ animationDuration: `${partners.length * 8}s`, animationPlayState: paused || !inView ? 'paused' : undefined }}
           >
             <div className="partners-marquee__group" aria-label="Partner websites">
               {partners.map(partner =>

@@ -1,3 +1,6 @@
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { popoverMotion } from '../design/motion';
+import { Skeleton } from './UI';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, Volume2, VolumeX, X } from 'lucide-react';
@@ -6,6 +9,9 @@ import { useAuth } from '../context/AuthContext';
 import { LocalizedTree, useLanguage } from '../context/LanguageContext';
 
 export function NotificationBell() {
+  const reduced = useReducedMotion();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
   const { t, locale } = useLanguage();
   const [items, setItems] = useState<any[]>([]),
     [open, setOpen] = useState(false),
@@ -67,6 +73,15 @@ export function NotificationBell() {
       window.clearInterval(timer)
     }
   }, [sound]);
+  useEffect(() => {
+    if (!open) return;
+    panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setOpen(false); trigger.current?.focus(); }
+    };
+    document.addEventListener('keydown', dismiss);
+    return () => document.removeEventListener('keydown', dismiss);
+  }, [open]);
   const toggleSound = () => {
     const next = !sound;
     setSound(next);
@@ -110,6 +125,7 @@ export function NotificationBell() {
   return <LocalizedTree>
     <div className="relative">
       <button
+        ref={trigger} type="button" aria-expanded={open} aria-controls={open ? "notification-panel" : undefined}
         aria-label={`${t('Notifications')}${unread ? `, ${t(`${unread} unread`)}` : ''}`}
         onClick={() => setOpen(v => !v)}
         className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-zawana-950/5"
@@ -120,14 +136,17 @@ export function NotificationBell() {
             {unread > 9 ? '9+' : unread}
           </span>}
       </button>
-      {open &&
+      <AnimatePresence>{open &&
         <>
           <button
             aria-label="Close notifications"
             className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <section className="absolute right-0 top-12 z-50 w-[min(92vw,390px)] overflow-hidden rounded-2xl border border-zawana-950/10 bg-white shadow-2xl">
+          <motion.section ref={panel} id="notification-panel" aria-label="Notifications"
+            {...popoverMotion} initial={reduced ? false : popoverMotion.initial}
+            transition={reduced ? { duration: 0 } : popoverMotion.transition}
+            className="premium-popover absolute right-0 top-12 z-50 w-[min(92vw,390px)] overflow-hidden rounded-2xl border border-zawana-950/10 bg-white shadow-2xl">
             <header className="flex items-center justify-between border-b p-4">
               <div>
                 <h2 className="font-black">Notifications</h2>
@@ -245,8 +264,8 @@ export function NotificationBell() {
                 <div className="p-8 text-center text-sm text-zawana-500">
                   <Check className="mx-auto mb-2" />No active notifications.</div>}
             </div>
-          </section>
-        </>}
+          </motion.section>
+        </>}</AnimatePresence>
     </div>
   </LocalizedTree>
 }

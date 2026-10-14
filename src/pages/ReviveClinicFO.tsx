@@ -1,3 +1,6 @@
+import { AnimatePresence } from 'framer-motion';
+import { DialogSurface } from '../components/Interactions';
+import { Select } from '../components/Select';
 import type { FormEvent, JSXElementConstructor, ReactElement, ReactNode, ReactPortal } from 'react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -396,7 +399,7 @@ export function ReviveClinicFO() {
         />
       )}
 
-      {showScheduleForm && (
+      <AnimatePresence>{showScheduleForm && (
         <Modal
           title="Schedule appointment"
           eyebrow="Front desk"
@@ -405,7 +408,7 @@ export function ReviveClinicFO() {
           <form onSubmit={handleSchedule} className="space-y-5">
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Customer">
-                <select
+                <Select
                   value={scheduleMemberId}
                   onChange={e => setScheduleMemberId(e.target.value)}
                   className={inputClass}
@@ -415,10 +418,10 @@ export function ReviveClinicFO() {
                       {member.name} · {member.code}
                     </option>
                   )}
-                </select>
+                </Select>
               </Field>
               <Field label="Service">
-                <select
+                <Select
                   value={scheduleService}
                   onChange={e => selectService(e.target.value)}
                   className={inputClass}
@@ -426,10 +429,10 @@ export function ReviveClinicFO() {
                   {services.map(service =>
                     <option key={service.name} value={service.name}>
                       {service.name} · {service.price.toLocaleString()} MMK</option>)}
-                </select>
+                </Select>
               </Field>
               <Field label="Practitioner">
-                <select
+                <Select
                   value={schedulePractitioner}
                   onChange={e => setSchedulePractitioner(e.target.value)}
                   className={inputClass}
@@ -439,7 +442,7 @@ export function ReviveClinicFO() {
                       {practitioner.name} · {practitioner.role}
                     </option>
                   )}
-                </select>
+                </Select>
               </Field>
               <Field label="Date">
                 <input
@@ -481,9 +484,9 @@ export function ReviveClinicFO() {
             />
           </form>
         </Modal>
-      )}
+      )}</AnimatePresence>
 
-      {showVisitForm && (
+      <AnimatePresence>{showVisitForm && (
         <Modal
           title="Record treatment"
           eyebrow="Customer record"
@@ -499,28 +502,28 @@ export function ReviveClinicFO() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Treatment">
-                <select name="treatment" className={inputClass}>
+                <Select name="treatment" className={inputClass}>
                   {services.map(service =>
                     <option key={service.name}>{service.name}</option>
                   )}
-                </select>
+                </Select>
               </Field>
               <Field label="Practitioner">
-                <select name="practitioner" className={inputClass}>
+                <Select name="practitioner" className={inputClass}>
                   {practitioners.map(practitioner =>
                     <option key={practitioner.name}>{practitioner.name}</option>
                   )}
-                </select>
+                </Select>
               </Field>
               <Field label="Date">
                 <input name="date" type="date" defaultValue={today} className={inputClass} />
               </Field>
               <Field label="Visit status">
-                <select name="status" className={inputClass}>
+                <Select name="status" className={inputClass}>
                   <option>Completed</option>
                   <option>Checked in</option>
                   <option>Scheduled</option>
-                </select>
+                </Select>
               </Field>
             </div>
             <Field label="Treatment notes">
@@ -538,7 +541,7 @@ export function ReviveClinicFO() {
             />
           </form>
         </Modal>
-      )}
+      )}</AnimatePresence>
     </Page>
   );
 }
@@ -573,8 +576,8 @@ function Modal({
   children: ReactNode
 }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-zawana-950/40 p-4 backdrop-blur-sm">
-      <Card className="max-h-[92vh] w-full max-w-2xl overflow-y-auto p-6 shadow-2xl">
+    <DialogSurface title={title} onClose={onClose} className="w-full max-w-2xl overflow-y-auto bg-white p-6">
+
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-zawana-accent">
@@ -582,13 +585,12 @@ function Modal({
             </p>
             <h2 className="mt-1 text-2xl font-black">{title}</h2>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2 hover:bg-zawana-950/5">
+          <button type="button" aria-label="Close dialog" onClick={onClose} className="rounded-xl p-2 hover:bg-zawana-950/5">
             <X size={19} />
           </button>
         </div>
         {children}
-      </Card>
-    </div>
+    </DialogSurface>
   );
 }
 

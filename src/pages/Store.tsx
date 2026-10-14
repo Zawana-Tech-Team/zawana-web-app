@@ -17,7 +17,7 @@ export function Store() {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {products.map(p =>
         <Card key={p.id} className="overflow-hidden">
-          <div className="grid h-48 place-items-center bg-zawana-950/4 text-6xl font-black text-zawana-950/10">Z</div>
+          <div className="grid h-48 place-items-center bg-zawana-950/4 text-zawana-950/25"><ShoppingBag size={54} strokeWidth={1} aria-hidden="true" /></div>
           <div className="p-5">
             <p className="text-xs text-zawana-500">{p.category}</p>
             <h3 className="mt-1 font-black">{p.name}</h3>

@@ -1,3 +1,4 @@
+import { PageSkeleton } from './components/UI';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 // @ts-expect-error ScrollToTop is a JSX module without a TypeScript declaration.
@@ -7,7 +8,6 @@ import { AppLayout } from './layouts/Layouts';
 import { useAuth } from './context/AuthContext';
 import type { UserRole } from './types';
 import { classes, courts } from './data';
-import { useLanguage } from './context/LanguageContext';
 
 const Generic = lazy(() => import('./pages/Generic').then(module => ({ default: module.Generic })));
 const Home = lazy(() => import('./pages/Home').then(module => ({ default: module.Home })));
@@ -88,22 +88,7 @@ const PaymentStatus = lazy(() =>
 );
 const MemberTraining = lazy(() => import('./pages/MemberTraining'));
 
-function RouteLoading() {
-  const { t } = useLanguage();
-  return <div
-    className="grid min-h-[60vh] place-items-center bg-zawana-page px-5"
-    role="status"
-    aria-live="polite"
-  >
-    <span className="flex items-center gap-3 text-sm font-medium text-zawana-500">
-      <span
-        aria-hidden="true"
-        className="h-5 w-5 animate-spin rounded-full border-2 border-zawana-border border-t-zawana-accent"
-      />
-      {t('Loading page…')}
-    </span>
-  </div>;
-}
+function RouteLoading() { return <PageSkeleton />; }
 
 const homeByRole: Record<UserRole, string> = {
   member: '/member',

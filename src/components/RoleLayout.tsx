@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { LayoutGroup } from 'framer-motion';
+import { WorkspaceNavLink } from './Interactions';
+import { useId, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -28,6 +30,8 @@ import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
 import { LanguageSwitcher, LocalizedTree, useLanguage } from '../context/LanguageContext';
 import type { UserRole } from '../types';
+import WorkspaceCover from './WorkspaceCover';
+import { useWorkspaceNavigation } from './useWorkspaceNavigation';
 
 type Item = { to: string; label: string; icon: LucideIcon };
 type RoleConfig = { label: string; eyebrow: string; items: Item[] };
@@ -155,9 +159,10 @@ function initials(name?: string | null) {
 
 function NavItems({ items, onNavigate }: { items: Item[]; onNavigate?: () => void }) {
   const { t } = useLanguage();
-  return <>
+  const navigationId = useId();
+  return <LayoutGroup id={navigationId}>
     {items.map(({ to, label, icon: Icon }) => (
-      <NavLink
+      <WorkspaceNavLink
         key={to}
         to={to}
         end
@@ -173,9 +178,9 @@ function NavItems({ items, onNavigate }: { items: Item[]; onNavigate?: () => voi
           aria-hidden="true"
           className="shrink-0 text-zawana-400 transition group-hover:translate-x-0.5 group-hover:text-zawana-600"
         />
-      </NavLink>
+      </WorkspaceNavLink>
     ))}
-  </>;
+  </LayoutGroup>;
 }
 
 export default function RoleLayout({
@@ -187,16 +192,20 @@ export default function RoleLayout({
 }) {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { drawerRef, triggerRef } = useWorkspaceNavigation(mobileOpen, setMobileOpen);
   const { t } = useLanguage();
   const config = configs[role];
   const notificationPath = `${config.items[0].to}/notifications`;
 
   return (
     <LocalizedTree>
-      <div className="min-h-screen bg-zawana-page text-zawana-950">
+      <div className="zawana-workspace min-h-screen bg-zawana-page text-zawana-950">
+        <a href="#main-content" className="workspace-skip">{t('Skip to content')}</a>
         <div
           aria-hidden={!mobileOpen}
-          className={`fixed inset-0 z-50 bg-zawana-950/30 lg:hidden ${mobileOpen ? 'block' : 'hidden'}`}
+          inert={!mobileOpen}
+          data-open={mobileOpen}
+          className="workspace-mobile-backdrop fixed inset-0 z-50 bg-zawana-950/30 lg:hidden"
         >
           <button
             type="button"
@@ -205,9 +214,12 @@ export default function RoleLayout({
             className="absolute inset-0 z-0 h-full w-full cursor-default"
           />
           <aside
+            ref={drawerRef}
             id="role-mobile-navigation"
+            role={mobileOpen ? 'dialog' : undefined}
+            aria-modal={mobileOpen ? true : undefined}
             aria-label="Mobile navigation"
-            className="relative z-10 flex h-full w-[min(320px,88vw)] flex-col border-r border-zawana-border bg-white p-4 shadow-2xl"
+            className="workspace-sidebar relative z-10 flex h-full w-[min(320px,88vw)] flex-col border-r border-zawana-border bg-white p-4 shadow-2xl"
           >
             <div className="flex h-12 items-center justify-between px-1">
               <Logo />
@@ -276,7 +288,7 @@ export default function RoleLayout({
           </aside>
         </div>
 
-        <aside className="fixed inset-y-0 left-0 z-40 hidden w-[260px] flex-col border-r border-zawana-border bg-white lg:flex">
+        <aside className="workspace-sidebar fixed inset-y-0 left-0 z-40 hidden w-[260px] flex-col border-r border-zawana-border bg-white lg:flex">
           <div className="flex h-[68px] items-center border-b border-zawana-border px-5">
             <Logo />
           </div>
@@ -334,9 +346,10 @@ export default function RoleLayout({
           </div>
         </aside>
 
-        <div className="min-h-screen lg:pl-[260px]">
-          <header className="sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-zawana-border bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+        <div className="workspace-main min-h-screen lg:pl-[260px]">
+          <header className="workspace-header sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-zawana-border bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
             <button
+              ref={triggerRef}
               type="button"
               aria-label={t('Open navigation')}
               aria-expanded={mobileOpen}
@@ -370,7 +383,7 @@ export default function RoleLayout({
               </div>
             </div>
           </header>
-          <div id="main-content">{children}</div>
+          <div id="main-content" tabIndex={-1}><WorkspaceCover role={role} />{children}</div>
         </div>
       </div>
     </LocalizedTree>

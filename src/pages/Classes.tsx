@@ -1,3 +1,4 @@
+import ServiceIntro from '../components/ServiceIntro';
 import type { ReactNode, FormEvent } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -22,6 +23,7 @@ import OptimizedImage from '../components/OptimizedImage';
 export function Classes() {
   const [booked, setBooked] = useState<string[]>([]);
   return <Page title="Classes" eyebrow="Train together">
+    <ServiceIntro image="gx-studio" label="MOVEMENT / COMMUNITY" title="Find your kind of movement." body="A studio for training together, finding your rhythm, and making progress." />
     <div className="grid gap-4 md:grid-cols-3">
       {classes.map(c =>
         <Card key={c.id} className="p-6">

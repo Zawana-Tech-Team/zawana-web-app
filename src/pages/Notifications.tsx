@@ -1,3 +1,4 @@
+import { SegmentedControl } from '../components/Interactions';
 import {
   Activity,
   Bell,
@@ -190,18 +191,9 @@ export function Notifications() {
             {error}
           </p>}
         <div className="flex items-center justify-between border-b border-zawana-950/8 p-4 sm:p-5">
-          <div className="flex rounded-xl bg-zawana-950/5 p-1">
-            <button
-              onClick={() => setFilter('all')}
-              className={`rounded-lg px-3 py-2 text-xs font-black transition ${filter === 'all' ? 'bg-white shadow-sm' : 'text-zawana-500'}`}
-            >All <span className="ml-1 opacity-60">{roleNotifications.length}</span>
-            </button>
-            <button
-              onClick={() => setFilter('unread')}
-              className={`rounded-lg px-3 py-2 text-xs font-black transition ${filter === 'unread' ? 'bg-white shadow-sm' : 'text-zawana-500'}`}
-            >Unread <span className="ml-1 opacity-60">{unreadCount}</span>
-            </button>
-          </div>
+          <SegmentedControl value={filter} onChange={setFilter} label="Notification filter"
+            options={[{ value: 'all', label: `All · ${roleNotifications.length}` }, { value: 'unread', label: `Unread · ${unreadCount}` }]} />
+
         </div>
 
         {visibleNotifications.length > 0 ? (

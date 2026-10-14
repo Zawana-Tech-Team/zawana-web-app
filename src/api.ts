@@ -17,11 +17,34 @@ export function getToken() {
   return token;
 }
 
+let refreshFlight: Promise<void> | null = null;
+
+async function refreshSession() {
+  if (!refreshFlight) {
+    refreshFlight = (async () => {
+      const result = await api<AuthResponse>('/auth/refresh', {
+        method: 'POST',
+        body: '{}'
+      });
+      setToken(result.accessToken || result.token);
+    })().finally(() => { refreshFlight = null; });
+  }
+  await refreshFlight;
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && options.body) headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const sentToken = token;
+  const explicitAuthorization = headers.has('Authorization');
+  if (sentToken && !explicitAuthorization) headers.set("Authorization", `Bearer ${sentToken}`);
+  let response = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include', ...options, headers });
+  if (response.status === 401 && sentToken && !explicitAuthorization && (!path.startsWith('/auth/') || path === '/auth/me' || path === '/auth/mfa/status')) {
+    // Concurrent requests share one rotation; a late 401 uses the already refreshed token.
+    if (token === sentToken) await refreshSession();
+    headers.set('Authorization', `Bearer ${token}`);
+    response = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include', ...options, headers });
+  }
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     const message = data?.message || `Request failed (${response.status})`;
@@ -50,4 +73,4 @@ export const del = (path: string, body?: unknown) =>
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
 
-export type AuthResponse = { user: User };
+export type AuthResponse = { user: User; accessToken: string; token: string };

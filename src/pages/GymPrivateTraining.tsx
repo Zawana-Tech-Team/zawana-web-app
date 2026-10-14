@@ -1,3 +1,4 @@
+import { Select } from '../components/Select';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Check, Clock3, Dumbbell, Search, UserRound } from "lucide-react";
 import { Badge, Button, Card, Empty, Pagination } from "../components/UI";
@@ -143,7 +144,7 @@ export default function GymPrivateTraining() {
               }}
             />
           </span>
-          <select
+          <Select
             required
             className="mt-2 w-full"
             value={form.memberId}
@@ -155,10 +156,10 @@ export default function GymPrivateTraining() {
                 {member.name} · {member.email}
               </option>
             )}
-          </select>
+          </Select>
         </label>
         <label className="text-xs font-black uppercase tracking-wider text-zawana-500">Gym Coach
-          <select
+          <Select
             required
             className="mt-2 w-full"
             value={form.coachId}
@@ -170,7 +171,7 @@ export default function GymPrivateTraining() {
                 {coach.name} · {coach.specialty}
               </option>
             )}
-          </select>
+          </Select>
           {selectedCoach &&
             <span className="mt-2 flex items-center gap-2 rounded-xl bg-zawana-50 p-2 text-xs font-bold normal-case tracking-normal text-zawana-700">
               {selectedCoach.imageUrl || selectedCoach.user?.avatar ?
@@ -206,7 +207,7 @@ export default function GymPrivateTraining() {
             onChange={event => setForm({ ...form, startTime: event.target.value })}
           />
         </label>
-        <label className="text-xs font-black uppercase tracking-wider text-zawana-500">Duration<select
+        <label className="text-xs font-black uppercase tracking-wider text-zawana-500">Duration<Select
             className="mt-2 w-full"
             value={form.durationMinutes}
             onChange={event => setForm({ ...form, durationMinutes: Number(event.target.value) })}
@@ -215,7 +216,7 @@ export default function GymPrivateTraining() {
               <option key={minutes} value={minutes}>
                 {minutes} minutes</option>
             )}
-          </select>
+          </Select>
         </label>
         <label className="text-xs font-black uppercase tracking-wider text-zawana-500 md:col-span-2 xl:col-span-1">Notes<textarea
             maxLength={1000}

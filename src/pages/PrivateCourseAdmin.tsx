@@ -1,3 +1,5 @@
+import { SegmentedControl, SelectionContent } from '../components/Interactions';
+import { Select } from '../components/Select';
 import { useEffect, useState } from 'react';
 import {
   Pencil,
@@ -103,7 +105,7 @@ export function PrivateCourseAdmin() {
   const visibleItems = items.filter(c =>
     `${c.title} ${c.category} ${c.description || ''}`.toLowerCase().includes(query.toLowerCase())
   );
-  return <Page title="Private course management" eyebrow="Administration Â· Badminton">
+  return <Page title="Private course management" eyebrow="Administration · Badminton">
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 className="text-2xl font-black">Private courses</h2>
@@ -117,18 +119,9 @@ export function PrivateCourseAdmin() {
       >
         <Plus size={16} /> New course</Button>
     </div>
-    <div className="mb-6 flex gap-2 border-b">
-      {(['catalog', 'requests'] as const).map(t =>
-        <button
-          key={t}
-          onClick={() => setActiveTab(t)}
-          className={`border-b-2 px-4 py-3 text-sm font-bold capitalize ${activeTab === t ? 'border-zawana-gold text-zawana-950' : 'border-transparent text-zawana-500'}`}
-        >
-          {t === 'catalog' ? `Course catalog Â· ${items.length}` : 'Booking requests'}
-        </button>
-      )}
-    </div>
-    {activeTab === 'requests' ?
+    <SegmentedControl value={activeTab} onChange={setActiveTab} label="Course views" className="mb-6 w-fit"
+      options={[{ value: 'catalog', label: `Course catalog · ${items.length}` }, { value: 'requests', label: 'Booking requests' }]} />
+    <SelectionContent value={activeTab}>{activeTab === 'requests' ?
       <PrivateCourseRequests coaches={coaches} /> :
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <section>
@@ -288,7 +281,7 @@ export function PrivateCourseAdmin() {
                   onChange={e => setForm({ ...form, category: e.target.value })}
                 />
               </label>
-              <label className="text-xs font-bold">Duration Â· minutes<input
+              <label className="text-xs font-bold">Duration · minutes<input
                   className="mt-1 w-full"
                   type="number"
                   min={30}
@@ -299,7 +292,7 @@ export function PrivateCourseAdmin() {
                 />
               </label>
             </div>
-            <label className="block text-xs font-bold">Price Â· MMK<input
+            <label className="block text-xs font-bold">Price · MMK<input
                 className="mt-1 w-full"
                 type="number"
                 min={0}
@@ -418,14 +411,14 @@ export function PrivateCourseAdmin() {
                 onClick={save}
                 className="flex-1"
               >
-                {busy ? 'Savingâ€¦' : editing ? 'Save changes' : 'Create course'}
+                {busy ? 'Saving…' : editing ? 'Save changes' : 'Create course'}
               </Button>
               {editing &&
                 <Button variant="secondary" onClick={() => start()}>Cancel</Button>}
             </div>
           </div>
         </Card>
-      </div>}
+      </div>}</SelectionContent>
   </Page>
 }
 
@@ -490,7 +483,7 @@ function PrivateCourseRequests({ coaches }: { coaches: any[] }) {
           value={filters.q}
           onChange={e => change('q', e.target.value)}
         />
-        <select
+        <Select
           aria-label="Booking status"
           value={filters.status}
           onChange={e => change('status', e.target.value)}
@@ -509,8 +502,8 @@ function PrivateCourseRequests({ coaches }: { coaches: any[] }) {
               {status(x)}
             </option>
           )}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Coach"
           value={filters.coachId}
           onChange={e => change('coachId', e.target.value)}
@@ -521,7 +514,7 @@ function PrivateCourseRequests({ coaches }: { coaches: any[] }) {
               {c.name}
             </option>
           )}
-        </select>
+        </Select>
         <input
           type="date"
           aria-label="From date"
