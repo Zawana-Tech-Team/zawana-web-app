@@ -1,3 +1,4 @@
+import { Select } from '../components/Select';
 import { useEffect, useState } from "react";
 import { CreditCard, ReceiptText, Search } from "lucide-react";
 import { Badge, Button, Card, Empty, Page, Pagination } from "../components/UI";
@@ -69,7 +70,7 @@ export default function PaymentHistory() {
             onChange={e => setSearch(e.target.value)}
           />
         </label>
-        <select
+        <Select
           aria-label="Filter payment status"
           value={status}
           onChange={e => {
@@ -81,7 +82,7 @@ export default function PaymentHistory() {
           <option value="paid">Paid</option>
           <option value="pending">Pending</option>
           <option value="refunded">Refunded</option>
-        </select>
+        </Select>
         <input
           aria-label="From date"
           type="date"

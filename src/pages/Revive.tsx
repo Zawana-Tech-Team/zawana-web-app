@@ -1,3 +1,4 @@
+import { Select } from '../components/Select';
 import { useState } from 'react';
 import { CalendarDays, Check, Clock3, HeartPulse, X,
 } from 'lucide-react';
@@ -209,7 +210,7 @@ export function Revive() {
               <label className="block text-sm font-bold">
                 Practitioner
 
-                <select
+                <Select
                   value={form.practitioner}
                   onChange={(event) =>
                     setForm({
@@ -222,7 +223,7 @@ export function Revive() {
                   {practitioners.map((person) => (
                     <option key={person.name}>{person.name}</option>
                   ))}
-                </select>
+                </Select>
               </label>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -252,7 +253,7 @@ export function Revive() {
                   <div className="mt-2 flex items-center rounded-xl border border-zawana-950/10 px-3">
                     <Clock3 size={16} />
 
-                    <select
+                    <Select
                       value={form.time}
                       onChange={(event) =>
                         setForm({
@@ -265,7 +266,7 @@ export function Revive() {
                       {timeSlots.map((time) => (
                         <option key={time}>{time}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 </label>
               </div>

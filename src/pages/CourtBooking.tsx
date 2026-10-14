@@ -1,3 +1,5 @@
+import { DialogSurface } from '../components/Interactions';
+import { AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -287,7 +289,7 @@ export function CourtBooking() {
           </div>
         </div>
       </Card>
-      {toast && <Toast message={toast} onClose={() => setToast("")} />}
+      <AnimatePresence>{toast && <Toast message={toast} onClose={() => setToast("")} />}</AnimatePresence>
     </Page>;
 
   return <Page
@@ -572,23 +574,9 @@ export function CourtBooking() {
         </Card>
       </div>
     </div>
-    {checkoutOpen &&
-      <div
-        className="fixed inset-0 z-[110] flex justify-end bg-zawana-950/45 backdrop-blur-[2px]"
-        role="presentation"
-        onMouseDown={e => {
-          if (e.target === e.currentTarget) setCheckoutOpen(false)
-        }}
-      >
-        <motion.section
-          initial={{ x: '100%' }}
-          animate={{ x: 0 }}
-          transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="mobile-checkout-title"
-          className="flex h-full w-full max-w-md flex-col bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl"
-        >
+    <AnimatePresence>{checkoutOpen &&
+      <DialogSurface title="Review checkout" labelledBy="mobile-checkout-title" drawer onClose={() => setCheckoutOpen(false)}
+        className="flex h-full w-full max-w-md flex-col bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl">
           <header className="flex items-center justify-between border-b p-5">
             <div>
               <p className="eyebrow text-zawana-accent">COURT RENTAL</p>
@@ -660,9 +648,8 @@ export function CourtBooking() {
             </Button>
             <p className="mt-3 text-center text-[11px] leading-5 text-zawana-500">Availability is rechecked before the existing booking confirmation runs.</p>
           </footer>
-        </motion.section>
-      </div>}
-    {toast &&
-      <Toast message={toast} type={error ? "error" : "success"} onClose={() => setToast("")} />}
+      </DialogSurface>}</AnimatePresence>
+    <AnimatePresence>{toast &&
+      <Toast message={toast} type={error ? "error" : "success"} onClose={() => setToast("")} />}</AnimatePresence>
   </Page>;
 }

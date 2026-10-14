@@ -1,3 +1,4 @@
+import { MotionConfig } from 'framer-motion';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -5,6 +6,8 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 // @ts-ignore CSS is loaded by the bundler.
 import './styles/workspace.css';
+// @ts-ignore CSS is loaded by the bundler.
+import './styles/premium.css';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
@@ -12,7 +15,7 @@ import { OperationsProvider } from './context/OperationsContext';
 import { LanguageProvider } from './context/LanguageContext';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <MotionConfig reducedMotion="user"><BrowserRouter>
       <AuthProvider>
         <AppProvider>
           <OperationsProvider>
@@ -22,6 +25,6 @@ createRoot(document.getElementById('root')!).render(
           </OperationsProvider>
         </AppProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </BrowserRouter></MotionConfig>
   </StrictMode>
 );

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { LayoutGroup } from 'framer-motion';
+import { WorkspaceNavLink } from '../components/Interactions';
+import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
@@ -86,10 +88,11 @@ function SidebarLinks({
   onNavigate?: () => void
 }) {
   const { t } = useLanguage();
+  const navigationId = useId();
   return (
-    <>
+    <LayoutGroup id={navigationId}>
       {items.map(([to, label, Icon]) => (
-        <NavLink
+        <WorkspaceNavLink
           key={to}
           to={to}
           end={to === '/member' || to === '/coach' || to === '/admin'}
@@ -101,10 +104,10 @@ function SidebarLinks({
           }
         >
           <Icon size={18} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />
-          {!collapsed && <span className="truncate">{t(label)}</span>}
-        </NavLink>
+          <span className="workspace-nav-label truncate" data-collapsed={collapsed} aria-hidden={collapsed}>{t(label)}</span>
+        </WorkspaceNavLink>
       ))}
-    </>
+    </LayoutGroup>
   );
 }
 
@@ -156,6 +159,7 @@ export function AppLayout({
   return (
     <LocalizedTree>
       <div className="zawana-workspace min-h-screen bg-zawana-page text-zawana-950">
+        <a href="#main-content" className="workspace-skip">{t('Skip to content')}</a>
         <aside
           className={`workspace-sidebar fixed inset-y-0 left-0 z-40 hidden border-r border-zawana-border bg-white lg:block ${collapsed ? 'w-[76px]' : 'w-[260px]'}`}
         >
@@ -237,7 +241,9 @@ export function AppLayout({
 
         <div
           aria-hidden={!mobileOpen}
-          className={`fixed inset-0 z-50 bg-zawana-950/30 lg:hidden ${mobileOpen ? 'block' : 'hidden'}`}
+          inert={!mobileOpen}
+          data-open={mobileOpen}
+          className="workspace-mobile-backdrop fixed inset-0 z-50 bg-zawana-950/30 lg:hidden"
         >
           <button
             type="button"
@@ -329,7 +335,7 @@ export function AppLayout({
               </NavLink>
             </div>
           </header>
-          <div id="main-content"><WorkspaceCover role={role} />{children}</div>
+          <div id="main-content" tabIndex={-1}><WorkspaceCover role={role} />{children}</div>
         </div>
       </div>
     </LocalizedTree>

@@ -1,3 +1,4 @@
+import { SegmentedControl, SelectionContent } from '../components/Interactions';
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clock3, CalendarDays } from 'lucide-react';
 import { Badge, Button, Card, Page } from '../components/UI';
@@ -161,19 +162,10 @@ export function CoachCalendar() {
           </button>
           <h2 className="ml-2 font-black">{label}</h2>
         </div>
-        <div className="flex rounded-xl bg-zawana-950/5 p-1">
-          {(['day', 'week', 'month'] as const).map(v =>
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`rounded-lg px-3 py-2 text-xs font-black capitalize ${view === v ? 'bg-white shadow-sm' : 'text-zawana-500'}`}
-            >
-              {v}
-            </button>
-          )}
-        </div>
+        <SegmentedControl label="Calendar view" value={view} onChange={setView}
+          options={(['day', 'week', 'month'] as const).map(value => ({ value, label: value.replace(/^./, c => c.toUpperCase()) }))} />
       </div>
-      {view === 'month' ?
+      <SelectionContent value={view}>{view === 'month' ?
         <div className="grid grid-cols-7">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(x =>
             <div key={x} className="border-b border-r p-2 text-xs font-black text-zawana-500">
@@ -236,7 +228,7 @@ export function CoachCalendar() {
                 </div>)}
             </div>
           </div>
-        </div>}
+        </div>}</SelectionContent>
       <div className="flex flex-wrap gap-4 border-t p-4 text-xs font-semibold text-zawana-500">
         <span>
           <i className="mr-2 inline-block h-3 w-3 rounded bg-amber-300" />Coach review</span>

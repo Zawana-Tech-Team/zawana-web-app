@@ -253,8 +253,8 @@
   flex-shrink: 0;
 }
 .public-brand img {
-  height: 72px;
-  width: 72px;
+  height: 84px;
+  width: 84px;
   object-fit: contain;
 }
 .public-brand > span {
@@ -1223,8 +1223,8 @@
     gap: 12px;
   }
   .public-brand img {
-    height: 60px;
-    width: 60px;
+    height: 68px;
+    width: 68px;
   }
   .public-header .public-brand > span {
     display: none;
@@ -1452,4 +1452,23 @@
   .zawana-public .hover-image {
     transform: none !important;
   }
+}
+
+/* Final tactile layer; retain the arena's original editorial composition. */
+.public-loader { pointer-events: none; }
+.zawana-public .public-button { transition: background-color 140ms, color 140ms, transform 140ms, border-color 140ms; }
+.zawana-public .public-button:active { transform: scale(.98); }
+.zawana-public .public-button:focus-visible { outline: 3px solid var(--public-gold); outline-offset: 5px; }
+.zawana-public :is(.ecosystem-card, .membership-card) { transition: border-color 180ms, box-shadow 220ms; }
+.zawana-public .public-section-heading { text-wrap: balance; }
+@media (prefers-reduced-motion: reduce) {
+  .zawana-public .public-button:active { transform: none; }
+}
+
+/* Display the supplied artwork directly; the frame trims its built-in empty margins. */
+.public-brand__logo { position: relative; display: block; flex-shrink: 0; width: 84px; height: 112px; overflow: hidden; }
+.public-brand .public-brand__logo img { position: absolute; width: 140px; height: 140px; max-width: none; left: -28px; top: -14px; object-fit: contain; filter: none; }
+@media (max-width: 767px) {
+  .public-brand__logo { width: 68px; height: 90px; }
+  .public-brand .public-brand__logo img { width: 112px; height: 112px; left: -22px; top: -11px; }
 }

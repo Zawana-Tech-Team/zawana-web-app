@@ -1,3 +1,5 @@
+import { AnimatePresence } from 'framer-motion';
+import { DialogSurface } from '../components/Interactions';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, CalendarDays, Clock3, UserRound, X } from 'lucide-react';
@@ -327,19 +329,9 @@ export function PrivateCourse() {
   </p>
       </Card>
     </div>
-    {availabilityOpen && court &&
-      <div
-        className="fixed inset-0 z-50 flex items-end justify-center bg-zawana-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
-        onMouseDown={e => {
-          if (e.target === e.currentTarget) setAvailabilityOpen(false)
-        }}
-      >
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="private-availability-title"
-          className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-7"
-        >
+    <AnimatePresence>{availabilityOpen && court &&
+      <DialogSurface title="Choose date and time" labelledBy="private-availability-title" onClose={() => setAvailabilityOpen(false)}
+        className="w-full max-w-3xl overflow-y-auto bg-white p-5 sm:p-7">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="eyebrow text-zawana-accent">PRIVATE COURSE · 04 · DATE & TIME · {court.name}
@@ -436,7 +428,6 @@ export function PrivateCourse() {
             <Button variant="secondary" onClick={() => setAvailabilityOpen(false)}>
               <CalendarDays size={15} /> Done</Button>
           </div>
-        </div>
-      </div>}
+      </DialogSurface>}</AnimatePresence>
   </Page>;
 }

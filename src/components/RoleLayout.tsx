@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { LayoutGroup } from 'framer-motion';
+import { WorkspaceNavLink } from './Interactions';
+import { useId, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -157,9 +159,10 @@ function initials(name?: string | null) {
 
 function NavItems({ items, onNavigate }: { items: Item[]; onNavigate?: () => void }) {
   const { t } = useLanguage();
-  return <>
+  const navigationId = useId();
+  return <LayoutGroup id={navigationId}>
     {items.map(({ to, label, icon: Icon }) => (
-      <NavLink
+      <WorkspaceNavLink
         key={to}
         to={to}
         end
@@ -175,9 +178,9 @@ function NavItems({ items, onNavigate }: { items: Item[]; onNavigate?: () => voi
           aria-hidden="true"
           className="shrink-0 text-zawana-400 transition group-hover:translate-x-0.5 group-hover:text-zawana-600"
         />
-      </NavLink>
+      </WorkspaceNavLink>
     ))}
-  </>;
+  </LayoutGroup>;
 }
 
 export default function RoleLayout({
@@ -197,9 +200,12 @@ export default function RoleLayout({
   return (
     <LocalizedTree>
       <div className="zawana-workspace min-h-screen bg-zawana-page text-zawana-950">
+        <a href="#main-content" className="workspace-skip">{t('Skip to content')}</a>
         <div
           aria-hidden={!mobileOpen}
-          className={`fixed inset-0 z-50 bg-zawana-950/30 lg:hidden ${mobileOpen ? 'block' : 'hidden'}`}
+          inert={!mobileOpen}
+          data-open={mobileOpen}
+          className="workspace-mobile-backdrop fixed inset-0 z-50 bg-zawana-950/30 lg:hidden"
         >
           <button
             type="button"
@@ -377,7 +383,7 @@ export default function RoleLayout({
               </div>
             </div>
           </header>
-          <div id="main-content"><WorkspaceCover role={role} />{children}</div>
+          <div id="main-content" tabIndex={-1}><WorkspaceCover role={role} />{children}</div>
         </div>
       </div>
     </LocalizedTree>

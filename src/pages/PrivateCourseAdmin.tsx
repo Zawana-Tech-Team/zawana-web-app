@@ -1,3 +1,5 @@
+import { SegmentedControl, SelectionContent } from '../components/Interactions';
+import { Select } from '../components/Select';
 import { useEffect, useState } from 'react';
 import {
   Pencil,
@@ -117,18 +119,9 @@ export function PrivateCourseAdmin() {
       >
         <Plus size={16} /> New course</Button>
     </div>
-    <div className="mb-6 flex gap-2 border-b">
-      {(['catalog', 'requests'] as const).map(t =>
-        <button
-          key={t}
-          onClick={() => setActiveTab(t)}
-          className={`border-b-2 px-4 py-3 text-sm font-bold capitalize ${activeTab === t ? 'border-zawana-gold text-zawana-950' : 'border-transparent text-zawana-500'}`}
-        >
-          {t === 'catalog' ? `Course catalog · ${items.length}` : 'Booking requests'}
-        </button>
-      )}
-    </div>
-    {activeTab === 'requests' ?
+    <SegmentedControl value={activeTab} onChange={setActiveTab} label="Course views" className="mb-6 w-fit"
+      options={[{ value: 'catalog', label: `Course catalog · ${items.length}` }, { value: 'requests', label: 'Booking requests' }]} />
+    <SelectionContent value={activeTab}>{activeTab === 'requests' ?
       <PrivateCourseRequests coaches={coaches} /> :
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <section>
@@ -425,7 +418,7 @@ export function PrivateCourseAdmin() {
             </div>
           </div>
         </Card>
-      </div>}
+      </div>}</SelectionContent>
   </Page>
 }
 
@@ -490,7 +483,7 @@ function PrivateCourseRequests({ coaches }: { coaches: any[] }) {
           value={filters.q}
           onChange={e => change('q', e.target.value)}
         />
-        <select
+        <Select
           aria-label="Booking status"
           value={filters.status}
           onChange={e => change('status', e.target.value)}
@@ -509,8 +502,8 @@ function PrivateCourseRequests({ coaches }: { coaches: any[] }) {
               {status(x)}
             </option>
           )}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Coach"
           value={filters.coachId}
           onChange={e => change('coachId', e.target.value)}
@@ -521,7 +514,7 @@ function PrivateCourseRequests({ coaches }: { coaches: any[] }) {
               {c.name}
             </option>
           )}
-        </select>
+        </Select>
         <input
           type="date"
           aria-label="From date"

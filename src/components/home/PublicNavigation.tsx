@@ -14,12 +14,14 @@ const links = [
 export function PublicBrand({ onClick }: { onClick?: () => void }) {
   return (
     <Link to="/" className="public-brand" aria-label="ZAWANA home" onClick={onClick}>
+      <div className="public-brand__logo">
       <img
-        src="/brand/zawana-logo-square.png"
+        src="/logo.png"
         alt="The Zawana crowned-lion logo and official wordmark"
-        width={72}
-        height={72}
+        width={2000}
+        height={2000}
       />
+      </div>
       <span>
         THE ART OF
         <br />

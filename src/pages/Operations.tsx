@@ -1,3 +1,7 @@
+import { SegmentedControl, useDialog } from '../components/Interactions';
+import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
+import { motionTokens } from '../design/motion';
+import { Select } from '../components/Select';
 import { Children, useMemo, useState, useEffect, type ReactNode } from 'react';
 
 import { Link, useLocation } from 'react-router-dom';
@@ -117,14 +121,22 @@ function OpsModal({
   onClose: () => void;
   wide?: boolean
 }) {
-  return <div
-    className="fixed inset-0 z-[120] flex items-center justify-center bg-zawana-950/55 p-4 backdrop-blur-md"
+  const dialogRef = useDialog(onClose);
+  const reduced = useReducedMotion();
+  return <motion.div
+    initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    transition={{ duration: motionTokens.popover }}
+    className="premium-dialog-backdrop fixed inset-0 z-[120] flex items-center justify-center bg-zawana-950/55 p-4"
     onMouseDown={e => {
       if (e.target === e.currentTarget) onClose()
     }}
   >
-    <div
-      className={`w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} overflow-hidden rounded-[30px] border border-white/60 bg-white shadow-[0_40px_120px_rgba(29,27,71,.28)]`}
+    <motion.div
+      ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
+      initial={reduced ? false : { opacity: 0, y: 16, scale: .98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .99 }}
+      transition={reduced ? { duration: 0 } : motionTokens.spring}
+      className={`premium-dialog-panel premium-dialog-panel--control w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} overflow-hidden rounded-[30px] border border-white/60 bg-white shadow-[0_40px_120px_rgba(29,27,71,.28)]`}
     >
       <div className="relative overflow-hidden bg-zawana-950 px-6 py-5 text-white">
         <div className="absolute -right-10 -top-14 h-40 w-40 rounded-full border border-zawana-gold/25" />
@@ -136,6 +148,7 @@ function OpsModal({
             {subtitle && <p className="mt-1 text-sm text-white/50">{subtitle}</p>}
           </div>
           <button
+            type="button" aria-label="Close dialog"
             onClick={onClose}
             className="grid h-10 w-10 place-items-center rounded-full bg-white/10 hover:bg-white/20"
           >
@@ -145,8 +158,8 @@ function OpsModal({
       </div>
 
       <div className="max-h-[78vh] overflow-y-auto p-6">{children}</div>
-    </div>
-  </div>
+    </motion.div>
+  </motion.div>
 }
 
 function ConfirmDelete({
@@ -360,7 +373,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   if (isDoctor || isCoach) title = titleMap[view] || 'Professional Dashboard';
 
-  const commonTop = () => notice && <Toast message={notice} onClose={() => setNotice('')} />;
+  const commonTop = () => <AnimatePresence>{notice && <Toast message={notice} onClose={() => setNotice('')} />}</AnimatePresence>;
 
   if (view === 'notifications')
     return <Page title={title} eyebrow={role.replace('_', ' ')}>
@@ -1078,7 +1091,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
       </div>
     </div>
 
-    {(purchase || renew) &&
+    <AnimatePresence>{(purchase || renew) &&
       <OpsModal
         title={purchase ? 'Activate badminton package' : 'Renew badminton package'}
         subtitle={
@@ -1108,7 +1121,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
                 >Walk-in</button>
               </div>
               {customerType === 'member' ?
-                <select
+                <Select
                   className="rounded-xl border p-3"
                   value={purchaseStudentId}
                   onChange={e => {
@@ -1122,7 +1135,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
                       {m.name} · {m.email}
                     </option>
                   )}
-                </select> :
+                </Select> :
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="text-xs font-bold">Customer name<input
                       className="mt-1 w-full"
@@ -1141,7 +1154,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
                   </label>
                 </div>}
             </>}
-          <select
+          <Select
             className="rounded-xl border p-3"
             value={packageId}
             onChange={e => {
@@ -1157,7 +1170,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
                   {p.title} · {p.sessions} sessions · {p.validity} days · {money(p.price)}
                 </option>
               )}
-          </select>
+          </Select>
           <div className="rounded-xl border bg-zawana-950/[.02] p-3 text-sm">
             <b>Front-desk sale · Cash</b>
             <p className="mt-1 text-xs text-zawana-500">Activation, check-in access and a finance transaction are recorded immediately.</p>
@@ -1203,7 +1216,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
                 : 'Renew package')}
           </Button>
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
   </div>;
 }
 
@@ -1606,7 +1619,7 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
         value={filters.q}
         onChange={e => setFilter('q', e.target.value)}
       />
-      <select
+      <Select
         aria-label="Status"
         className="rounded-xl border p-3"
         value={filters.status}
@@ -1624,8 +1637,8 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
             {s.replaceAll('_', ' ')}
           </option>
         )}
-      </select>
-      <select
+      </Select>
+      <Select
         aria-label="Payment status"
         className="rounded-xl border p-3"
         value={filters.paymentStatus}
@@ -1637,8 +1650,8 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
             {s}
           </option>
         )}
-      </select>
-      <select
+      </Select>
+      <Select
         aria-label="Court"
         className="rounded-xl border p-3"
         value={filters.courtId}
@@ -1649,7 +1662,7 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
           <option key={c.id} value={c.id}>
             {c.name}
           </option>)}
-      </select>
+      </Select>
       <input
         aria-label="Specific date"
         type="date"
@@ -1921,7 +1934,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
     >
       <Edit3 size={15} />
     </button>
-    {open &&
+    <AnimatePresence>{open &&
       <OpsModal
         title={`Edit ${kind} package`}
         subtitle="Update pricing, sessions, validity and status."
@@ -1979,14 +1992,14 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
               onChange={e => setForm({ ...form, description: e.target.value })}
             />
           </label>
-          <label>Status<select
+          <label>Status<Select
               value={form.status || 'active'}
               onChange={e => setForm({ ...form, status: e.target.value })}
             >
               <option value="active">Active</option>
               {kind === 'badminton' && <option value="coming_soon">Coming Soon</option>}
               <option value="inactive">Inactive</option>
-            </select>
+            </Select>
           </label>
         </div>
         <div className="mt-6 flex justify-end gap-2">
@@ -1994,7 +2007,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
           <Button onClick={save}>
             <Check size={15} /> Save changes</Button>
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
   </>
 }
 
@@ -2031,7 +2044,7 @@ function PackageDelete({
         <Trash2 size={15} />
       </button>
     }
-    {open && <ConfirmDelete name={name} onCancel={() => setOpen(false)} onConfirm={remove} />}
+    <AnimatePresence>{open && <ConfirmDelete name={name} onCancel={() => setOpen(false)} onConfirm={remove} />}</AnimatePresence>
   </>
 }
 
@@ -2113,7 +2126,7 @@ function PackageManager({
       <Button onClick={() => setShowForm(true)}>
         <Plus size={16} /> New package</Button>
     </div>
-    {showForm &&
+    <AnimatePresence>{showForm &&
       <OpsModal
         title={`Create ${kind} package`}
         subtitle="Set the package data used by front office and POS."
@@ -2227,7 +2240,7 @@ function PackageManager({
           <Button variant="secondary" onClick={save}>
             <Plus size={15} /> Create</Button>
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
     {kind === 'badminton' ? <BadmintonPackages /> : <GymMemberships />}
   </div>
 }
@@ -2312,7 +2325,7 @@ function MembershipTable({
           }}
         />
       </div>
-      <select
+      <Select
         aria-label="Filter memberships by access"
         value={status}
         onChange={e => {
@@ -2323,7 +2336,7 @@ function MembershipTable({
         <option value="">All memberships</option>
         <option value="ready">Ready to check in</option>
         <option value="blocked">Expired or no sessions</option>
-      </select>
+      </Select>
     </div>
     {visible.length ?
       <Table
@@ -2507,14 +2520,14 @@ function AppointmentTable({
     </Table>
     {!rows.length &&
       <Card className="mt-4 p-10 text-center text-sm text-zawana-500">No appointments linked to this account yet.</Card>}
-    {open &&
+    <AnimatePresence>{open &&
       <OpsModal
         title="Schedule clinic appointment"
         subtitle="Select member and doctor accounts. The doctor’s schedule will be checked before saving."
         onClose={() => setOpen(false)}
       >
         <div className="grid gap-4 md:grid-cols-2">
-          <select
+          <Select
             value={form.userId}
             onChange={e => setForm({ ...form, userId: e.target.value })}
           >
@@ -2523,8 +2536,8 @@ function AppointmentTable({
               <option key={a.id} value={a.id}>
                 {a.name} · {a.email}
               </option>)}
-          </select>
-          <select
+          </Select>
+          <Select
             value={form.doctorId}
             onChange={e => setForm({ ...form, doctorId: e.target.value })}
           >
@@ -2536,7 +2549,7 @@ function AppointmentTable({
                   {d.user.name} · {d.specialty}
                 </option>
               )}
-          </select>
+          </Select>
           <input
             type="date"
             value={form.date}
@@ -2566,7 +2579,7 @@ function AppointmentTable({
             {saving ? 'Saving…' : 'Create appointment'}
           </Button>
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
   </div>
 }
 
@@ -2856,13 +2869,13 @@ function CourtManager() {
             value={form.name}
             onChange={e => setForm({ ...form, name: e.target.value })}
           />
-          <select
+          <Select
             value={form.type}
             onChange={e => setForm({ ...form, type: e.target.value as any })}
           >
             <option>Premium</option>
             <option>Standard</option>
-          </select>
+          </Select>
           <input
             placeholder="Surface"
             value={form.surface}
@@ -2888,17 +2901,8 @@ function CourtManager() {
       </Card>}
 
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex gap-2">
-        {['all', 'available', 'maintenance', 'inactive'].map(x =>
-          <button
-            key={x}
-            onClick={() => setFilter(x)}
-            className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-wider ${filter === x ? 'bg-zawana-950 text-white' : 'border bg-white text-zawana-500'}`}
-          >
-            {x}
-          </button>
-        )}
-      </div>
+      <SegmentedControl value={filter} onChange={setFilter} label="Court status"
+        options={['all', 'available', 'maintenance', 'inactive'].map(value => ({ value, label: value.replace(/^./, c => c.toUpperCase()) }))} />
       <p className="text-sm text-zawana-500">Pricing is per 60-minute session.</p>
     </div>
 
@@ -3073,7 +3077,7 @@ function StudentManager({
       >
         <Plus size={16} /> Register student</Button>
     </div>
-    {showForm &&
+    <AnimatePresence>{showForm &&
       <OpsModal
         title={editing ? 'Edit student' : 'Register student'}
         subtitle="Keep academy student information current."
@@ -3113,32 +3117,32 @@ function StudentManager({
             value={form.attendance ?? 0}
             onChange={e => setForm({ ...form, attendance: +e.target.value })}
           />
-          <select
+          <Select
             value={form.paymentStatus || 'pending'}
             onChange={e => setForm({ ...form, paymentStatus: e.target.value })}
           >
             <option value="pending">Payment pending</option>
             <option value="paid">Paid</option>
-          </select>
+          </Select>
           <input
             type="date"
             value={form.expiryDate || ''}
             onChange={e => setForm({ ...form, expiryDate: e.target.value })}
           />
-          <select
+          <Select
             value={form.status || 'active'}
             onChange={e => setForm({ ...form, status: e.target.value })}
           >
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
-          </select>
+          </Select>
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
           <Button onClick={save}>
             <Check size={15} /> Save</Button>
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
     {
       <Table
         headers={[
@@ -3186,8 +3190,8 @@ function StudentManager({
           </tr>)}
       </Table>
     }
-    {deleting &&
-      <ConfirmDelete name={deleting.name} onCancel={() => setDeleting(null)} onConfirm={remove} />}
+    <AnimatePresence>{deleting &&
+      <ConfirmDelete name={deleting.name} onCancel={() => setDeleting(null)} onConfirm={remove} />}</AnimatePresence>
   </div>
 }
 
@@ -3251,7 +3255,7 @@ function Finance() {
         value={filters.to}
         onChange={e => setFilter('to', e.target.value)}
       />
-      <select
+      <Select
         aria-label="Transaction status"
         className="rounded-xl border p-3"
         value={filters.status}
@@ -3261,8 +3265,8 @@ function Finance() {
         {['paid', 'pending', 'refunded', 'cancelled'].map(s =>
           <option key={s}>{s}</option>
         )}
-      </select>
-      <select
+      </Select>
+      <Select
         aria-label="Payment method"
         className="rounded-xl border p-3"
         value={filters.paymentMethod}
@@ -3272,22 +3276,11 @@ function Finance() {
         {['Cash', 'KPay', 'Pay Later', 'Temporarily disabled'].map(s =>
           <option key={s}>{s}</option>
         )}
-      </select>
+      </Select>
     </div>
-    <div className="mb-5 flex flex-wrap gap-2">
-      {['', 'Gym', 'Badminton', 'Clinic', 'Store', 'Cafe', 'Academy'].map(b =>
-        <button
-          key={b || 'All'}
-          onClick={() => {
-            setBusiness(b);
-            setPage(1)
-          }}
-          className={`rounded-full border px-4 py-2 text-xs font-black ${business === b ? 'bg-zawana-950 text-white' : 'bg-white'}`}
-        >
-          {b || 'All businesses'}
-        </button>
-      )}
-    </div>
+    <SegmentedControl label="Finance business" value={business} className="mb-5 w-fit"
+      onChange={value => { setBusiness(value); setPage(1); }}
+      options={['', 'Gym', 'Badminton', 'Clinic', 'Store', 'Cafe', 'Academy'].map(value => ({ value, label: value || 'All businesses' }))} />
     {error &&
       <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
         {error}
@@ -3419,7 +3412,7 @@ function Transactions({ business }: { business: Transaction['business'] }) {
           setItem(e.target.value)
         }}
       />
-      <select
+      <Select
         aria-label="Filter status"
         value={status}
         onChange={e => {
@@ -3431,7 +3424,7 @@ function Transactions({ business }: { business: Transaction['business'] }) {
         <option value="paid">Paid</option>
         <option value="pending">Pending</option>
         <option value="refunded">Refunded</option>
-      </select>
+      </Select>
       <Button>Search transactions</Button>
     </form>
     {error &&
@@ -3639,7 +3632,7 @@ function CMS({ notify }: { notify: (s: string) => void }) {
         </tr>
       })}
     </Table>
-    {open &&
+    <AnimatePresence>{open &&
       <OpsModal
         title={editing ? 'Edit content' : 'Create content'}
         subtitle="Set a future date to schedule publication, or use Publish now to make it visible immediately."
@@ -3661,14 +3654,14 @@ function CMS({ notify }: { notify: (s: string) => void }) {
             value={form.googleFormLink || ''}
             onChange={e => setForm({ ...form, googleFormLink: e.target.value })}
           />
-          <select
+          <Select
             aria-label="Content status"
             value={form.status || 'draft'}
             onChange={e => setForm({ ...form, status: e.target.value })}
           >
             <option value="draft">Draft</option>
             <option value="published">Published</option>
-          </select>
+          </Select>
           <textarea
             className="md:col-span-2"
             rows={6}
@@ -3691,13 +3684,13 @@ function CMS({ notify }: { notify: (s: string) => void }) {
           <Button onClick={save}>
             <Check size={15} /> Save content</Button>
         </div>
-      </OpsModal>}
-    {deleting &&
+      </OpsModal>}</AnimatePresence>
+    <AnimatePresence>{deleting &&
       <ConfirmDelete
         name={deleting.title}
         onCancel={() => setDeleting(null)}
         onConfirm={remove}
-      />}
+      />}</AnimatePresence>
   </div>;
 }
 
@@ -3897,7 +3890,7 @@ function ProductManager({ notify }: { notify: (s: string) => void }) {
             setPage(1)
           }}
         />
-        <select
+        <Select
           aria-label="Filter products by category"
           value={categoryFilter}
           onChange={e => {
@@ -3911,8 +3904,8 @@ function ProductManager({ notify }: { notify: (s: string) => void }) {
               {c.name}
             </option>
           )}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Filter products by status"
           value={statusFilter}
           onChange={e => {
@@ -3923,7 +3916,7 @@ function ProductManager({ notify }: { notify: (s: string) => void }) {
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
-        </select>
+        </Select>
       </div>
     </Card>
 
@@ -3998,7 +3991,7 @@ function ProductManager({ notify }: { notify: (s: string) => void }) {
       onPage={setPage}
     />
 
-    {open &&
+    <AnimatePresence>{open &&
       <OpsModal
         title={editing ? 'Edit product' : 'Add product'}
         subtitle="Product prices are tax-exclusive; tax is added at checkout."
@@ -4028,7 +4021,7 @@ function ProductManager({ notify }: { notify: (s: string) => void }) {
           )}
           <label className="text-sm">
             <span className="text-[11px] font-black uppercase tracking-wider text-zawana-500">Category</span>
-            <select
+            <Select
               className="mt-1"
               value={form.category}
               onChange={e => setForm({ ...form, category: e.target.value })}
@@ -4037,18 +4030,18 @@ function ProductManager({ notify }: { notify: (s: string) => void }) {
                 <option key={c.id}>{c.name}</option>
               )}
               <option>General</option>
-            </select>
+            </Select>
           </label>
           <label className="text-sm">
             <span className="text-[11px] font-black uppercase tracking-wider text-zawana-500">Status</span>
-            <select
+            <Select
               className="mt-1"
               value={form.status}
               onChange={e => setForm({ ...form, status: e.target.value })}
             >
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-            </select>
+            </Select>
           </label>
           <label className="text-sm md:col-span-2">
             <span className="text-[11px] font-black uppercase tracking-wider text-zawana-500">Description</span>
@@ -4070,9 +4063,9 @@ function ProductManager({ notify }: { notify: (s: string) => void }) {
           <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={save}>Save product</Button>
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
 
-    {catOpen &&
+    <AnimatePresence>{catOpen &&
       <OpsModal
         title="Product categories"
         subtitle="Create, rename or deactivate store categories."
@@ -4114,7 +4107,7 @@ function ProductManager({ notify }: { notify: (s: string) => void }) {
             </div>
           )}
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
   </div>
 }
 
@@ -4226,7 +4219,7 @@ function Inventory({ notify }: { notify: (message: string) => void }) {
     </div>
     <Card className="mb-3 p-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        <select
+        <Select
           aria-label="Filter inventory by category"
           value={category}
           onChange={e => {
@@ -4240,8 +4233,8 @@ function Inventory({ notify }: { notify: (message: string) => void }) {
               {c.name}
             </option>
           )}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Filter inventory status"
           value={status}
           onChange={e => {
@@ -4254,7 +4247,7 @@ function Inventory({ notify }: { notify: (message: string) => void }) {
           <option value="healthy">Healthy stock</option>
           <option value="active">Active products</option>
           <option value="inactive">Inactive products</option>
-        </select>
+        </Select>
       </div>
     </Card>
     <Table
@@ -4590,7 +4583,7 @@ function CafeMenu() {
       )}
     </Table>
 
-    {open &&
+    <AnimatePresence>{open &&
       <OpsModal
         title={editing ? 'Edit menu item' : 'Add menu item'}
         onClose={() => setOpen(false)}
@@ -4634,7 +4627,7 @@ function CafeMenu() {
           <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={save}>Save menu item</Button>
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
   </div>
 }
 
@@ -4747,17 +4740,8 @@ function CafePOS({ notify }: { notify: (s: string) => void }) {
               onChange={event => setSearch(event.target.value)}
             />
           </label>
-          <div className="flex flex-wrap gap-2">
-            {categories.map(value =>
-              <button
-                key={value}
-                onClick={() => setCategory(value)}
-                className={`rounded-full px-3 py-2 text-xs font-black ${category === value ? 'bg-zawana-950 text-white' : 'border bg-white'}`}
-              >
-                {value}
-              </button>
-            )}
-          </div>
+          <SegmentedControl label="Menu category" value={category} onChange={setCategory}
+            options={categories.map(value => ({ value, label: value }))} />
         </div>
       </Card>
 
@@ -4841,7 +4825,7 @@ function CafePOS({ notify }: { notify: (s: string) => void }) {
       </div>
 
       <div className="mt-4 grid gap-3">
-        <label className="text-[10px] font-black uppercase tracking-widest text-zawana-500">Order location<select
+        <label className="text-[10px] font-black uppercase tracking-widest text-zawana-500">Order location<Select
             className="mt-1 w-full"
             value={location}
             onChange={event => {
@@ -4852,10 +4836,10 @@ function CafePOS({ notify }: { notify: (s: string) => void }) {
             {CAFE_LOCATIONS.map(option =>
               <option key={option}>{option}</option>
             )}
-          </select>
+          </Select>
         </label>
         {usesCourt &&
-          <label className="text-[10px] font-black uppercase tracking-widest text-zawana-500">Court (optional)<select
+          <label className="text-[10px] font-black uppercase tracking-widest text-zawana-500">Court (optional)<Select
               className="mt-1 w-full"
               value={courtId}
               onChange={event => setCourtId(event.target.value)}
@@ -4866,7 +4850,7 @@ function CafePOS({ notify }: { notify: (s: string) => void }) {
                   {court.name}
                 </option>
               )}
-            </select>
+            </Select>
           </label>}
         <input
           aria-label="Customer name"
@@ -5478,14 +5462,14 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
             onChange={e => setDate(e.target.value)}
           />
         </label>
-        <label className="text-xs font-bold">Override type<select
+        <label className="text-xs font-bold">Override type<Select
             className="mt-2 w-full"
             value={overrideType}
             onChange={e => setOverrideType(e.target.value as 'open' | 'closed')}
           >
             <option value="open">Holiday · open</option>
             <option value="closed">Closed all day</option>
-          </select>
+          </Select>
         </label>
         <label className="text-xs font-bold">Holiday / closure label<input
             className="mt-2 w-full"
@@ -5572,7 +5556,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
         body="Admin must create courts before the FO can accept rentals."
       />}
 
-    {court &&
+    <AnimatePresence>{court &&
       <OpsModal
         wide
         title={`${court.name} · availability`}
@@ -5734,7 +5718,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
             </div>
           </div>
         </div>
-      </OpsModal>}
+      </OpsModal>}</AnimatePresence>
   </div>
 }
 
@@ -5899,7 +5883,7 @@ function CoachBookings({ notify }: { notify: (s: string) => void }) {
         value={filters.q}
         onChange={e => setFilter('q', e.target.value)}
       />
-      <select
+      <Select
         className="rounded-xl border p-3"
         aria-label="Filter status"
         value={filters.status}
@@ -5917,7 +5901,7 @@ function CoachBookings({ notify }: { notify: (s: string) => void }) {
         ].map(x =>
           <option key={x}>{x}</option>
         )}
-      </select>
+      </Select>
       <input
         className="rounded-xl border p-3"
         type="date"

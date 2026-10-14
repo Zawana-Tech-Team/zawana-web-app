@@ -1,3 +1,5 @@
+import { SegmentedControl } from '../components/Interactions';
+import { Select } from '../components/Select';
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Card, Badge, Page, Empty, Pagination } from "../components/UI";
@@ -170,19 +172,9 @@ export function Bookings() {
         {message}
       </p>}
     <Card className="mb-5 space-y-4 p-4 sm:p-5">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {presets.map(preset =>
-          <button
-            key={preset.id}
-            onClick={() => setPreset(preset.id)}
-            aria-pressed={filters.datePreset === preset.id && !filters.from && !filters.to}
-            className={`rounded-xl border px-3 py-3 text-left transition ${filters.datePreset === preset.id && !filters.from && !filters.to ? "border-zawana-950 bg-zawana-950 text-white" : "border-zawana-950/10 hover:border-zawana-gold"}`}
-          >
-            <span className="block text-xs font-bold opacity-75">{preset.label}</span>
-            <b className="mt-1 block text-xl">{dateCounts[preset.id]}</b>
-          </button>
-        )}
-      </div>
+      <SegmentedControl label="Booking dates" className="premium-date-presets"
+        value={filters.from || filters.to ? '' : filters.datePreset} onChange={value => setPreset(value as BookingDatePreset)}
+        options={presets.map(preset => ({ value: preset.id, label: <><span>{preset.label}</span><b>{dateCounts[preset.id]}</b></> }))} />
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <input
           aria-label="Search bookings"
@@ -190,7 +182,7 @@ export function Bookings() {
           value={filters.q}
           onChange={e => updateFilters({ q: e.target.value })}
         />
-        <select
+        <Select
           aria-label="Booking type"
           value={filters.kind}
           onChange={e => updateFilters({ kind: e.target.value })}
@@ -200,8 +192,8 @@ export function Bookings() {
           <option value="private_course">Private course</option>
           <option value="class">Class</option>
           <option value="pt">Personal training</option>
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Booking status"
           value={filters.status}
           onChange={e => updateFilters({ status: e.target.value })}
@@ -221,8 +213,8 @@ export function Bookings() {
               {statusLabel(s)}
             </option>
           )}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Court"
           value={filters.courtId}
           onChange={e => updateFilters({ courtId: e.target.value })}
@@ -233,8 +225,8 @@ export function Bookings() {
               {c.name}
             </option>
           )}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Coach"
           value={filters.coachId}
           onChange={e => updateFilters({ coachId: e.target.value })}
@@ -244,7 +236,7 @@ export function Bookings() {
             <option key={c.id} value={c.id}>
               {c.name}
             </option>)}
-        </select>
+        </Select>
         <div className="grid grid-cols-2 gap-2">
           <input
             aria-label="From date"

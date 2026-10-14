@@ -13,7 +13,7 @@ import OptimizedImage from '../OptimizedImage';
 import { useLanguage } from '../../context/LanguageContext';
 
 const ease = [0.22, 1, 0.36, 1] as const;
-export const entrance = { duration: 0.85, ease };
+export const entrance = { duration: 0.55, ease };
 
 export function FadeUp({
   children,
@@ -28,7 +28,7 @@ export function FadeUp({
   return (
     <motion.div
       className={className}
-      initial={reduced ? false : { opacity: 0, y: 32 }}
+      initial={reduced ? false : { opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.12 }}
       transition={{ ...entrance, delay }}
@@ -258,7 +258,7 @@ export function PageLoader() {
       } catch {
         /* Private browsing still gets a deterministic intro. */
       }
-    }, 850);
+    }, 350);
     return () => window.clearTimeout(timer);
   }, [reduced, visible]);
   return (
@@ -269,10 +269,10 @@ export function PageLoader() {
           aria-hidden="true"
           initial={{ y: 0 }}
           exit={{ y: '-100%' }}
-          transition={{ duration: 0.65, ease }}
+          transition={{ duration: 0.35, ease }}
         >
           <motion.img
-            src="/brand/zawana-logo-square.png"
+            src="/brand/zawana-logo-transparent.png"
             width={108}
             height={108}
             alt=""

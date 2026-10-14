@@ -10,7 +10,7 @@ import {
   MapPin,
   Trophy
 } from 'lucide-react';
-import { Badge, Button, Card, Empty, Page, Stat } from '../components/UI';
+import { Badge, Button, Card, Empty, Page, Stat, PageSkeleton } from '../components/UI';
 import { get, post } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { formatBookingDate, localDateKey } from '../utils/bookingDates';
@@ -82,15 +82,7 @@ export function Dashboard() {
   const nextCourt = schedule.find(b => b.kind === 'court');
   const nextCourse = schedule.find(b => b.kind === 'private_course');
   const checkedToday = Boolean(data?.checkIns?.some((c: any) => c.date === today));
-  if (loading)
-    return <Page title="Your badminton" eyebrow="Member dashboard">
-      <div className="grid animate-pulse gap-4 md:grid-cols-3">
-        <Card className="h-28 bg-zawana-950/5" />
-        <Card className="h-28 bg-zawana-950/5" />
-        <Card className="h-28 bg-zawana-950/5" />
-      </div>
-      <Card className="mt-5 h-64 animate-pulse bg-zawana-950/5" />
-    </Page>;
+  if (loading) return <PageSkeleton />;
   return <Page
     title={`Welcome back, ${user?.name?.split(' ')[0] || 'Athlete'}`}
     eyebrow="Zawana Badminton"
@@ -126,7 +118,7 @@ export function Dashboard() {
         }
       />
     </div>
-    <div className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_.7fr]">
+    <div className="premium-dashboard__grid mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]">
       <div className="space-y-6">
         <Card className="border-l-4 border-l-zawana-gold p-5">
           <div className="flex items-center justify-between">
@@ -286,6 +278,7 @@ export function Dashboard() {
               </div>
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <Button
+                  loading={busy}
                   disabled={
                     busy || checkedToday || Number(data.enrollment.sessionsRemaining) <= 0
                   }
@@ -319,7 +312,7 @@ export function Dashboard() {
             </div>
           </Card>}
       </div>
-      <div className="space-y-6">
+      <aside className="premium-dashboard__aside" aria-label="Notifications and services">
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-zawana-950/8 p-5">
             <div>
@@ -363,7 +356,7 @@ export function Dashboard() {
             )}
           </div>
         </Card>
-      </div>
+      </aside>
     </div>
     <Card className="mt-6 p-5">
       <div className="flex items-center justify-between">

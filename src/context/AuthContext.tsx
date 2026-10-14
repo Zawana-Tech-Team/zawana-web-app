@@ -25,7 +25,7 @@ import {
   type User as FirebaseUser,
 } from 'firebase/auth';
 import type { User } from '../types';
-import { get, post, patch, setToken, getToken } from '../api';
+import { api, get, post, patch, setToken, getToken, type AuthResponse } from '../api';
 import {
   firebaseAuth,
   firebaseConfigured,
@@ -119,9 +119,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (syncFlight.current) return syncFlight.current;
     syncFlight.current = (async () => {
-      setToken(await fb.getIdToken());
       try {
-        const result = await post<any>('/auth/session', {});
+        const result = await api<AuthResponse>('/auth/session', {
+          method: 'POST', body: '{}',
+          headers: { Authorization: `Bearer ${await fb.getIdToken()}` }
+        });
+        setToken(result.accessToken || result.token);
         setUser(result.user);
         setPendingProfile(null);
         setVerificationEmail('');
@@ -181,7 +184,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         try {
-          setToken(await fb.getIdToken());
           if (fb.emailVerified) await syncFirebaseUser(fb);
           else setVerificationEmail(fb.email || '');
         } catch {
@@ -355,11 +357,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const fb = firebaseAuth?.currentUser;
     if (!fb) throw new Error('Your sign-in session expired. Sign in again.');
     if (!fb.emailVerified) throw new Error('Verify your email before completing your profile.');
-    setToken(await fb.getIdToken());
-    const result = await post<any>('/auth/complete-profile', {
-      name: name.trim(),
-      phone: phone.trim()
+    const result = await api<AuthResponse>('/auth/complete-profile', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await fb.getIdToken()}` },
+      body: JSON.stringify({ name: name.trim(), phone: phone.trim() })
     });
+    setToken(result.accessToken || result.token);
     setUser(result.user);
     setPendingProfile(null);
     return result.user;
@@ -395,9 +398,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!firebaseAuth?.currentUser) return null;
     await firebaseAuth.currentUser.reload();
     const fb = firebaseAuth.currentUser;
-    setToken(await fb.getIdToken(true));
     try {
-      const result = await post<any>('/auth/session', {});
+      const result = await api<AuthResponse>('/auth/session', {
+        method: 'POST', body: '{}',
+        headers: { Authorization: `Bearer ${await fb.getIdToken(true)}` }
+      });
+      setToken(result.accessToken || result.token);
       setUser(result.user);
       return result.user as User;
     } catch {

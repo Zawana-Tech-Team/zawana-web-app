@@ -1,3 +1,4 @@
+import { useReducedMotion } from 'framer-motion';
 import { Activity, CalendarDays, Users } from 'lucide-react';
 import { Card, Page, Stat } from '../components/UI';
 import { revenue } from '../data';
@@ -14,6 +15,7 @@ import {
 } from 'recharts';
 
 export function Admin() {
+  const reduced = useReducedMotion();
   const peakHours = [
     { name: '8AM', value: 42 },
     { name: '10AM', value: 55 },
@@ -76,9 +78,9 @@ export function Admin() {
           <div className="mt-5 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={revenue}>
-                <CartesianGrid stroke="rgba(29,27,71,.08)" />
-                <XAxis dataKey="name" stroke="#7d8886" />
-                <YAxis stroke="#7d8886" />
+                <CartesianGrid vertical={false} stroke="#e8ebe2" strokeDasharray="3 4" />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fill: '#62685d', fontSize: 11 }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fill: '#62685d', fontSize: 11 }} width={38} />
                 <Tooltip
                   contentStyle={{
                     background: '#FFFFFF',
@@ -86,7 +88,7 @@ export function Admin() {
                     borderRadius: 12,
                   }}
                 />
-                <Line type="monotone" dataKey="value" stroke="#C4AF49" strokeWidth={3} />
+                <Line isAnimationActive={!reduced} animationDuration={280} dot={false} activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }} type="monotone" dataKey="value" stroke="#C4AF49" strokeWidth={3} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -101,9 +103,9 @@ export function Admin() {
           <div className="mt-5 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={peakHours}>
-                <CartesianGrid stroke="rgba(29,27,71,.08)" />
-                <XAxis dataKey="name" stroke="#7d8886" />
-                <YAxis stroke="#7d8886" />
+                <CartesianGrid vertical={false} stroke="#e8ebe2" strokeDasharray="3 4" />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fill: '#62685d', fontSize: 11 }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fill: '#62685d', fontSize: 11 }} width={38} />
                 <Tooltip
                   contentStyle={{
                     background: '#FFFFFF',
@@ -111,7 +113,7 @@ export function Admin() {
                     borderRadius: 12,
                   }}
                 />
-                <Bar dataKey="value" fill="#C4AF49" radius={[6, 6, 0, 0]} />
+                <Bar isAnimationActive={!reduced} animationDuration={280} maxBarSize={36} dataKey="value" fill="#C4AF49" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

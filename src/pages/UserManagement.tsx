@@ -1,3 +1,7 @@
+import { SegmentedControl, useDialog } from '../components/Interactions';
+import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
+import { motionTokens } from '../design/motion';
+import { Select } from '../components/Select';
 import { useCallback, useEffect, useState } from "react";
 import { Eye, Pencil, Plus, Search, ShieldCheck, UserRound, X, Trash2 } from "lucide-react";
 import { Badge, Button, Card, Empty, Page, Pagination, Toast } from "../components/UI";
@@ -47,16 +51,24 @@ function UserModal({
   onClose: () => void;
   children: React.ReactNode
 }) {
-  return <div
-    className="fixed inset-0 z-[100] flex items-end justify-center bg-zawana-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+  const dialogRef = useDialog(onClose);
+  const reduced = useReducedMotion();
+  return <motion.div
+    initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    transition={{ duration: motionTokens.popover }}
+    className="premium-dialog-backdrop fixed inset-0 z-[100] flex items-end justify-center bg-zawana-950/60 p-0 sm:items-center sm:p-4"
     onMouseDown={e => {
       if (e.target === e.currentTarget) onClose()
     }}
   >
-    <section
+    <motion.div
+      ref={dialogRef} tabIndex={-1} aria-label={title}
+      initial={reduced ? false : { opacity: 0, y: 16, scale: .98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .99 }}
+      transition={reduced ? { duration: 0 } : motionTokens.spring}
       role="dialog"
       aria-modal="true"
-      className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-7"
+      className="premium-dialog-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-7"
     >
       <div className="mb-5 flex items-start justify-between">
         <div>
@@ -68,8 +80,8 @@ function UserModal({
         </button>
       </div>
       {children}
-    </section>
-  </div>
+    </motion.div>
+  </motion.div>
 }
 
 export default function UserManagement() {
@@ -260,7 +272,7 @@ export default function UserManagement() {
         <Plus size={16} /> Create account</Button>
     }
   >
-    {notice && <Toast message={notice} onClose={() => setNotice("")} />}
+    <AnimatePresence>{notice && <Toast message={notice} onClose={() => setNotice("")} />}</AnimatePresence>
     {error &&
       <div
         role="alert"
@@ -297,20 +309,8 @@ export default function UserManagement() {
             }}
           />
         </div>
-        <div className="flex gap-2 overflow-x-auto">
-          {["all", ...roles].map(role =>
-            <button
-              key={role}
-              onClick={() => {
-                setFilter(role);
-                setPage(1)
-              }}
-              className={`whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold ${filter === role ? "bg-zawana-950 text-white" : "bg-zawana-900 text-zawana-500"}`}
-            >
-              {label(role)}
-            </button>
-          )}
-        </div>
+        <SegmentedControl value={filter} onChange={value => { setFilter(value); setPage(1); }} label="Account role"
+          options={["all", ...roles].map(value => ({ value, label: label(value) }))} />
       </div>
       {loading ?
         <div className="animate-pulse p-8 text-sm text-zawana-500">Loading accounts…</div> : users.length ?
@@ -396,7 +396,7 @@ export default function UserManagement() {
         />
       </div>
     </Card>
-    {mode &&
+    <AnimatePresence>{mode &&
       <UserModal
         title={
           mode === "create"
@@ -501,7 +501,7 @@ export default function UserManagement() {
                   onChange={e => setForm({ ...form, phone: e.target.value })}
                 />
               </label>
-              <label className="text-xs font-bold">Role<select
+              <label className="text-xs font-bold">Role<Select
                   className="mt-1 w-full"
                   value={form.role}
                   onChange={e => setForm({ ...form, role: e.target.value })}
@@ -510,18 +510,18 @@ export default function UserManagement() {
                     <option value={r} key={r}>
                       {label(r)}
                     </option>)}
-                </select>
+                </Select>
               </label>
               {form.role === "coach" &&
                 <>
-                  <label className="text-xs font-bold">Coach department<select
+                  <label className="text-xs font-bold">Coach department<Select
                       className="mt-1 w-full"
                       value={form.coachDepartment || "Badminton"}
                       onChange={e => setForm({ ...form, coachDepartment: e.target.value })}
                     >
                       <option>Badminton</option>
                       <option>Gym</option>
-                    </select>
+                    </Select>
                     <span className="mt-1 block font-normal text-zawana-500">Badminton coaches can be assigned to private courses.</span>
                   </label>
                   <div className="sm:col-span-2">
@@ -579,8 +579,8 @@ export default function UserManagement() {
               </Button>
             </div>
           </>}
-      </UserModal>}
-    {deleteTarget &&
+      </UserModal>}</AnimatePresence>
+    <AnimatePresence>{deleteTarget &&
       <UserModal
         title="Delete user account?"
         onClose={() => {
@@ -632,7 +632,7 @@ export default function UserManagement() {
             </Button>
           </div>
         </div>
-      </UserModal>}
+      </UserModal>}</AnimatePresence>
     <div className="mt-5 flex items-center gap-2 text-xs text-zawana-500">
       <ShieldCheck size={14} /> Public signups remain members. Staff roles can only be provisioned here by an administrator.<UserRound size={14} />
     </div>
