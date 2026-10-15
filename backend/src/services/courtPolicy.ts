@@ -25,9 +25,14 @@ export function businessNow(now = new Date()) {
   };
 }
 export function toMinute(value: string) {
-  const m = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!m || +m[1] < 1 || +m[1] > 12 || +m[2] > 59) return NaN;
-  return (+m[1] % 12) * 60 + +m[2] + (m[3].toUpperCase() === "PM" ? 720 : 0);
+  // CourtBlock stores 24-hour times; Booking/display ranges also use AM/PM.
+  const m = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!m || +m[2] > 59) return NaN;
+  const hour = +m[1],
+    minute = +m[2];
+  if (!m[3]) return hour <= 23 ? hour * 60 + minute : NaN;
+  if (hour < 1 || hour > 12) return NaN;
+  return (hour % 12) * 60 + minute + (m[3].toUpperCase() === "PM" ? 720 : 0);
 }
 export function range(value: string) {
   const parts = value.split(/\s*(?:—|–|-|to)\s*/i);

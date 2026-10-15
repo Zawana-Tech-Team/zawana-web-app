@@ -24,7 +24,7 @@ async function readCalendar(db: PrismaClient, from: string, to: string) {
         status: { in: occupyingStatuses },
         courtId: { not: null },
       },
-      select: { date: true, courtId: true, time: true },
+      select: { date: true, courtId: true, time: true, status: true },
     }),
     db.courtBlock.findMany({
       where: {
@@ -55,29 +55,45 @@ function build(date: string, data: Awaited<ReturnType<typeof readCalendar>>) {
     Array.from({ length: (closingMinute - openingMinute) / 60 }, (_, index) => {
       const start = openingMinute + index * 60,
         time = formatRange(start, start + 60);
+      let status:
+        | "available"
+        | "booked"
+        | "reserved"
+        | "blocked"
+        | "closed"
+        | "maintenance"
+        | "expired" = "available";
       let reason: string | null = null;
+      const reservation = bookings.find(
+        (row) => row.courtId === court.id && overlaps(row.time, time),
+      );
+      const block = blocks.find(
+        (row) =>
+          row.courtId === court.id &&
+          overlaps(`${row.start} — ${row.end}`, time),
+      );
       if (
         date < minDate ||
         (date === minDate && start <= current.hour * 60 + current.minute)
-      )
+      ) {
+        status = "expired";
         reason = "Time has passed";
-      else if (override?.type === "closed")
+      } else if (override?.type === "closed") {
+        status = "closed";
         reason = override.reason || override.title || "Facility closed";
-      else if (court.status !== "available") reason = "Court under maintenance";
-      else if (
-        bookings.some(
-          (row) => row.courtId === court.id && overlaps(row.time, time),
-        )
-      )
-        reason = "Reserved";
-      else if (
-        blocks.some(
-          (row) =>
-            row.courtId === court.id &&
-            overlaps(`${row.start} — ${row.end}`, time),
-        )
-      )
-        reason = "Facility block";
+      } else if (court.status !== "available") {
+        status = "maintenance";
+        reason = "Court under maintenance";
+      } else if (reservation) {
+        status = ["confirmed", "CONFIRMED"].includes(reservation.status)
+          ? "booked"
+          : "reserved";
+        reason = status === "booked" ? "Booked" : "Reserved";
+      } else if (block) {
+        status = "blocked";
+        reason =
+          block.type.trim().toLowerCase() === "class" ? "Class" : "Reserved";
+      }
       return {
         id: `${date}|${court.id}|${start}`,
         date,
@@ -90,7 +106,8 @@ function build(date: string, data: Awaited<ReturnType<typeof readCalendar>>) {
         price: holiday
           ? holiday.price
           : court.price + (start >= 900 ? 5000 : 0),
-        available: reason === null,
+        available: status === "available",
+        status,
         reason,
       };
     }),

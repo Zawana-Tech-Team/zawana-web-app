@@ -4,6 +4,7 @@ import type {
   BookingSubmission,
   PrismaClient,
   BookingStatus,
+  Prisma,
 } from "@prisma/client";
 import { isDateKey } from "../utils/dateKeys.js";
 import {
@@ -269,9 +270,10 @@ export async function createCourtBooking(
             new Error(
               "One or more selected slots are no longer available. No bookings were created.",
             ),
-            { statusCode: 409, conflicts },
+            { statusCode: 409, code: "BOOKING_CONFLICT", conflicts },
           );
         const rows = [];
+        const notifications: Prisma.NotificationCreateManyInput[] = [];
         for (const item of requested) {
           const court = currentById.get(item.courtId)!,
             r = range(item.time)!,
@@ -296,49 +298,44 @@ export async function createCourtBooking(
               reservationExpiresAt: null,
             },
           });
-          await tx.notification.create({
-            data: {
-              userId: user.id,
-              title: "Court booking confirmed",
-              body: `${court.name} · ${item.date} · ${item.time}.`,
-              link: "/bookings",
-              audience: "member",
-              type: "booking",
-              icon: "calendar",
-              entityType: "booking",
-              entityId: row.id,
-            },
+          notifications.push({
+            userId: user.id,
+            title: "Court booking confirmed",
+            body: `${court.name} · ${item.date} · ${item.time}.`,
+            link: "/bookings",
+            audience: "member",
+            type: "booking",
+            icon: "calendar",
+            entityType: "booking",
+            entityId: row.id,
           });
-          await tx.notification.create({
-            data: {
-              userId: null,
-              title: "New court booking",
-              body: `${user.name} · ${court.name} · ${item.date} · ${item.time}.`,
-              link: "/badminton-fo/bookings",
-              audience: "badminton_fo",
-              type: "booking",
-              icon: "calendar",
-              actionLabel: "View bookings",
-              entityType: "booking",
-              entityId: row.id,
-            },
+          notifications.push({
+            userId: null,
+            title: "New court booking",
+            body: `${user.name} · ${court.name} · ${item.date} · ${item.time}.`,
+            link: "/badminton-fo/bookings",
+            audience: "badminton_fo",
+            type: "booking",
+            icon: "calendar",
+            actionLabel: "View bookings",
+            entityType: "booking",
+            entityId: row.id,
           });
-          await tx.notification.create({
-            data: {
-              userId: null,
-              title: "New badminton booking",
-              body: `${user.name} · ${court.name} · ${item.date} · ${item.time}.`,
-              link: "/admin/bookings",
-              audience: "admin",
-              type: "booking",
-              icon: "calendar",
-              actionLabel: "View bookings",
-              entityType: "booking",
-              entityId: row.id,
-            },
+          notifications.push({
+            userId: null,
+            title: "New badminton booking",
+            body: `${user.name} · ${court.name} · ${item.date} · ${item.time}.`,
+            link: "/admin/bookings",
+            audience: "admin",
+            type: "booking",
+            icon: "calendar",
+            actionLabel: "View bookings",
+            entityType: "booking",
+            entityId: row.id,
           });
           rows.push(row);
         }
+        await tx.notification.createMany({ data: notifications });
         if (key)
           await tx.bookingSubmission.update({
             where: { userId_key: { userId: user.id, key } },

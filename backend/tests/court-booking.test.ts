@@ -168,6 +168,125 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
       assert.equal(response.value.slots[9].price, 25000);
     },
   );
+  await t.test(
+    "availability distinguishes booked, reserved and released backend statuses",
+    async () => {
+      for (const [status, expected] of [
+        ["confirmed", "booked"],
+        ["CONFIRMED", "booked"],
+        ["pending", "reserved"],
+        ["PENDING_COACH_CONFIRMATION", "reserved"],
+        ["AWAITING_PAYMENT", "reserved"],
+        ["cancelled", "available"],
+        ["completed", "available"],
+        ["EXPIRED", "available"],
+      ] as const) {
+        const booking = await db.booking.create({
+          data: {
+            userId: user.id,
+            kind: "court",
+            title: "QA status",
+            code: randomUUID(),
+            ...slot(6),
+            price: 20000,
+            location: "QA",
+            status,
+            paymentStatus: "pending",
+          },
+        });
+        try {
+          const response = await request(
+            `/court-booking/availability?date=${keyDate}`,
+          );
+          const actual = response.value.slots.find(
+            (s: { courtId: string; startMinute: number }) =>
+              s.courtId === court.id && s.startMinute === 360,
+          );
+          assert.equal(actual.status, expected, status);
+          assert.equal(actual.available, expected === "available", status);
+          assert.equal(
+            actual.reason,
+            expected === "available"
+              ? null
+              : expected === "booked"
+                ? "Booked"
+                : "Reserved",
+          );
+          assert.equal(actual.userId, undefined);
+          assert.equal(actual.paymentStatus, undefined);
+          if (expected !== "available") {
+            const count = await db.booking.count();
+            const conflict = await request("/bookings", "POST", {
+              kind: "court",
+              bookings: [slot(6)],
+            });
+            assert.equal(conflict.status, 409, status);
+            assert.equal(
+              await db.booking.count(),
+              count,
+              "Unavailable slot must not create another reservation",
+            );
+          }
+        } finally {
+          await db.booking.delete({ where: { id: booking.id } });
+        }
+      }
+    },
+  );
+  await t.test("maintenance and elapsed slots cannot be booked", async () => {
+    await db.court.update({
+      where: { id: court.id },
+      data: { status: "maintenance" },
+    });
+    try {
+      const response = await request(
+        `/court-booking/availability?date=${keyDate}`,
+      );
+      assert.ok(
+        response.value.slots
+          .filter((s: { courtId: string }) => s.courtId === court.id)
+          .every(
+            (s: { status: string; available: boolean }) =>
+              s.status === "maintenance" && !s.available,
+          ),
+      );
+      assert.equal(
+        (
+          await request("/bookings", "POST", {
+            kind: "court",
+            bookings: [slot(6)],
+          })
+        ).status,
+        409,
+      );
+    } finally {
+      await db.court.update({
+        where: { id: court.id },
+        data: { status: "available" },
+      });
+    }
+    const previous = new Date(`${today()}T12:00:00Z`);
+    previous.setUTCDate(previous.getUTCDate() - 1);
+    const yesterday = previous.toISOString().slice(0, 10);
+    const expired = await request(
+      `/court-booking/availability?date=${yesterday}`,
+    );
+    assert.ok(
+      expired.value.slots.every(
+        (s: { status: string; available: boolean }) =>
+          s.status === "expired" && !s.available,
+      ),
+    );
+    assert.equal(
+      (
+        await request("/bookings", "POST", {
+          kind: "court",
+          bookings: [{ ...slot(6), date: yesterday }],
+        })
+      ).status,
+      400,
+    );
+  });
   let ids: string[] = [];
   const retryKey = randomUUID();
   const input = {
@@ -199,6 +318,7 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
         assert.equal(b.meta, "QA request");
       }
       assert.equal(await db.transaction.count(), 0);
+      assert.equal(await db.notification.count(), 6);
       const recovered = await request(`/court-booking/submissions/${retryKey}`);
       assert.equal(recovered.status, 200);
       assert.deepEqual(
@@ -299,6 +419,63 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
     );
   });
   await t.test(
+    "24-hour weekly blocks match web availability and reject every court payload shape",
+    async () => {
+      await db.courtBlock.create({
+        data: {
+          courtId: second.id,
+          date: "",
+          dayOfWeek: new Date(`${keyDate}T12:00:00Z`).getUTCDay(),
+          start: "18:00",
+          end: "20:00",
+          title: "QA weekly class",
+        },
+      });
+      const availability = await request(
+        `/court-booking/availability?date=${keyDate}`,
+      );
+      const sessions = availability.value.slots.filter(
+        (s: { courtId: string }) => s.courtId === second.id,
+      );
+      for (const minute of [1080, 1140]) {
+        const blocked = sessions.find(
+          (s: { startMinute: number }) => s.startMinute === minute,
+        );
+        assert.equal(blocked.status, "blocked");
+        assert.equal(blocked.available, false);
+        assert.equal(blocked.reason, "Class");
+      }
+      assert.equal(
+        sessions.find((s: { startMinute: number }) => s.startMinute === 1200)
+          .available,
+        true,
+      );
+      const web = await request(
+        `/bookings/month-availability?month=${keyDate.slice(0, 7)}`,
+      );
+      assert.equal(web.status, 200);
+      assert.ok(
+        web.value.blocks.some(
+          (b: { courtId: string; start: string; end: string }) =>
+            b.courtId === second.id && b.start === "18:00" && b.end === "20:00",
+        ),
+      );
+      const time = "6:00 PM — 7:00 PM",
+        before = await db.booking.count();
+      for (const input of [
+        { date: keyDate, courtId: second.id, time },
+        { date: keyDate, slots: [{ courtId: second.id, time }] },
+        { bookings: [{ date: keyDate, courtId: second.id, time }] },
+      ])
+        assert.equal(
+          (await request("/bookings", "POST", { kind: "court", ...input }))
+            .status,
+          409,
+        );
+      assert.equal(await db.booking.count(), before);
+    },
+  );
+  await t.test(
     "invalid slots, facility blocks, closure and holiday pricing",
     async () => {
       for (const time of [
@@ -329,9 +506,10 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
         data: {
           courtId: court.id,
           date: keyDate,
-          start: "10:00 AM",
-          end: "11:00 AM",
+          start: "10:00",
+          end: "11:00",
           title: "QA facility block",
+          type: "reservation",
         },
       });
       assert.equal(
@@ -346,6 +524,8 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
       await db.courtDateOverride.create({
         data: { date: keyDate, type: "closed" },
       });
+      const closed = (await courtAvailability(db, keyDate)).slots;
+      assert.ok(closed.every((s) => s.status === "closed" && !s.available));
       assert.equal(
         (
           await request("/bookings", "POST", {
@@ -364,6 +544,18 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
       });
       const a = await courtAvailability(db, keyDate);
       assert.equal(a.slots[0].price, 32000);
+      const blocked = a.slots.find(
+        (s) => s.courtId === court.id && s.startMinute === 600,
+      )!;
+      assert.equal(blocked.status, "blocked");
+      assert.equal(blocked.reason, "Reserved");
+      assert.equal(blocked.available, false);
+      assert.equal(
+        a.slots.find((s) => s.courtId === second.id && s.startMinute === 1080)!
+          .available,
+        true,
+        "Explicit open overrides still release weekly blocks, as on web",
+      );
     },
   );
   await t.test(

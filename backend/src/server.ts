@@ -5346,7 +5346,7 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   )
     return res
       .status(409)
-      .json({ message: "Another booking is being confirmed. Refresh availability and try again." });
+      .json({ code:"BOOKING_BUSY", message: "Another booking is being confirmed. Check the reservation status and retry with the same request." });
   if (err?.statusCode === 429) res.setHeader("Retry-After", "900");
   if (err?.statusCode)
     return res
