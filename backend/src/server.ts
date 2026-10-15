@@ -2196,15 +2196,16 @@ app.patch(
           .json({ message: "Members may only cancel their own standard bookings." });
     }
     if (existing.kind === "private_course")
-      return res
-        .status(403)
-        .json({ message: "Private course status is managed through its booking workflow." });
-    res.json(
-      await prisma.booking.update({
-        where: { id: String(req.params.id) },
-        data: { status: b.status }
-      })
-    );
+      return res.status(403).json({ message: "Private course status is managed through its booking workflow." });
+    if (existing.kind === "court" && req.user!.role === "member") {
+      if (existing.status === "cancelled" || existing.status === "CANCELLED") return res.json(existing);
+      if (!["pending", "confirmed", "CONFIRMED"].includes(existing.status) || existing.paymentStatus !== "pending")
+        return res.status(409).json({message:"Only active unpaid reservations can be cancelled in the app. Contact ZAWANA staff for paid bookings."});
+      const changed = await prisma.booking.updateMany({where:{id:existing.id,userId:req.user!.id,status:existing.status,paymentStatus:"pending"},data:{status:"cancelled"}});
+      if (!changed.count) return res.status(409).json({message:"This reservation has changed. Refresh before cancelling."});
+      return res.json(await prisma.booking.findUniqueOrThrow({where:{id:existing.id}}));
+    }
+    res.json(await prisma.booking.update({where:{id:String(req.params.id)},data:{status:b.status}}));
   })
 );
 
@@ -5345,7 +5346,7 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   )
     return res
       .status(409)
-      .json({ message: "Another booking is being confirmed. Refresh availability and try again." });
+      .json({ code:"BOOKING_BUSY", message: "Another booking is being confirmed. Check the reservation status and retry with the same request." });
   if (err?.statusCode === 429) res.setHeader("Retry-After", "900");
   if (err?.statusCode)
     return res
