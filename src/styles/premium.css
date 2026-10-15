@@ -215,3 +215,11 @@ input[type='checkbox'], input[type='radio'] { accent-color: #8a792b; width: 17px
   .zawana-app-logo:not([data-compact='true']) img { width: 64px; height: 64px; }
   .workspace-header .zawana-app-logo img { width: 48px; height: 48px; }
 }
+/* Print only the authenticated gym receipt currently open in a dialog. */
+@media print {
+  body:has(.gym-receipt) * { visibility: hidden; }
+  body:has(.gym-receipt) .gym-receipt,
+  body:has(.gym-receipt) .gym-receipt * { visibility: visible; }
+  body:has(.gym-receipt) .gym-receipt { position: fixed; inset: 0; background: white; color: #17191c; }
+  body:has(.gym-receipt) .gym-receipt .print\:hidden { display: none; }
+}

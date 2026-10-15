@@ -50,6 +50,9 @@ import { ImageUpload, mediaImageSrc } from '../components/ImageUpload';
 import { CAFE_LOCATIONS, CAFE_PAYMENT_METHODS } from '../constants/cafe';
 
 import GymPrivateTraining from './GymPrivateTraining';
+import GymPackageManager from './GymPackageManager';
+import GymEnrollments from './GymEnrollments';
+import { gymToday } from '../types/gym';
 
 import CoachTraining from './CoachTraining';
 
@@ -443,17 +446,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     </Page>;
 
   if (isAdmin && view === 'gym-packages')
-    return <Page title={title} eyebrow="HPC Gym">
-      <>
-        {commonTop()}
-        <PackageManager
-          kind="gym"
-          showForm={showForm}
-          setShowForm={setShowForm}
-          notify={notify}
-        />
-      </>
-    </Page>;
+    return <Page title={title} eyebrow="HPC Gym"><GymPackageManager /></Page>;
 
   if (isAdmin && view === 'coaches')
     return <Page title={title} eyebrow="People & Scheduling">
@@ -551,7 +544,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   if (isGym && view === 'memberships')
     return <Page title={title} eyebrow="Gym FO">
-      <GymMemberships />
+      <GymEnrollments />
     </Page>;
 
   if (isGym && view === 'private-training')
@@ -2241,7 +2234,7 @@ function PackageManager({
             <Plus size={15} /> Create</Button>
         </div>
       </OpsModal>}</AnimatePresence>
-    {kind === 'badminton' ? <BadmintonPackages /> : <GymMemberships />}
+    {kind === 'badminton' ? <BadmintonPackages /> : <GymEnrollments />}
   </div>
 }
 
@@ -2284,7 +2277,7 @@ function MembershipTable({
   const [status, setStatus] = useState(''),
     [page, setPage] = useState(1),
     [busyId, setBusyId] = useState('');
-  const dateNow = today;
+  const dateNow = gymToday();
   const rows = o.memberships.filter(
     m =>([m.customer, m.phone, m.id, m.package].some(v =>
         String(v || '')
@@ -2292,7 +2285,7 @@ function MembershipTable({
           .includes(query.toLowerCase()))) &&
       (!status ||
         status ===
-          (m.status === 'active' && m.expiryDate >= dateNow && m.sessionsRemaining > 0
+          (m.status === 'active' && m.startDate <= dateNow && m.expiryDate >= dateNow && (m.accessMode === 'unlimited' || m.sessionsRemaining > 0)
             ? 'ready'
             : 'blocked'))
   );
@@ -2304,7 +2297,7 @@ function MembershipTable({
     try {
       const result = await post<any>('/memberships/check-in', { membershipId: m.id });
       await o.refresh();
-      notify(`${m.customer} checked in · ${result.membership.sessionsRemaining} sessions remain.`)
+      notify(result.membership.accessMode === 'unlimited' ? `${m.customer} checked in · unlimited gym access.` : `${m.customer} checked in · ${result.membership.sessionsRemaining} visits remain.`)
     } catch (e: any) {
       notify(e.message || 'Gym check-in was denied.')
     } finally {
@@ -2353,7 +2346,7 @@ function MembershipTable({
       >
         {visible.map(m => {
           const ready =
-            m.status === 'active' && m.expiryDate >= dateNow && m.sessionsRemaining > 0;
+            m.status === 'active' && m.startDate <= dateNow && m.expiryDate >= dateNow && (m.accessMode === 'unlimited' || m.sessionsRemaining > 0);
           return <tr key={m.id}>
             <Cell>
               <b>{m.customer}</b>
@@ -2361,8 +2354,7 @@ function MembershipTable({
             </Cell>
             <Cell>{m.package}</Cell>
             <Cell>
-              <b>{m.sessionsRemaining || 0}</b>
-              <span className="text-zawana-500"> / {m.sessionsTotal || 0}</span>
+              <b>{m.accessMode === 'unlimited' ? 'Unlimited' : `${m.sessionsRemaining || 0} / ${m.sessionsTotal || 0}`}</b>
             </Cell>
             <Cell>
               {m.startDate}

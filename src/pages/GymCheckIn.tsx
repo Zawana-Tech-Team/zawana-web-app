@@ -5,8 +5,10 @@ import { Check, Clock3, LogIn, Search, UserRound } from 'lucide-react';
 import { Badge, Button, Card, Empty, Page, Stat } from '../components/UI';
 
 import { get, post } from '../api';
+import { gymToday } from '../types/gym';
 
 type Membership = {
+  accessMode?: string;
   id: string;
   customer: string;
   customerId: string;
@@ -55,10 +57,10 @@ export function GymCheckIn() {
   const member = rows.find(m => m.id === selectedId) || filtered[0],
     isReady =
       !!member &&
-      member.status === 'active' &&
-      member.expiryDate >= new Date().toISOString().slice(0, 10) &&
-      member.sessionsRemaining > 0,
-    checkedToday = !!member?.checkIns?.some(c => c.date === new Date().toISOString().slice(0, 10));
+      member.status === 'active' && member.startDate <= gymToday() &&
+      member.expiryDate >= gymToday() &&
+      (member.accessMode === 'unlimited' || member.sessionsRemaining > 0),
+    checkedToday = !!member?.checkIns?.some(c => c.date === gymToday());
 
   const checkIn = async () => {
     if (!member) return;
@@ -68,7 +70,7 @@ export function GymCheckIn() {
       const result = await post<any>('/memberships/check-in', { membershipId: member.id });
       await load();
       setNotice(
-        `${member.customer} checked in · ${result.membership.sessionsRemaining} sessions remain.`
+        result.membership.accessMode === 'unlimited' ? `${member.customer} checked in · unlimited access.` : `${member.customer} checked in · ${result.membership.sessionsRemaining} visits remain.`
       )
     } catch (e: any) {
       setError(e.message || 'Gym check-in was denied.')
@@ -85,16 +87,16 @@ export function GymCheckIn() {
         value={
           rows.filter(
             m =>
-              m.status === 'active' &&
-              m.expiryDate >= new Date().toISOString().slice(0, 10) &&
-              m.sessionsRemaining > 0
+              m.status === 'active' && m.startDate <= gymToday() &&
+              m.expiryDate >= gymToday() &&
+              (m.accessMode === 'unlimited' || m.sessionsRemaining > 0)
           ).length
         }
       />
       <Stat
         label="Visits today"
         value={
-          rows.filter(m => m.lastCheckIn?.startsWith(new Date().toISOString().slice(0, 10)))
+          rows.filter(m => m.lastCheckIn?.startsWith(gymToday()))
             .length
         }
       />
@@ -133,7 +135,7 @@ export function GymCheckIn() {
                 <div className="flex justify-between gap-2">
                   <b>{m.customer}</b>
                   <span className="text-xs">
-                    {m.sessionsRemaining}/{m.sessionsTotal}
+                    {m.accessMode === 'unlimited' ? 'Unlimited' : `${m.sessionsRemaining}/${m.sessionsTotal}`}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-zawana-500">
@@ -170,7 +172,7 @@ export function GymCheckIn() {
               <div className="rounded-xl bg-zawana-950/4 p-4">
                 <p className="text-xs text-zawana-500">Sessions remaining</p>
                 <b className="text-xl">
-                  {member.sessionsRemaining} / {member.sessionsTotal}
+                  {member.accessMode === 'unlimited' ? 'Unlimited' : `${member.sessionsRemaining} / ${member.sessionsTotal}`}
                 </b>
               </div>
               <div className="rounded-xl bg-zawana-950/4 p-4">
@@ -202,7 +204,7 @@ export function GymCheckIn() {
                         <b>
                           {c.date} · {c.time}
                         </b>
-                        <p className="text-xs text-zawana-500">{c.sessionsUsed} session used</p>
+                        <p className="text-xs text-zawana-500">{c.sessionsUsed ? `${c.sessionsUsed} visit used` : 'Unlimited membership visit'}</p>
                       </div>
                     </div>
                     <Badge>Gym</Badge>
@@ -217,4 +219,4 @@ export function GymCheckIn() {
         </Card>}
     </div>
   </Page>
-}
+}

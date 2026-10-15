@@ -104,7 +104,8 @@ const homeByRole: Record<UserRole, string> = {
 };
 
 function Guard({ role, children }: { role: UserRole; children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return <RouteLoading />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== role) return <Navigate to={homeByRole[user.role] || '/dashboard'} replace />;
   if (role === 'member') return <AppLayout role="member">{children}</AppLayout>;

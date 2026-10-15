@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "api": "npm --prefix backend run dev",
-    "api:seed": "npm --prefix backend run prisma:seed"
+    "api:seed": "npm --prefix backend run prisma:seed",
+    "lint:gym": "node tooling/gym/node_modules/eslint/bin/eslint.js --config eslint.gym.config.mjs .",
+    "test:gym:browser": "node scripts/test-gym-browser.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

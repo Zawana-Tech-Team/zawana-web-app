@@ -215,6 +215,8 @@ export type GymPackage = {
 };
 
 export type MembershipRecord = {
+  accessMode?: string;
+  enrollmentId?: string | null;
   id: string;
   customerId: string;
   customer: string;

@@ -50,6 +50,12 @@ export function WorkspaceNavLink({ children, ...props }: Omit<NavLinkProps, 'chi
   </>}</NavLink>;
 }
 
+// Dialogs can overlap briefly while one exits and the next opens. Retain each
+// element's original state until every dialog that locked it has been removed.
+const inertLocks = new WeakMap<HTMLElement, { count: number; original: boolean }>();
+let openDialogCount = 0;
+let originalBodyOverflow = '';
+
 /** Dialog behavior reused by operational modals; restores focus and contains keyboard navigation. */
 export function useDialog(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
@@ -59,19 +65,23 @@ export function useDialog(onClose: () => void) {
     const dialog = ref.current;
     if (!dialog) return;
     const previous = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
     const background = document.getElementById('root');
-    const siblings: { element: HTMLElement; inert: boolean }[] = [];
+    const siblings: HTMLElement[] = [];
     let branch: HTMLElement | null = dialog;
     while (branch && branch !== background && branch.parentElement) {
       for (const sibling of branch.parentElement.children) {
         if (sibling !== branch && sibling instanceof HTMLElement) {
-          siblings.push({ element: sibling, inert: sibling.inert });
+          const lock = inertLocks.get(sibling) || { count: 0, original: sibling.inert };
+          lock.count += 1;
+          inertLocks.set(sibling, lock);
+          siblings.push(sibling);
           sibling.inert = true;
         }
       }
       branch = branch.parentElement;
     }
+    if (openDialogCount === 0) originalBodyOverflow = document.body.style.overflow;
+    openDialogCount += 1;
     document.body.style.overflow = 'hidden';
     const controls = () => [...dialog.querySelectorAll<HTMLElement>(
       'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'
@@ -91,8 +101,17 @@ export function useDialog(onClose: () => void) {
     background?.addEventListener('keydown', keydown);
     return () => {
       background?.removeEventListener('keydown', keydown);
-      document.body.style.overflow = overflow;
-      siblings.forEach(({ element, inert }) => { element.inert = inert; });
+      openDialogCount -= 1;
+      if (openDialogCount === 0) document.body.style.overflow = originalBodyOverflow;
+      siblings.forEach(element => {
+        const lock = inertLocks.get(element);
+        if (!lock) return;
+        lock.count -= 1;
+        if (lock.count === 0) {
+          element.inert = lock.original;
+          inertLocks.delete(element);
+        }
+      });
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, []);
