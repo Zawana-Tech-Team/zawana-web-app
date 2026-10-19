@@ -41,7 +41,8 @@ import { useOperations } from '../context/OperationsContext';
 
 import { useAuth } from '../context/AuthContext';
 
-import type { UserRole, Appointment, CourtBooking, Transaction } from '../types';
+import type { UserRole, Appointment, CourtBooking, Transaction, ContentItem } from '../types';
+import { publicImageSrc, publicationDate } from '../utils/publicContent';
 
 import { get, post, patch, put, del } from '../api';
 
@@ -50,6 +51,9 @@ import { ImageUpload, mediaImageSrc } from '../components/ImageUpload';
 import { CAFE_LOCATIONS, CAFE_PAYMENT_METHODS } from '../constants/cafe';
 
 import GymPrivateTraining from './GymPrivateTraining';
+import GymPackageManager from './GymPackageManager';
+import GymEnrollments from './GymEnrollments';
+import { gymToday } from '../types/gym';
 
 import CoachTraining from './CoachTraining';
 
@@ -422,7 +426,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     </Page>;
 
   if (isAdmin && view === 'cms')
-    return <Page title={title} eyebrow="Homepage & Community">
+    return <Page title={title} eyebrow="Community & Achievements">
       <>
         {commonTop()}
         <CMS notify={notify} />
@@ -443,17 +447,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     </Page>;
 
   if (isAdmin && view === 'gym-packages')
-    return <Page title={title} eyebrow="HPC Gym">
-      <>
-        {commonTop()}
-        <PackageManager
-          kind="gym"
-          showForm={showForm}
-          setShowForm={setShowForm}
-          notify={notify}
-        />
-      </>
-    </Page>;
+    return <Page title={title} eyebrow="HPC Gym"><GymPackageManager /></Page>;
 
   if (isAdmin && view === 'coaches')
     return <Page title={title} eyebrow="People & Scheduling">
@@ -551,7 +545,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   if (isGym && view === 'memberships')
     return <Page title={title} eyebrow="Gym FO">
-      <GymMemberships />
+      <GymEnrollments />
     </Page>;
 
   if (isGym && view === 'private-training')
@@ -2241,7 +2235,7 @@ function PackageManager({
             <Plus size={15} /> Create</Button>
         </div>
       </OpsModal>}</AnimatePresence>
-    {kind === 'badminton' ? <BadmintonPackages /> : <GymMemberships />}
+    {kind === 'badminton' ? <BadmintonPackages /> : <GymEnrollments />}
   </div>
 }
 
@@ -2284,7 +2278,7 @@ function MembershipTable({
   const [status, setStatus] = useState(''),
     [page, setPage] = useState(1),
     [busyId, setBusyId] = useState('');
-  const dateNow = today;
+  const dateNow = gymToday();
   const rows = o.memberships.filter(
     m =>([m.customer, m.phone, m.id, m.package].some(v =>
         String(v || '')
@@ -2292,7 +2286,7 @@ function MembershipTable({
           .includes(query.toLowerCase()))) &&
       (!status ||
         status ===
-          (m.status === 'active' && m.expiryDate >= dateNow && m.sessionsRemaining > 0
+          (m.status === 'active' && m.startDate <= dateNow && m.expiryDate >= dateNow && (m.accessMode === 'unlimited' || m.sessionsRemaining > 0)
             ? 'ready'
             : 'blocked'))
   );
@@ -2304,7 +2298,7 @@ function MembershipTable({
     try {
       const result = await post<any>('/memberships/check-in', { membershipId: m.id });
       await o.refresh();
-      notify(`${m.customer} checked in · ${result.membership.sessionsRemaining} sessions remain.`)
+      notify(result.membership.accessMode === 'unlimited' ? `${m.customer} checked in · unlimited gym access.` : `${m.customer} checked in · ${result.membership.sessionsRemaining} visits remain.`)
     } catch (e: any) {
       notify(e.message || 'Gym check-in was denied.')
     } finally {
@@ -2353,7 +2347,7 @@ function MembershipTable({
       >
         {visible.map(m => {
           const ready =
-            m.status === 'active' && m.expiryDate >= dateNow && m.sessionsRemaining > 0;
+            m.status === 'active' && m.startDate <= dateNow && m.expiryDate >= dateNow && (m.accessMode === 'unlimited' || m.sessionsRemaining > 0);
           return <tr key={m.id}>
             <Cell>
               <b>{m.customer}</b>
@@ -2361,8 +2355,7 @@ function MembershipTable({
             </Cell>
             <Cell>{m.package}</Cell>
             <Cell>
-              <b>{m.sessionsRemaining || 0}</b>
-              <span className="text-zawana-500"> / {m.sessionsTotal || 0}</span>
+              <b>{m.accessMode === 'unlimited' ? 'Unlimited' : `${m.sessionsRemaining || 0} / ${m.sessionsTotal || 0}`}</b>
             </Cell>
             <Cell>
               {m.startDate}
@@ -3485,58 +3478,66 @@ function Transactions({ business }: { business: Transaction['business'] }) {
 
 function CMS({ notify }: { notify: (s: string) => void }) {
   const o = useOperations();
-  const [editing, setEditing] = useState<any>(null);
-  const [deleting, setDeleting] = useState<any>(null);
+  const [editing, setEditing] = useState<ContentItem | null>(null);
+  const [deleting, setDeleting] = useState<ContentItem | null>(null);
   const [open, setOpen] = useState(false);
   const [publishingId, setPublishingId] = useState('');
-  const [form, setForm] = useState<any>({
+  const [saving, setSaving] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [kindFilter, setKindFilter] = useState('all');
+  const emptyForm: Omit<ContentItem, 'id'> = {
+    kind: 'achievement',
+    category: 'Milestones',
+    body: '',
     title: '',
     description: '',
     image: '',
     googleFormLink: '',
     status: 'draft',
-    publishDate: ''
-  });
+    publishDate: gymToday()
+  };
+  const [form, setForm] = useState(emptyForm);
+  const contentToday = gymToday();
 
-  const start = (item?: any) => {
+  const start = (item?: ContentItem, kind: ContentItem['kind'] = 'achievement') => {
     setEditing(item || null);
     setForm(
       item
-        ? { ...item }
-        : {
-            title: '',
-            description: '',
-            image: '',
-            googleFormLink: '',
-            status: 'draft',
-            publishDate: ''
-          }
+        ? { ...emptyForm, ...item }
+        : { ...emptyForm, kind }
     );
     setOpen(true);
   };
-  const isLive = (item: any) =>
-    item.status === 'published' && Boolean(item.publishDate) && item.publishDate <= today;
-  const isScheduled = (item: any) =>
-    item.status === 'published' && Boolean(item.publishDate) && item.publishDate > today;
+  const isLive = (item: ContentItem) =>
+    item.status === 'published' && Boolean(item.publishDate) && item.publishDate <= contentToday;
+  const isScheduled = (item: ContentItem) =>
+    item.status === 'published' && Boolean(item.publishDate) && item.publishDate > contentToday;
   const save = async () => {
-    if (!form.title) {
+    if (saving || imageUploading) return;
+    if (!form.title.trim()) {
       notify('Content title is required.');
       return }
+    setSaving(true);
     try {
       if (editing)
         await o.updateContent(editing.id, {
           title: form.title,
+          kind: form.kind,
+          category: form.category,
+          body: form.body,
           description: form.description,
           image: form.image,
           googleFormLink: form.googleFormLink,
           status: form.status,
-          publishDate: form.publishDate || today
+          publishDate: form.publishDate || contentToday
         });
-      else await o.addContent({ ...form, publishDate: form.publishDate || today });
+      else await o.addContent({ ...form, publishDate: form.publishDate || contentToday });
       notify(editing ? 'Content updated.' : 'Content created.');
       setOpen(false);
     } catch (e: any) {
       notify(e.message || 'Could not save content.')
+    } finally {
+      setSaving(false);
     }
   };
   const remove = async () => {
@@ -3549,11 +3550,11 @@ function CMS({ notify }: { notify: (s: string) => void }) {
       notify(e.message || 'Delete failed.')
     }
   };
-  const publish = async (item: any) => {
+  const publish = async (item: ContentItem) => {
     setPublishingId(item.id);
     try {
       await o.publishContent(item.id);
-      notify(item.title + ' is live on the homepage.');
+      notify(item.title + (item.kind === 'achievement' ? ' is live on the achievements page.' : ' is live on the homepage.'));
     } catch (e: any) {
       notify(e.message || 'Publish failed.')
     } finally {
@@ -3564,32 +3565,36 @@ function CMS({ notify }: { notify: (s: string) => void }) {
   return <div>
     <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
       <div>
-        <p className="max-w-xl text-sm text-zawana-500">Create homepage/community content with an image, description and Google Form CTA.</p>
+        <p className="max-w-xl text-sm text-zawana-500">Publish achievement articles or community updates. Achievement stories appear on their own public page.</p>
         <p className="mt-1 text-xs text-zawana-400">Future publish dates are scheduled. Use Publish now to show an item immediately.</p>
       </div>
-      <Button onClick={() => start()}>
-        <Plus size={16} /> New content</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => start(undefined, 'community')}><Plus size={16} /> Community update</Button>
+        <Button onClick={() => start()}><Plus size={16} /> New achievement</Button>
+      </div>
     </div>
-    <Table headers={['Content', 'Status', 'Publish date', 'Homepage', 'Actions']}>
-      {o.content.map((c: any) => {
+    <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Filter content type">
+      {[['all', 'All content'], ['achievement', 'Achievements'], ['community', 'Community']].map(([value, label]) =>
+        <Button key={value} variant={kindFilter === value ? 'primary' : 'secondary'} aria-pressed={kindFilter === value} onClick={() => setKindFilter(value)}>{label}</Button>)}
+      <Link to="/achievements" className="ml-auto inline-flex items-center gap-2 text-sm font-semibold"><Eye size={16} /> View achievements</Link>
+    </div>
+    <Table headers={['Content', 'Status', 'Publish date', 'Destination', 'Actions']}>
+      {o.content.filter(c => kindFilter === 'all' || c.kind === kindFilter).map(c => {
         const live = isLive(c);
         const scheduled = isScheduled(c);
         const dateLabel = c.publishDate
-          ? new Date(c.publishDate + 'T00:00:00').toLocaleDateString(undefined, {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric'
-            })
+          ? publicationDate(c.publishDate)
           : 'No date';
         return <tr key={c.id}>
           <Cell>
             <div className="flex items-center gap-3">
               <div className="h-12 w-16 overflow-hidden rounded-xl bg-zawana-900">
                 {c.image &&
-                  <img src={c.image} alt={c.title} className="h-full w-full object-cover" />}
+                  <img src={publicImageSrc(c.image)} alt={c.title} className="h-full w-full object-cover" />}
               </div>
               <div>
                 <b>{c.title}</b>
+                <p className="mt-1 text-xs font-semibold text-zawana-500">{c.kind === 'achievement' ? `Achievement · ${c.category}` : 'Community update'}</p>
                 <p className="max-w-sm truncate text-xs text-zawana-500">{c.description}</p>
               </div>
             </div>
@@ -3599,7 +3604,8 @@ function CMS({ notify }: { notify: (s: string) => void }) {
           </Cell>
           <Cell>{dateLabel}</Cell>
           <Cell>
-            {live ? 'Visible on homepage' : scheduled ? 'Scheduled for ' + dateLabel : 'Hidden'}
+            {c.kind === 'achievement' ? 'Achievements page' : 'Homepage / community'}
+            <p className="mt-1 text-xs text-zawana-500">{live ? 'Public' : scheduled ? 'Scheduled for ' + dateLabel : 'Hidden draft'}</p>
           </Cell>
           <Cell>
             <div className="flex flex-wrap gap-2">
@@ -3611,6 +3617,7 @@ function CMS({ notify }: { notify: (s: string) => void }) {
               >
                 <Edit3 size={15} />
               </button>
+              {live && c.kind === 'achievement' && <Link to={`/achievements/${c.id}`} className="rounded-xl p-2 hover:bg-zawana-900" aria-label={`View ${c.title}`}><Eye size={15} /></Link>}
               <button
                 className="rounded-xl p-2 text-red-600 hover:bg-red-50"
                 onClick={() => setDeleting(c)}
@@ -3622,7 +3629,7 @@ function CMS({ notify }: { notify: (s: string) => void }) {
               {!live &&
                 <Button
                   className="px-3 py-2"
-                  disabled={publishingId === c.id}
+                  disabled={Boolean(publishingId)}
                   onClick={() => publish(c)}
                 >
                   {publishingId === c.id ? 'Publishing…' : 'Publish now'}
@@ -3632,57 +3639,72 @@ function CMS({ notify }: { notify: (s: string) => void }) {
         </tr>
       })}
     </Table>
+    {!o.content.some(c => kindFilter === 'all' || c.kind === kindFilter) && <Empty title="Your next story starts here" body="Create an achievement to celebrate your players, or a community update for the homepage." />}
     <AnimatePresence>{open &&
       <OpsModal
-        title={editing ? 'Edit content' : 'Create content'}
-        subtitle="Set a future date to schedule publication, or use Publish now to make it visible immediately."
-        onClose={() => setOpen(false)}
+        title={editing ? 'Edit content' : 'Create a new story'}
+        subtitle="Save a draft, publish today, or choose a future date to schedule your story. Dates use Yangon time."
+        onClose={() => { if (!saving && !imageUploading) setOpen(false); }}
       >
         <div className="grid gap-4 md:grid-cols-2">
-          <input
-            placeholder="Title"
+          <label className="text-sm font-semibold">Post type
+          <Select aria-label="Post type" value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value as ContentItem['kind'] })}>
+            <option value="achievement">Achievement article</option><option value="community">Community update</option>
+          </Select></label>
+          <label className="text-sm font-semibold">Category
+          <Select aria-label="Story category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value as ContentItem['category'] })}>
+            {['Milestones', 'Tournaments', 'Academy', 'Community'].map(category => <option key={category} value={category}>{category}</option>)}
+          </Select></label>
+          <label className="text-sm font-semibold md:col-span-2">Title
+          <input className="mt-2 w-full" aria-label="Story title" maxLength={180}
+            placeholder="Give your story a title"
             value={form.title || ''}
             onChange={e => setForm({ ...form, title: e.target.value })}
-          />
-          <input
-            placeholder="Image URL / path"
+          /></label>
+          <div className="md:col-span-2"><ImageUpload label="Story cover image" value={form.image} onBusyChange={setImageUploading} onChange={url => setForm(current => ({ ...current, image: url || '' }))} /></div>
+          <label className="text-sm font-semibold">Or use an image URL / path
+          <input className="mt-2 w-full" aria-label="Cover image URL" placeholder="https://… or /facilities/…"
             value={form.image || ''}
             onChange={e => setForm({ ...form, image: e.target.value })}
-          />
-          <input
-            placeholder="Google Form link"
+          /></label>
+          <label className="text-sm font-semibold">Registration / more information (optional)
+          <input className="mt-2 w-full" aria-label="More information URL" type="url" placeholder="https://…"
             value={form.googleFormLink || ''}
             onChange={e => setForm({ ...form, googleFormLink: e.target.value })}
-          />
+          /></label>
+          <label className="text-sm font-semibold md:col-span-2">{form.kind === 'achievement' ? 'Summary' : 'Description'}
+          <textarea className="mt-2 w-full" aria-label="Story summary" rows={3} maxLength={3000} placeholder="A short introduction for readers"
+            value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+          </label>
+          {form.kind === 'achievement' && <label className="text-sm font-semibold md:col-span-2">Full article
+            <textarea className="mt-2 w-full" aria-label="Full article" rows={12} maxLength={100000} placeholder="Tell the full story…"
+              value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} />
+            <span className="mt-1 block text-xs font-normal text-zawana-500">Plain text. Leave a blank line between paragraphs. A summary and full article are required to publish.</span>
+          </label>}
+          <label className="text-sm font-semibold">Publication status
           <Select
             aria-label="Content status"
             value={form.status || 'draft'}
-            onChange={e => setForm({ ...form, status: e.target.value })}
+            onChange={e => setForm({ ...form, status: e.target.value as ContentItem['status'] })}
           >
             <option value="draft">Draft</option>
             <option value="published">Published</option>
-          </Select>
-          <textarea
-            className="md:col-span-2"
-            rows={6}
-            placeholder="Description"
-            value={form.description || ''}
-            onChange={e => setForm({ ...form, description: e.target.value })}
-          />
+          </Select></label>
           <label className="text-sm font-semibold text-zawana-600">Publish date
      <input
               className="mt-2 w-full"
               type="date"
+              aria-label="Publish date"
               value={form.publishDate || ''}
               onChange={e => setForm({ ...form, publishDate: e.target.value })}
             />
-            <span className="mt-1 block text-xs font-normal text-zawana-400">Published content appears on the homepage on this date.</span>
+            <span className="mt-1 block text-xs font-normal text-zawana-400">Published {form.kind === 'achievement' ? 'articles appear on the achievements page' : 'updates appear on the homepage'} on this date.</span>
           </label>
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={save}>
-            <Check size={15} /> Save content</Button>
+          <Button variant="secondary" disabled={saving || imageUploading} onClick={() => setOpen(false)}>Cancel</Button>
+          <Button disabled={saving || imageUploading} onClick={save}>
+            <Check size={15} /> {saving ? 'Saving…' : imageUploading ? 'Uploading cover…' : 'Save story'}</Button>
         </div>
       </OpsModal>}</AnimatePresence>
     <AnimatePresence>{deleting &&

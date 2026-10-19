@@ -161,6 +161,8 @@ model User {
   badmintonPackageCategories BadmintonPackageCategory[] @relation("BadmintonPackageCategoryCreator")
   badmintonPackagePurchases BadmintonPackagePurchase[]
   paymentAttempts       PaymentAttempt[]
+  gymEnrollmentMembers GymEnrollmentMember[]
+  gymSessionAttendance GymSessionAttendance[]
   courtDateOverrides    CourtDateOverride[]
 
   @@index([role, active])
@@ -234,6 +236,7 @@ model Coach {
   userId    String?     @unique
   user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   bookings  Booking[]
+  gymEnrollments GymEnrollment[]
   privateTrainingSessions PrivateTrainingSession[]
   privateCourses PrivateCourse[] @relation("PrivateCourseCoaches")
 }
@@ -294,6 +297,11 @@ model Booking {
 }
 
 model PrivateTrainingSession {
+  enrollmentId String?
+  enrollment GymEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  requestKey String?
+  attendance GymSessionAttendance[]
+  debit GymSessionDebit?
   id               String                @id @default(cuid())
   memberId         String
   member           User                  @relation("PrivateTrainingMember", fields: [memberId], references: [id], onDelete: Cascade)
@@ -310,6 +318,8 @@ model PrivateTrainingSession {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @default(now()) @updatedAt
 
+  @@unique([enrollmentId, requestKey])
+  @@index([enrollmentId, status])
   @@index([memberId, date, status])
   @@index([coachId, date, status])
 }
@@ -353,6 +363,9 @@ model MembershipPlan {
 }
 
 model Membership {
+  enrollmentId String? @unique
+  enrollment GymEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  accessMode String @default("sessions")
   id          String  @id @default(cuid())
   customerId  String
   userId      String?
@@ -489,6 +502,7 @@ model Transaction {
   staff         String
   status        String
   createdAt     DateTime            @default(now())
+  gymEnrollment GymEnrollment?
   cafeOrder     CafeOrder?
 
   @@index([userId, date])
@@ -659,6 +673,17 @@ model BadmintonCheckIn {
 }
 
 model GymPackage {
+  kind String @default("MEMBERSHIP")
+  rate Int @default(0)
+  months Int @default(0)
+  validityDays Int @default(90)
+  sessionMinutes Int @default(60)
+  minMembers Int @default(1)
+  maxMembers Int @default(1)
+  coachRequired Boolean @default(false)
+  version Int @default(1)
+  revisions GymPackageRevision[]
+  enrollments GymEnrollment[]
   id          String @id @default(cuid())
   title       String
   price       Int
@@ -671,12 +696,17 @@ model GymPackage {
 
 model ContentItem {
   id             String @id @default(cuid())
+  kind           String @default("community")
+  category       String @default("Milestones")
+  body           String @default("")
   title          String
   image          String
   description    String
   googleFormLink String
   status         String @default("draft")
   publishDate    String
+
+  @@index([kind, status, publishDate])
 }
 
 model AuthIdentity {
@@ -764,4 +794,92 @@ model BookingSubmission {
   bookingIds String
   createdAt DateTime @default(now())
   @@id([userId, key])
+}
+
+
+model GymPackageRevision {
+  id String @id @default(cuid())
+  packageId String
+  package GymPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  version Int
+  snapshot Json
+  actorId String?
+  createdAt DateTime @default(now())
+  @@unique([packageId, version])
+}
+
+model GymEnrollment {
+  id String @id @default(cuid())
+  code String @unique
+  packageId String
+  package GymPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  packageVersion Int
+  snapshot Json
+  kind String
+  totalPrice Int
+  sessionsTotal Int
+  sessionsRemaining Int
+  status String @default("PENDING_PAYMENT")
+  startDate String
+  expiryDate String
+  coachId String?
+  coach Coach? @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  createdById String
+  requestKey String
+  payloadHash String
+  renewalOfId String?
+  renewalOf GymEnrollment? @relation("GymRenewal", fields: [renewalOfId], references: [id], onDelete: Restrict)
+  renewals GymEnrollment[] @relation("GymRenewal")
+  transactionId String? @unique
+  transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  paymentMethod String?
+  paidAt DateTime?
+  createdAt DateTime @default(now())
+  members GymEnrollmentMember[]
+  sessions PrivateTrainingSession[]
+  membership Membership?
+  debits GymSessionDebit[]
+  @@unique([createdById, requestKey])
+  @@index([renewalOfId])
+  @@index([status, expiryDate])
+  @@index([packageId, createdAt])
+}
+
+model GymEnrollmentMember {
+  enrollmentId String
+  enrollment GymEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@id([enrollmentId, userId])
+  @@index([userId])
+}
+
+model GymSessionAttendance {
+  sessionId String
+  session PrivateTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status String @default("EXPECTED")
+  @@id([sessionId, userId])
+}
+
+model GymSessionDebit {
+  sessionId String @id
+  session PrivateTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  enrollmentId String
+  enrollment GymEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  actorId String
+  createdAt DateTime @default(now())
+}
+
+model GymAuditLog {
+  id String @id @default(cuid())
+  actorId String
+  action String
+  entityType String
+  entityId String
+  before Json?
+  after Json?
+  createdAt DateTime @default(now())
+  @@index([entityType, entityId, createdAt])
 }

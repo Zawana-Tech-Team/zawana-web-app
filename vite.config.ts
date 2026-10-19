@@ -8,6 +8,8 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         codeSplitting: {
+          // Keep React/shared UI out of the lazy WebGL chunks and their dependency graph.
+          includeDependenciesRecursively: false,
           groups: [
             {
               name: 'three-core',

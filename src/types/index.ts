@@ -215,6 +215,8 @@ export type GymPackage = {
 };
 
 export type MembershipRecord = {
+  accessMode?: string;
+  enrollmentId?: string | null;
   id: string;
   customerId: string;
   customer: string;
@@ -373,12 +375,25 @@ export type CafeOrder = {
 
 export type ContentItem = {
   id: string;
+  kind: 'community' | 'achievement';
+  category: 'Milestones' | 'Tournaments' | 'Academy' | 'Community';
+  body: string;
   title: string;
   image: string;
   description: string;
   googleFormLink: string;
   status: 'draft' | 'published';
   publishDate: string;
+};
+
+export type AchievementSummary = Pick<ContentItem, 'id' | 'title' | 'kind' | 'category' | 'description' | 'image' | 'publishDate'>;
+
+export type PublicCoach = {
+  id: string;
+  name: string;
+  specialty: string;
+  department: 'Badminton';
+  imageUrl: string | null;
 };
 
 export type Student = {

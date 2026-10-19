@@ -49,7 +49,7 @@ const configs: Record<Exclude<UserRole, 'member'>, RoleConfig> = {
       { to: '/admin/private-courses', label: 'Private Courses', icon: CalendarDays },
       { to: '/admin/courts', label: 'Court Rentals', icon: CalendarDays },
       { to: '/admin/finance', label: 'Finance', icon: BarChart3 },
-      { to: '/admin/cms', label: 'Content / Community', icon: FileText },
+      { to: '/admin/cms', label: 'Content & Achievements', icon: FileText },
     ]
   },
   owner: {

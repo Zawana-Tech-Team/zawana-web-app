@@ -11,6 +11,9 @@ import { classes, courts } from './data';
 
 const Generic = lazy(() => import('./pages/Generic').then(module => ({ default: module.Generic })));
 const Home = lazy(() => import('./pages/Home').then(module => ({ default: module.Home })));
+const Achievements = lazy(() => import('./pages/Achievements').then(module => ({ default: module.Achievements })));
+const AchievementArticle = lazy(() => import('./pages/Achievements').then(module => ({ default: module.AchievementArticle })));
+const Coaches = lazy(() => import('./pages/Coaches').then(module => ({ default: module.Coaches })));
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
 const Signup = lazy(() => import('./pages/Signup').then(module => ({ default: module.Signup })));
 const CafeCustomer = lazy(() =>
@@ -104,7 +107,8 @@ const homeByRole: Record<UserRole, string> = {
 };
 
 function Guard({ role, children }: { role: UserRole; children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return <RouteLoading />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== role) return <Navigate to={homeByRole[user.role] || '/dashboard'} replace />;
   if (role === 'member') return <AppLayout role="member">{children}</AppLayout>;
@@ -154,15 +158,9 @@ export default function App() {
           <Generic title="Memberships" body="Choose an access plan built around how you train." />
         }
       />
-      <Route
-        path="/coaches"
-        element={
-          <Generic
-            title="Coaches"
-            body="Meet Zawana coaches across badminton, strength, conditioning and recovery."
-          />
-        }
-      />
+      <Route path="/coaches" element={<Coaches />} />
+      <Route path="/achievements" element={<Achievements />} />
+      <Route path="/achievements/:id" element={<AchievementArticle />} />
       <Route
         path="/contact"
         element={

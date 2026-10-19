@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CalendarDays, Dumbbell } from "lucide-react";
 import { Badge, Card, Empty, Page } from "../components/UI";
 import { get } from "../api";
+import GymEnrollments from "./GymEnrollments";
 
 type TrainingSession = {
   id: string;
@@ -69,6 +70,7 @@ export default function MemberTraining() {
       <p role="alert" className="mb-5 rounded-xl bg-red-50 p-4 text-sm text-red-800">
         {error}
       </p>}
+    <div className="mb-6"><GymEnrollments memberView /></div>
     <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
       <Card className="p-6">
         <div className="flex items-center gap-3">

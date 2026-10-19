@@ -16,6 +16,10 @@ import { requireRecentSession } from "./modules/auth/hybrid.policy.js";
 import mediaRoutes from "./routes/media.js";
 import cafeRoutes from "./routes/cafe.js";
 import gymTrainingRoutes from "./routes/gymTraining.js";
+import { createGymManagementRoutes } from "./routes/gymManagement.js";
+import { activateGymEnrollment } from "./services/gymEnrollments.js";
+import { gymError, lockEnrollment } from "./services/gymPolicy.js";
+import { checkGymSchedule } from "./services/gymSessions.js";
 import { auth, roles } from "./middleware/auth.js";
 import type { AuthRequest } from "./types/auth.js";
 import { env } from "./config/env.js";
@@ -29,6 +33,8 @@ import { isDateKey } from "./utils/dateKeys.js";
 import { asyncRoute } from "./utils/asyncRoute.js";
 import { isStoredImageUrl } from "./services/mediaStorage.js";
 import { firebaseAdminAuth } from "./services/firebaseAdmin.js";
+import { contentInput } from "./services/contentPolicy.js";
+import { createPublicStoriesRoutes } from "./routes/publicStories.js";
 
 const app = express();
 const PORT = env.port;
@@ -77,6 +83,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/cafe", cafeRoutes);
 app.use("/api", gymTrainingRoutes);
+app.use("/api", createPublicStoriesRoutes(prisma));
+app.use("/api", createGymManagementRoutes(prisma, startKPayAttempt));
 app.use("/api", createCourtBookingRoutes(prisma, expirePrivateCourseReservations));
 
 const businessTimeZone = process.env.BUSINESS_TIME_ZONE || "Asia/Yangon";
@@ -130,6 +138,11 @@ async function startKPayAttempt(
     );
   const reference = code("KP");
   const { attempt, isNew } = await prisma.$transaction(async tx => {
+    if (resourceType === "gym_enrollment") {
+      const enrollment = await lockEnrollment(tx, resourceId);
+      if (enrollment.status !== "PENDING_PAYMENT" || enrollment.expiryDate < today() || enrollment.totalPrice !== amount)
+        throw gymError("This enrollment is no longer payable.");
+    }
     if (resourceType === "private_course") {
       await rawExec(tx, `UPDATE "Booking" SET id=id WHERE id=?`, resourceId);
       const booking = await tx.booking.findUnique({
@@ -297,7 +310,7 @@ async function expirePrivateCourseReservations() {
             userId: attempt.userId,
             title: "Payment session expired",
             body: "Your KPay checkout expired. No payment was recorded; you can start a new checkout.",
-            link: attempt.resourceType === "badminton_package" ? "/membership" : "/bookings",
+            link: attempt.resourceType === "gym_enrollment" ? "/member/training" : attempt.resourceType === "badminton_package" ? "/membership" : "/bookings",
             audience: "member",
             type: "payment",
             icon: "clock",
@@ -2076,12 +2089,16 @@ app.post(
       })
     )
       return res.status(409).json({ message: "That coach is already booked at this time." });
-    const booking = await prisma.booking.create({
+    const booking = await prisma.$transaction(async tx => {
+      await tx.$executeRaw`UPDATE "Coach" SET "status"="status" WHERE "id"=${coach.id}`;
+      await tx.$executeRaw`UPDATE "User" SET "active"="active" WHERE "id"=${req.user!.id}`;
+      await checkGymSchedule(tx, coach.id, [req.user!.id], b.date!, wanted[0], wanted[1]);
+      return tx.booking.create({
       data: {
         kind: "pt",
         title: b.title || "Personal training",
-        date: b.date,
-        time: b.time,
+        date: b.date!,
+        time: b.time!,
         location: b.location || "Zawana",
         coachId: coach.id,
         price: 30000,
@@ -2090,6 +2107,7 @@ app.post(
         status: "CONFIRMED",
         paymentStatus: "pending"
       }
+    });
     });
     res.status(201).json({ booking });
   })
@@ -2617,59 +2635,6 @@ app.delete(
     res.status(204).end()
   })
 );
-app.get(
-  "/api/packages/gym",
-  auth,
-  roles("admin", "owner", "gym_fo"),
-  asyncRoute(async (_req, res) =>
-    res.json(await prisma.gymPackage.findMany({ orderBy: { title: "asc" } }))
-  )
-);
-const gymPackageInput = z.object({
-  title: z.string().trim().min(2).max(120),
-  price: z.coerce.number().int().nonnegative(),
-  duration: z.coerce.number().int().positive(),
-  sessions: z.coerce.number().int().positive(),
-  description: z.string().default(""),
-  benefits: z.array(z.string()).default([]),
-  status: z.enum(["active", "inactive"]).default("active")
-});
-app.post(
-  "/api/packages/gym",
-  auth,
-  roles("admin", "gym_fo"),
-  asyncRoute(async (req, res) =>
-    res.status(201).json(await prisma.gymPackage.create({ data: gymPackageInput.parse(req.body) }))
-  )
-);
-app.patch(
-  "/api/packages/gym/:id",
-  auth,
-  roles("admin", "gym_fo"),
-  asyncRoute(async (req, res) => {
-    const input = gymPackageInput.partial().parse(req.body);
-    const result = await prisma.$transaction(async tx => {
-      const pkg = await tx.gymPackage.update({ where: { id: req.params.id }, data: input });
-      if (input.sessions && input.sessions > 0)
-        await tx.membership.updateMany({
-          where: { packageId: pkg.id, status: "active", sessionsTotal: 0 },
-          data: { sessionsTotal: input.sessions, sessionsRemaining: input.sessions }
-        });
-      return pkg;
-    });
-    res.json(result);
-  })
-);
-app.delete(
-  "/api/packages/gym/:id",
-  auth,
-  roles("admin", "gym_fo"),
-  asyncRoute(async (req, res) => {
-    await prisma.gymPackage.delete({ where: { id: req.params.id } });
-    res.status(204).end()
-  })
-);
-
 // Memberships
 app.get(
   "/api/memberships",
@@ -2700,58 +2665,6 @@ app.post(
       .json({ message: "Memberships can only be activated by verified KPay payment." })
   )
 );
-app.post(
-  "/api/memberships/check-in",
-  auth,
-  roles("admin", "owner", "gym_fo"),
-  asyncRoute(async (req: AuthRequest, res) => {
-    const body = z
-      .object({ membershipId: z.string().min(1), note: z.string().optional() })
-      .parse(req.body);
-    const date = today(),
-      time = businessNow().clock;
-    let result: any;
-    try {
-      result = await prisma.$transaction(async tx => {
-        const row = await tx.membership.findUnique({ where: { id: body.membershipId } });
-        if (!row) return { error: "Gym membership not found.", status: 404 };
-        if (row.status !== "active" || row.expiryDate < date)
-          return { error: "This Gym membership has expired.", status: 409 };
-        if (row.sessionsRemaining <= 0)
-          return { error: "No Gym sessions remain on this package.", status: 409 };
-        const duplicate = await tx.gymCheckIn.findUnique({
-          where: { membershipId_date: { membershipId: row.id, date } }
-        });
-        if (duplicate)
-          return { error: "This membership is already checked in today.", status: 409 };
-        const changed = await tx.membership.updateMany({
-          where: {
-            id: row.id,
-            status: "active",
-            expiryDate: { gte: date },
-            sessionsRemaining: { gt: 0 }
-          },
-          data: { sessionsRemaining: { decrement: 1 }, lastCheckIn: `${date} ${time}` }
-        });
-        if (!changed.count)
-          return { error: "Membership access changed. Refresh and try again.", status: 409 };
-        const checkIn = await tx.gymCheckIn.create({
-          data: { membershipId: row.id, date, time, staffId: req.user!.id, note: body.note }
-        });
-        return { membership: await tx.membership.findUnique({ where: { id: row.id } }), checkIn };
-      });
-    } catch (error: any) {
-      if (error?.code === "P2002")
-        return res
-          .status(409)
-          .json({ message: "This membership has already been checked in today." });
-      throw error;
-    }
-    if ("error" in result) return res.status(result.status).json({ message: result.error });
-    res.status(201).json(result);
-  })
-);
-
 // Badminton package ownership + check-in
 function addDaysIso(start: string, days: number) {
   const d = new Date(`${start}T00:00:00`);
@@ -3647,7 +3560,12 @@ app.get(
     const hasPage = typeof req.query.page !== "undefined",
       page = Math.max(1, Number(req.query.page) || 1),
       limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-    const where: any = req.user!.role === "member" ? { userId: req.user!.id } : {};
+    const where: any = req.user!.role === "member" ? {
+      AND: [{ OR: [
+        { userId: req.user!.id },
+        { gymEnrollment: { is: { members: { some: { userId: req.user!.id } } } } },
+      ] }],
+    } : {};
     if (
       ![
         "admin",
@@ -3809,7 +3727,7 @@ app.get(
   asyncRoute(async (_req, res) =>
     res.json(
       await prisma.contentItem.findMany({
-        where: { status: "published", publishDate: { lte: today() } },
+        where: { kind: "community", status: "published", publishDate: { lte: today() } },
         orderBy: { publishDate: "desc" },
         take: 100
       })
@@ -3829,16 +3747,18 @@ app.post(
   auth,
   roles("admin"),
   asyncRoute(async (req, res) =>
-    res.status(201).json(await prisma.contentItem.create({ data: req.body }))
+    res.status(201).json(await prisma.contentItem.create({ data: contentInput.parse(req.body) }))
   )
 );
 app.patch(
   "/api/content/:id",
   auth,
   roles("admin"),
-  asyncRoute(async (req, res) =>
-    res.json(await prisma.contentItem.update({ where: { id: req.params.id }, data: req.body }))
-  )
+  asyncRoute(async (req, res) => {
+    const existing = await prisma.contentItem.findUniqueOrThrow({ where: { id: req.params.id } });
+    const data = contentInput.parse({ ...existing, ...req.body });
+    res.json(await prisma.contentItem.update({ where: { id: req.params.id }, data }));
+  })
 );
 app.delete(
   "/api/content/:id",
@@ -3853,14 +3773,11 @@ app.patch(
   "/api/content/:id/publish",
   auth,
   roles("admin"),
-  asyncRoute(async (req, res) =>
-    res.json(
-      await prisma.contentItem.update({
-        where: { id: req.params.id },
-        data: { status: "published", publishDate: today() }
-      })
-    )
-  )
+  asyncRoute(async (req, res) => {
+    const existing = await prisma.contentItem.findUniqueOrThrow({ where: { id: req.params.id } });
+    const data = contentInput.parse({ ...existing, status: "published", publishDate: today() });
+    res.json(await prisma.contentItem.update({ where: { id: req.params.id }, data }));
+  })
 );
 
 // Member badminton dashboard and private course workflow. Private-course requests
@@ -5030,6 +4947,10 @@ app.post(
       });
       if (!changed.count) return "already";
       const user = await tx.user.findUniqueOrThrow({ where: { id: attempt.userId } });
+      if (attempt.resourceType === "gym_enrollment") {
+        await activateGymEnrollment(tx, attempt.resourceId, attempt.amount, "KPay", "kpay:webhook", "KPay");
+        return "activated";
+      }
       if (["court", "private_course", "booking"].includes(attempt.resourceType)) {
         const booking = await tx.booking.findUnique({
           where: { id: attempt.resourceId },

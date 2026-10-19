@@ -37,7 +37,8 @@ export function PaymentStatus() {
   const paid = attempt?.status === 'SUCCEEDED',
     expired = attempt?.status === 'EXPIRED',
     failed = attempt?.status === 'FAILED';
-  return <Page title="KPay checkout" eyebrow="Private course payment">
+  const gym = attempt?.resourceType === 'gym_enrollment';
+  return <Page title="KPay checkout" eyebrow={gym ? 'Gym package payment' : 'Private course payment'}>
     <Card className="mx-auto max-w-xl p-7 text-center">
       <div
         className={`mx-auto grid h-14 w-14 place-items-center rounded-2xl ${paid ? 'bg-emerald-100 text-emerald-700' : expired || failed ? 'bg-red-100 text-red-700' : 'bg-zawana-950 text-zawana-gold'}`}
@@ -106,12 +107,12 @@ export function PaymentStatus() {
         <p className="mt-4 inline-flex items-center gap-2 text-xs text-zawana-500">
           <Clock3 size={14} />Waiting for KPay confirmation…</p>}
       {paid &&
-        <p className="mt-3 text-sm text-emerald-800">Your private course is now confirmed. Your member and coach schedules have been updated.</p>}
+        <p className="mt-3 text-sm text-emerald-800">{gym ? 'Your gym package is activated. View your package balance and receipt in My Gym Training.' : 'Your private course is now confirmed. Your member and coach schedules have been updated.'}</p>}
       {expired &&
-        <p className="mt-3 text-sm text-zawana-500">The reservation was released when the 24-hour payment window ended.</p>}
+        <p className="mt-3 text-sm text-zawana-500">{gym ? 'This checkout expired without activation. Ask Gym Front Office to start a new checkout.' : 'The reservation was released when the 24-hour payment window ended.'}</p>}
       <div className="mt-6 flex flex-wrap justify-center gap-2">
-        <Link to="/bookings">
-          <Button>{paid ? 'View confirmed booking' : 'My bookings'}</Button>
+        <Link to={gym ? '/member/training' : '/bookings'}>
+          <Button>{gym ? 'View gym packages' : paid ? 'View confirmed booking' : 'My bookings'}</Button>
         </Link>
         <Link to="/member">
           <Button variant="secondary">Member dashboard</Button>
