@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { lazy, Suspense, useState } from 'react';
-import { ArrowDown, ArrowUpRight, MoveUpRight, Pause, Play } from 'lucide-react';
+import { ArrowUpRight, MoveUpRight } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { LocalizedTree, LanguageSwitcher } from '../../context/LanguageContext';
 import {
@@ -9,95 +8,17 @@ import {
   MagneticButton,
   ParallaxImage,
   RevealLines,
-  RevealText,
   SectionTransition,
   StaggerContainer
 } from './Motion';
 import { PublicBrand } from './PublicNavigation';
-import HeroSceneBoundary from './HeroSceneBoundary';
-import HeroFallback from './HeroFallback';
 
-const HeroScene = lazy(() => import('./HeroScene'));
 
 export function SectionLabel({ number, children }: { number: string; children: string }) {
   return (
     <p className="public-eyebrow">
       <span>{number} /</span> {children}
     </p>
-  );
-}
-
-export function CinematicHero() {
-  const [scenePaused, setScenePaused] = useState(false);
-  const reduced = useReducedMotion();
-  return (
-    <LocalizedTree>
-      <section className="cinematic-hero cinematic-hero--three" aria-labelledby="hero-heading">
-        <HeroSceneBoundary fallback={<HeroFallback />}>
-          <Suspense fallback={<HeroFallback />}>
-            <HeroScene paused={scenePaused} />
-          </Suspense>
-        </HeroSceneBoundary>
-        <div className="hero-shade" />
-        {!reduced && (
-          <button
-            type="button"
-            className="hero-scene-control"
-            aria-label={scenePaused ? 'Resume 3D motion' : 'Pause 3D motion'}
-            aria-pressed={scenePaused}
-            onClick={() => setScenePaused((value) => !value)}
-          >
-            {scenePaused ? (
-              <Play size={12} aria-hidden="true" />
-            ) : (
-              <Pause size={12} aria-hidden="true" />
-            )}
-            {scenePaused ? 'Resume motion' : 'Pause motion'}
-          </button>
-        )}
-        <div className="hero-scene-caption" aria-hidden="true">
-          <span>PRECISION IN MOTION</span>
-          <span>BADMINTON / PERFORMANCE / LIFESTYLE</span>
-        </div>
-        <div className="hero-content public-container">
-          <FadeUp>
-            <p className="public-eyebrow">
-              <span className="hero-gold-line" /> Yangon, Myanmar · Sports & lifestyle
-            </p>
-          </FadeUp>
-          <h1 id="hero-heading">
-            <RevealText text="ELEVATE YOUR GAME." delay={0.3} />
-            <RevealText text="REDEFINE YOUR" delay={0.5} />
-            <RevealText text="LIFESTYLE." delay={0.65} className="hero-outline" />
-          </h1>
-          <FadeUp delay={0.65} className="hero-support">
-            <p>A connected destination for badminton, performance, recovery, and lifestyle.</p>
-            <div className="public-actions">
-              <MagneticButton to="#ecosystem">Explore ZAWANA</MagneticButton>
-              <MagneticButton to="/book/court" variant="outline">
-                Book a Court
-              </MagneticButton>
-            </div>
-          </FadeUp>
-        </div>
-        <Link className="hero-note" to="/book/court">
-          <span className="hero-note__index">01 / THE ARENA</span>
-          <span>
-            Make time
-            <br />
-            for your game.
-          </span>
-          <ArrowUpRight size={25} aria-hidden="true" />
-        </Link>
-        <div className="hero-bottom public-container">
-          <a href="#arena">
-            Scroll to discover <ArrowDown size={15} aria-hidden="true" />
-          </a>
-          <span>PLAY. TRAIN. RECOVER. BELONG.</span>
-          <span>THE ART OF PERFORMANCE</span>
-        </div>
-      </section>
-    </LocalizedTree>
   );
 }
 
@@ -455,11 +376,11 @@ export function ClosingSection() {
         <div className="public-container closing-content">
           <SectionLabel number="08">Your next chapter</SectionLabel>
           <h2 id="closing-heading" className="public-heading">
-            <RevealLines lines={['YOUR NEXT LEVEL', 'STARTS HERE.']} />
+            <RevealLines lines={['BEYOND THE GAME.', 'INTO YOUR ELEMENT.']} />
           </h2>
           <FadeUp>
             <p>A new game. A stronger you. A place to belong.</p>
-            <MagneticButton to="/signup">Join ZAWANA</MagneticButton>
+            <div className="public-actions"><MagneticButton to="/book/court">Book a Court</MagneticButton><MagneticButton to="/signup" variant="outline">Join ZAWANA</MagneticButton></div>
           </FadeUp>
           <span className="closing-signature">THE ART OF PERFORMANCE.</span>
         </div>
@@ -491,9 +412,11 @@ export function PublicFooter() {
             </div>
             <nav aria-label="Explore ZAWANA">
               <span className="public-small">DISCOVER</span>
-              <a href="#arena">The arena</a>
-              <a href="#ecosystem">Our experiences</a>
-              <a href="#community">Community</a>
+              <a href="/#arena">The arena</a>
+              <a href="/#ecosystem">Our experiences</a>
+              <a href="/#community">Community</a>
+              <Link to="/achievements">Achievements</Link>
+              <Link to="/coaches">Badminton coaches</Link>
               <Link to="/contact">Contact ZAWANA</Link>
             </nav>
             <nav aria-label="ZAWANA services">

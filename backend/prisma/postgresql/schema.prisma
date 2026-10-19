@@ -696,12 +696,17 @@ model GymPackage {
 
 model ContentItem {
   id             String @id @default(cuid())
+  kind           String @default("community")
+  category       String @default("Milestones")
+  body           String @default("")
   title          String
   image          String
   description    String
   googleFormLink String
   status         String @default("draft")
   publishDate    String
+
+  @@index([kind, status, publishDate])
 }
 
 model AuthIdentity {

@@ -33,6 +33,8 @@ import { isDateKey } from "./utils/dateKeys.js";
 import { asyncRoute } from "./utils/asyncRoute.js";
 import { isStoredImageUrl } from "./services/mediaStorage.js";
 import { firebaseAdminAuth } from "./services/firebaseAdmin.js";
+import { contentInput } from "./services/contentPolicy.js";
+import { createPublicStoriesRoutes } from "./routes/publicStories.js";
 
 const app = express();
 const PORT = env.port;
@@ -81,6 +83,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/cafe", cafeRoutes);
 app.use("/api", gymTrainingRoutes);
+app.use("/api", createPublicStoriesRoutes(prisma));
 app.use("/api", createGymManagementRoutes(prisma, startKPayAttempt));
 app.use("/api", createCourtBookingRoutes(prisma, expirePrivateCourseReservations));
 
@@ -3724,7 +3727,7 @@ app.get(
   asyncRoute(async (_req, res) =>
     res.json(
       await prisma.contentItem.findMany({
-        where: { status: "published", publishDate: { lte: today() } },
+        where: { kind: "community", status: "published", publishDate: { lte: today() } },
         orderBy: { publishDate: "desc" },
         take: 100
       })
@@ -3744,16 +3747,18 @@ app.post(
   auth,
   roles("admin"),
   asyncRoute(async (req, res) =>
-    res.status(201).json(await prisma.contentItem.create({ data: req.body }))
+    res.status(201).json(await prisma.contentItem.create({ data: contentInput.parse(req.body) }))
   )
 );
 app.patch(
   "/api/content/:id",
   auth,
   roles("admin"),
-  asyncRoute(async (req, res) =>
-    res.json(await prisma.contentItem.update({ where: { id: req.params.id }, data: req.body }))
-  )
+  asyncRoute(async (req, res) => {
+    const existing = await prisma.contentItem.findUniqueOrThrow({ where: { id: req.params.id } });
+    const data = contentInput.parse({ ...existing, ...req.body });
+    res.json(await prisma.contentItem.update({ where: { id: req.params.id }, data }));
+  })
 );
 app.delete(
   "/api/content/:id",
@@ -3768,14 +3773,11 @@ app.patch(
   "/api/content/:id/publish",
   auth,
   roles("admin"),
-  asyncRoute(async (req, res) =>
-    res.json(
-      await prisma.contentItem.update({
-        where: { id: req.params.id },
-        data: { status: "published", publishDate: today() }
-      })
-    )
-  )
+  asyncRoute(async (req, res) => {
+    const existing = await prisma.contentItem.findUniqueOrThrow({ where: { id: req.params.id } });
+    const data = contentInput.parse({ ...existing, status: "published", publishDate: today() });
+    res.json(await prisma.contentItem.update({ where: { id: req.params.id }, data }));
+  })
 );
 
 // Member badminton dashboard and private course workflow. Private-course requests

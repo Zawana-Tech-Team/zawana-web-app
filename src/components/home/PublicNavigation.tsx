@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ArrowUpRight, Menu, X } from 'lucide-react';
 import { LanguageSwitcher, LocalizedTree } from '../../context/LanguageContext';
 
@@ -8,8 +8,12 @@ const links = [
   ['#arena', 'The Arena'],
   ['#ecosystem', 'Experiences'],
   ['#membership', 'Membership'],
-  ['#community', 'Community']
+  ['#community', 'Community'],
+  ['/achievements', 'Achievements'],
+  ['/coaches', 'Coaches']
 ];
+
+const MotionLink = motion.create(Link);
 
 export function PublicBrand({ onClick }: { onClick?: () => void }) {
   return (
@@ -39,6 +43,8 @@ export function PublicNavigation() {
   const trigger = useRef<HTMLButtonElement>(null);
   const reduced = useReducedMotion();
   const location = useLocation();
+  const currentPath = useRef(location.pathname);
+  currentPath.current = location.pathname;
   useEffect(() => {
     setOpen(false);
   }, [location.pathname]);
@@ -46,6 +52,7 @@ export function PublicNavigation() {
     if (!menuPresent || !dialog.current) return;
     const element = dialog.current;
     const scrollY = window.scrollY;
+    const openedOnPath = currentPath.current;
     const bodyStyle = {
       position: document.body.style.position,
       top: document.body.style.top,
@@ -86,7 +93,7 @@ export function PublicNavigation() {
       element.removeEventListener('keydown', trapFocus);
       element.close();
       Object.assign(document.body.style, bodyStyle);
-      window.scrollTo({ top: scrollY, behavior: 'instant' });
+      window.scrollTo({ top: openedOnPath === currentPath.current ? scrollY : 0, behavior: 'instant' });
       trigger.current?.focus({ preventScroll: true });
     };
   }, [menuPresent]);
@@ -113,9 +120,11 @@ export function PublicNavigation() {
         <PublicBrand />
         <nav className="public-desktop-nav" aria-label="Main navigation">
           {links.map(([href, label]) => (
-            <a href={href} key={href}>
-              {label}
-            </a>
+            href.startsWith('#') ? (
+              <a href={location.pathname === '/' ? href : `/${href}`} key={href}>{label}</a>
+            ) : (
+              <NavLink to={href} key={href}>{label}</NavLink>
+            )
           ))}
         </nav>
         <div className="public-header__actions">
@@ -176,10 +185,10 @@ export function PublicNavigation() {
             </p>
             <nav aria-label="Mobile navigation">
               {links.map(([href, label], i) => (
-                <motion.a
-                  href={href}
+                href.startsWith('#') ? <motion.a
+                  href={location.pathname === '/' ? href : `/${href}`}
                   key={href}
-                  onClick={(event) => followAnchor(event, href)}
+                  onClick={(event) => location.pathname === '/' ? followAnchor(event, href) : setOpen(false)}
                   initial={reduced ? false : { opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.08 }}
@@ -187,7 +196,17 @@ export function PublicNavigation() {
                   <span>0{i + 1}</span>
                   {label}
                   <ArrowUpRight aria-hidden="true" />
-                </motion.a>
+                </motion.a> : <MotionLink
+                  to={href}
+                  key={href}
+                  aria-current={location.pathname.startsWith(href) ? 'page' : undefined}
+                  onClick={() => setOpen(false)}
+                  initial={reduced ? false : { opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.08 }}
+                >
+                  <span>0{i + 1}</span>{label}<ArrowUpRight aria-hidden="true" />
+                </MotionLink>
               ))}
             </nav>
             <div className="public-mobile-menu__bottom">

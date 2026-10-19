@@ -60,7 +60,8 @@ export function Generic({ title, body }: { title: string; body: string }) {
           <nav aria-label="Public navigation">
             <Link to="/facilities">Experiences</Link>
             <Link to="/memberships">Membership</Link>
-            <Link to="/coaches">Coaching</Link>
+            <Link to="/achievements">Achievements</Link>
+            <Link to="/coaches">Coaches</Link>
             <Link to="/contact">Contact</Link>
           </nav>
           <Link className="info-join" to="/signup">

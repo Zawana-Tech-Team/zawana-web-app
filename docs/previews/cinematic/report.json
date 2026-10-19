@@ -1,0 +1,166 @@
+{
+  "url": "http://127.0.0.1:62654",
+  "report": [
+    {
+      "name": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "snapshots": [
+        {
+          "progress": 0,
+          "chapter": "reveal",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.2,
+          "chapter": "impact",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.3,
+          "chapter": "impact",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.4,
+          "chapter": "arena",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.65,
+          "chapter": "explore",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.85,
+          "chapter": "book",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 1,
+          "chapter": "book",
+          "renderer": "webgl"
+        }
+      ],
+      "idleFrames": 0,
+      "reversed": true,
+      "bookingGuard": "login",
+      "navigation": "passed"
+    },
+    {
+      "name": "tablet",
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "snapshots": [
+        {
+          "progress": 0,
+          "chapter": "reveal",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.2,
+          "chapter": "impact",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.3,
+          "chapter": "impact",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.4,
+          "chapter": "arena",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.65,
+          "chapter": "explore",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.85,
+          "chapter": "book",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 1,
+          "chapter": "book",
+          "renderer": "webgl"
+        }
+      ],
+      "idleFrames": 0,
+      "reversed": true,
+      "bookingGuard": "login",
+      "navigation": "passed"
+    },
+    {
+      "name": "mobile",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "snapshots": [
+        {
+          "progress": 0,
+          "chapter": "reveal",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.2,
+          "chapter": "impact",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.3,
+          "chapter": "impact",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.4,
+          "chapter": "arena",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.65,
+          "chapter": "explore",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 0.85,
+          "chapter": "book",
+          "renderer": "webgl"
+        },
+        {
+          "progress": 1,
+          "chapter": "book",
+          "renderer": "webgl"
+        }
+      ],
+      "idleFrames": 0,
+      "reversed": true,
+      "bookingGuard": "login",
+      "navigation": "passed"
+    },
+    {
+      "name": "reduced-motion",
+      "staticChapters": 5,
+      "heavyAssets": 0
+    },
+    {
+      "name": "webgl-unavailable",
+      "staticChapters": 5,
+      "heavyAssets": 0
+    },
+    {
+      "name": "data-saving",
+      "staticChapters": 5,
+      "heavyAssets": 0
+    }
+  ],
+  "runtimeErrors": [],
+  "limits": "Desktop Chrome with SwiftShader; not a physical Android/iOS performance measurement. Public content API responses use empty fixtures. No backend or booking writes."
+}

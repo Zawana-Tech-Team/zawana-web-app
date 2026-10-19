@@ -1,0 +1,776 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "height": 568,
+      "cinematic": false,
+      "measurements": []
+    },
+    {
+      "width": 320,
+      "height": 640,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 145,
+          "bottom": 451.375,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 145,
+          "bottom": 374.875,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 145,
+          "bottom": 398.375,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 145,
+          "bottom": 470.4375,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 145,
+          "bottom": 459.1875,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "height": 640,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 145,
+          "bottom": 408.25,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 145,
+          "bottom": 387.75,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 145,
+          "bottom": 411.25,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 145,
+          "bottom": 469.875,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 145,
+          "bottom": 452.8125,
+          "header": 89,
+          "controls": 506,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "height": 667,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 145,
+          "bottom": 413.0625,
+          "header": 89,
+          "controls": 533,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 145,
+          "bottom": 392.5625,
+          "header": 89,
+          "controls": 533,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 145,
+          "bottom": 416.0625,
+          "header": 89,
+          "controls": 533,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 145,
+          "bottom": 473.46875,
+          "header": 89,
+          "controls": 533,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 145,
+          "bottom": 456.40625,
+          "header": 89,
+          "controls": 533,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 180,
+          "bottom": 475.71875,
+          "header": 89,
+          "controls": 685,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 180,
+          "bottom": 455.21875,
+          "header": 89,
+          "controls": 685,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 180,
+          "bottom": 478.71875,
+          "header": 89,
+          "controls": 685,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 163,
+          "bottom": 536.53125,
+          "header": 89,
+          "controls": 685,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 180,
+          "bottom": 554.46875,
+          "header": 89,
+          "controls": 685,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 414,
+      "height": 736,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 180,
+          "bottom": 475.71875,
+          "header": 89,
+          "controls": 577,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 180,
+          "bottom": 455.21875,
+          "header": 89,
+          "controls": 577,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 180,
+          "bottom": 478.71875,
+          "header": 89,
+          "controls": 577,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 163,
+          "bottom": 542.78125,
+          "header": 89,
+          "controls": 577,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 180,
+          "bottom": 560.71875,
+          "header": 89,
+          "controls": 577,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 480,
+      "height": 640,
+      "cinematic": false,
+      "measurements": []
+    },
+    {
+      "width": 600,
+      "height": 650,
+      "cinematic": false,
+      "measurements": []
+    },
+    {
+      "width": 600,
+      "height": 800,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 180,
+          "bottom": 530,
+          "header": 89,
+          "controls": 641,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 180,
+          "bottom": 509.5,
+          "header": 89,
+          "controls": 641,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 180,
+          "bottom": 533,
+          "header": 89,
+          "controls": 641,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 163,
+          "bottom": 579.34375,
+          "header": 89,
+          "controls": 641,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 180,
+          "bottom": 597.28125,
+          "header": 89,
+          "controls": 641,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 767,
+      "height": 701,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 145,
+          "bottom": 539.125,
+          "header": 89,
+          "controls": 567,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 145,
+          "bottom": 518.625,
+          "header": 89,
+          "controls": 567,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 145,
+          "bottom": 542.125,
+          "header": 89,
+          "controls": 567,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 145,
+          "bottom": 495.75,
+          "header": 89,
+          "controls": 567,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 145,
+          "bottom": 478.6875,
+          "header": 89,
+          "controls": 567,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "height": 650,
+      "cinematic": false,
+      "measurements": []
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 335.640625,
+          "bottom": 700.359375,
+          "header": 105,
+          "controls": 905,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 350.390625,
+          "bottom": 685.609375,
+          "header": 105,
+          "controls": 905,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 338.640625,
+          "bottom": 697.359375,
+          "header": 105,
+          "controls": 905,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 333.234375,
+          "bottom": 702.75,
+          "header": 105,
+          "controls": 905,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 290.109375,
+          "bottom": 745.890625,
+          "header": 105,
+          "controls": 905,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "height": 700,
+      "cinematic": false,
+      "measurements": []
+    },
+    {
+      "width": 1024,
+      "height": 701,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 170.375,
+          "bottom": 550.625,
+          "header": 105,
+          "controls": 582,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 185.125,
+          "bottom": 535.875,
+          "header": 105,
+          "controls": 582,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 173.375,
+          "bottom": 547.625,
+          "header": 105,
+          "controls": 582,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 172.515625,
+          "bottom": 548.46875,
+          "header": 105,
+          "controls": 582,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 150.328125,
+          "bottom": 570.671875,
+          "header": 105,
+          "controls": 582,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 178.1875,
+          "bottom": 601.8125,
+          "header": 105,
+          "controls": 649,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 192.9375,
+          "bottom": 587.0625,
+          "header": 105,
+          "controls": 649,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 181.1875,
+          "bottom": 598.8125,
+          "header": 105,
+          "controls": 649,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 182.0625,
+          "bottom": 597.921875,
+          "header": 105,
+          "controls": 649,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 141.671875,
+          "bottom": 638.328125,
+          "header": 105,
+          "controls": 649,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 160.765625,
+          "bottom": 579.234375,
+          "header": 105,
+          "controls": 599.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 175.515625,
+          "bottom": 564.484375,
+          "header": 105,
+          "controls": 599.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 163.765625,
+          "bottom": 576.234375,
+          "header": 105,
+          "controls": 599.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 174.453125,
+          "bottom": 565.546875,
+          "header": 105,
+          "controls": 599.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 157.703125,
+          "bottom": 582.296875,
+          "header": 105,
+          "controls": 599.5,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 1366,
+      "height": 768,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 165.109375,
+          "bottom": 614.890625,
+          "header": 105,
+          "controls": 647.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 179.859375,
+          "bottom": 600.140625,
+          "header": 105,
+          "controls": 647.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 168.109375,
+          "bottom": 611.890625,
+          "header": 105,
+          "controls": 647.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 173.296875,
+          "bottom": 606.703125,
+          "header": 105,
+          "controls": 647.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 141.671875,
+          "bottom": 638.328125,
+          "header": 105,
+          "controls": 647.5,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 208.609375,
+          "bottom": 703.390625,
+          "header": 105,
+          "controls": 779.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 223.359375,
+          "bottom": 688.640625,
+          "header": 105,
+          "controls": 779.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 211.609375,
+          "bottom": 700.390625,
+          "header": 105,
+          "controls": 779.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 221.015625,
+          "bottom": 690.984375,
+          "header": 105,
+          "controls": 779.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 191.5,
+          "bottom": 720.5,
+          "header": 105,
+          "controls": 779.5,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "cinematic": true,
+      "measurements": [
+        {
+          "chapter": "reveal",
+          "top": 267.9375,
+          "bottom": 824.0625,
+          "header": 105,
+          "controls": 959.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "impact",
+          "top": 282.6875,
+          "bottom": 809.3125,
+          "header": 105,
+          "controls": 959.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "arena",
+          "top": 270.9375,
+          "bottom": 821.0625,
+          "header": 105,
+          "controls": 959.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "explore",
+          "top": 288.65625,
+          "bottom": 803.34375,
+          "header": 105,
+          "controls": 959.5,
+          "clipped": false,
+          "linksFit": true
+        },
+        {
+          "chapter": "book",
+          "top": 259.4375,
+          "bottom": 832.5625,
+          "header": 105,
+          "controls": 959.5,
+          "clipped": false,
+          "linksFit": true
+        }
+      ]
+    },
+    {
+      "width": 844,
+      "height": 390,
+      "cinematic": false,
+      "measurements": []
+    },
+    {
+      "width": 915,
+      "height": 412,
+      "cinematic": false,
+      "measurements": []
+    }
+  ],
+  "errors": [],
+  "limits": "Desktop Chrome viewport emulation; public API content uses browser-only fixtures."
+}

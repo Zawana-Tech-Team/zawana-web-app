@@ -6,7 +6,7 @@ const apiOrigin = new URL(API_BASE_URL, window.location.href).origin;
 
 export function mediaImageSrc(value?: string | null) {
   if (!value) return "";
-  return value.startsWith("/") ? `${apiOrigin}${value}` : value;
+  return value.startsWith("/uploads/") ? `${apiOrigin}${value}` : value;
 }
 
 async function compressedDataUrl(file: File) {
@@ -29,10 +29,12 @@ async function compressedDataUrl(file: File) {
 export function ImageUpload({
   value,
   onChange,
+  onBusyChange,
   label = "Product image"
 }: {
   value?: string | null;
   onChange: (url: string | null) => void;
+  onBusyChange?: (busy: boolean) => void;
   label?: string;
 }) {
   const [busy, setBusy] = useState(false);
@@ -55,6 +57,7 @@ export function ImageUpload({
     const objectUrl = URL.createObjectURL(file);
     setPreview(objectUrl);
     setBusy(true);
+    onBusyChange?.(true);
     try {
       const image = await compressedDataUrl(file);
       const result = await post<{ url: string }>("/media/images", { image });
@@ -66,6 +69,7 @@ export function ImageUpload({
       setError(cause instanceof Error ? cause.message : "Image upload failed. Try again.");
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   };
 
