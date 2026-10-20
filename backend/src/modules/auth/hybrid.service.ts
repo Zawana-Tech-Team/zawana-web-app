@@ -68,7 +68,7 @@ export function createHybridAuth(
       where: { kind_value: { kind: "phone", value: phone } },
     });
     if (identity) return { userId: identity.userId };
-    // Legacy contact numbers count as existing accounts, but never authorize or merge identities.
+    // Preflight existence only; OTP sign-in resolves every matching owner separately.
     const rows = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "User"
       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("phone", ' ', ''), '-', ''), '(', ''), ')', ''), '.', '')
       IN (${phone}, ${'0' + phone.slice(3)}, ${phone.slice(1)}) LIMIT 1`;
@@ -83,6 +83,27 @@ export function createHybridAuth(
       ...(input.email ? { emailExists: Boolean(emailAccount) } : {}),
       ...(input.phone ? { phoneExists: Boolean(phoneAccount) } : {}),
     };
+  }
+  async function phoneSignInOwner(phone: string, uid: string, tx: Tx = db) {
+    const [identity, enrolled, contacts] = await Promise.all([
+      resolve(uid, tx),
+      tx.authIdentity.findUnique({
+        where: { kind_value: { kind: "phone", value: phone } },
+      }),
+      tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "User"
+        WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("phone", ' ', ''), '-', ''), '(', ''), ')', ''), '.', '')
+        IN (${phone}, ${'0' + phone.slice(3)}, ${phone.slice(1)}) LIMIT 2`,
+    ]);
+    const owners = new Set(contacts.map(row => row.id));
+    if (enrolled) owners.add(enrolled.userId);
+    if (owners.size > 1 || (identity && !owners.has(identity.id)))
+      reject("PHONE_ACCOUNT_CONFLICT", 409, "This number has conflicting account records. Contact ZAWANA support.");
+    const ownerId = owners.values().next().value;
+    if (!ownerId)
+      reject("ACCOUNT_NOT_FOUND", 404, "No ZAWANA account uses this phone number. Create an account first.");
+    const user = await tx.user.findUnique({ where: { id: ownerId } });
+    if (!user) reject("ACCOUNT_NOT_FOUND", 404, "No ZAWANA account uses this phone number.");
+    return user;
   }
   async function bind(tx: Tx, userId: string, kind: string, value: string) {
     const existing = await tx.authIdentity.findUnique({
@@ -334,10 +355,13 @@ export function createHybridAuth(
     if (await db.authChallenge.findUnique({ where: { proofKey } }))
       reject("PROOF_REPLAY", 401, "Request a new phone code.");
     const owner = await phoneOwner(phone);
-    const user = await resolve(claims.uid);
+    const user = intent === "signin"
+      ? await phoneSignInOwner(phone, claims.uid)
+      : await resolve(claims.uid);
     const requiresLink = Boolean(owner && owner.userId !== user?.id);
     if (user) {
-      await db.$transaction((tx) => bind(tx, user.id, "phone_uid", claims.uid));
+      if (intent !== "signin")
+        await db.$transaction((tx) => bind(tx, user.id, "phone_uid", claims.uid));
       requireMember(user);
     }
     const challengeToken = newCredential();
@@ -357,56 +381,40 @@ export function createHybridAuth(
     return {
       challengeToken,
       expiresAt: row.expiresAt.toISOString(),
-      next: requiresLink
+      next: intent === "signin"
+        ? "session"
+        : requiresLink
         ? "link-account"
         : user
-          ? "password"
+          ? "link-account"
           : intent === "link"
             ? "link-account"
             : "registration",
       phone,
     };
   }
-  async function phonePassword(input: {
+  async function phoneLogin(input: {
     challengeToken: string;
-    password: string;
     remember: boolean;
   }) {
     const row = await challenge(input.challengeToken);
-    const attempted = await db.authChallenge.updateMany({
-      where: { id: row.id, consumedAt: null, attempts: { lt: 5 } },
-      data: { attempts: { increment: 1 } },
-    });
-    if (!attempted.count) reject("RATE_LIMITED", 429, "Too many attempts.");
-    const user = await resolve(row.firebaseUid);
-    if (!user || !user.firebaseUid)
-      reject(
-        "ACCOUNT_LINK_REQUIRED",
-        409,
-        "Sign in to your existing account and link your phone.",
-      );
+    if (row.intent !== "signin")
+      reject("INVALID_PHONE_PROOF", 403, "Request a sign-in code to continue.");
+    const user = await phoneSignInOwner(row.phone, row.firebaseUid);
     requireMember(user);
-    await limited("password", user.id);
-    const claims = await password(user.email, input.password);
-    const authority = await getIdentity(claims.uid);
-    if (authority.providerData.some((p) => p.providerId === "phone"))
-      reject(
-        "PHONE_AUTHORITY_CONFLICT",
-        409,
-        "Contact ZAWANA to separate the phone and password identities.",
-      );
-    if (claims.uid !== user.firebaseUid)
-      reject(
-        "INVALID_CREDENTIALS",
-        401,
-        "The sign-in details could not be accepted.",
-      );
-    const proofs = [
+    const proofs: IdentityProof[] = [
       { uid: row.firebaseUid, authTime: row.authTime, phoneOnly: true },
-      proof(claims),
+      ...(user.firebaseUid && user.firebaseUid !== row.firebaseUid
+        ? [{ uid: user.firebaseUid, authTime: row.authTime, accountOnly: true }]
+        : []),
     ];
+    // Check canonical account revocation and MFA as well as the phone identity.
+    // MFA accounts must continue through the website's additional verification.
     await session.checkProofs(proofs);
     return db.$transaction(async (tx) => {
+      const currentOwner = await phoneSignInOwner(row.phone, row.firebaseUid, tx);
+      if (currentOwner.id !== user.id)
+        reject("PHONE_ACCOUNT_CONFLICT", 409, "The account for this number changed. Request a new phone code.");
       await consume(tx, row.id);
       await bind(tx, user.id, "firebase", row.firebaseUid);
       await bind(tx, user.id, "phone", row.phone);
@@ -415,14 +423,8 @@ export function createHybridAuth(
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
       });
-      return session.issue(
-        tx,
-        user,
-        "phone_otp_password",
-        proofs,
-        input.remember,
-      );
-    });
+      return session.issue(tx, user, "phone_otp", proofs, input.remember);
+    }, { isolationLevel: "Serializable" });
   }
   async function register(input: {
     challengeToken: string;
@@ -789,7 +791,7 @@ export function createHybridAuth(
     emailLogin,
     providerLogin,
     phoneChallenge,
-    phonePassword,
+    phoneLogin,
     register,
     resendRegistration,
     registrationStatus,

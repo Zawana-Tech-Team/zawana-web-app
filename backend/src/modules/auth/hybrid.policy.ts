@@ -57,7 +57,7 @@ export function requireWebProof(claims: DecodedIdToken, verifiedEmailRequired = 
     reject(
       "PASSWORD_REQUIRED",
       403,
-      "Phone sign-in requires an OTP and your account password.",
+      "Use the mobile phone OTP sign-in flow for phone authentication.",
     );
   if (!claims.email || (verifiedEmailRequired && !claims.email_verified))
     reject(

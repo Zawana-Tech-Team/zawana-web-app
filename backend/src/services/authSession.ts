@@ -12,6 +12,8 @@ export type IdentityProof = {
   uid: string;
   authTime: number;
   phoneOnly?: boolean;
+  /** Account reference for revocation/MFA checks, not a sign-in credential. */
+  accountOnly?: boolean;
   secondFactor?: string;
 };
 type Db = PrismaClient;
@@ -33,13 +35,14 @@ export function createSessionService(
           );
         },
       );
+      const strongCredential = !proof.phoneOnly && !proof.accountOnly;
       const weak =
-        !proof.phoneOnly &&
+        strongCredential &&
         (await db.authIdentity.findUnique({
           where: { kind_value: { kind: "phone_uid", value: proof.uid } },
         }));
       if (
-        !proof.phoneOnly &&
+        strongCredential &&
         (weak || identity.providerData.some((p) => p.providerId === "phone"))
       )
         reject(
@@ -47,10 +50,7 @@ export function createSessionService(
           403,
           "Use an independent password or social identity.",
         );
-      if (
-        !proof.phoneOnly &&
-        (identity.multiFactor?.enrolledFactors.length || 0) > 0
-      ) {
+      if ((identity.multiFactor?.enrolledFactors.length || 0) > 0) {
         mfaEnrolled = true;
         if (!proof.secondFactor)
           reject(
