@@ -182,16 +182,13 @@ export function createAuthRouter(
     }),
   );
   router.post(
-    "/mobile/password",
+    "/mobile/phone-login",
     asyncRoute(async (req, res) =>
       send(
         req,
         res,
-        await hybrid.phonePassword(
-          z
-            .object({ challengeToken: capability, password, remember })
-            .strict()
-            .parse(req.body),
+        await hybrid.phoneLogin(
+          z.object({ challengeToken: capability, remember }).strict().parse(req.body),
         ),
       ),
     ),

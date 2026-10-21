@@ -20,6 +20,7 @@
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "auth:audit": "tsx scripts/audit-auth-identities.ts",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "auth:migrate-local": "tsx scripts/apply-hybrid-auth-local.ts",
     "gym:seed": "tsx scripts/seed-gym-catalog.ts"
   },

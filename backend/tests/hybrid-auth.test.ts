@@ -189,16 +189,15 @@ test("email, Google, Apple, and explicitly linked phone resolve one preserved Us
   const next = claims("phone-alias", "phone", "");
   next.auth_time += 1;
   const phoneChallenge = await f.service.phoneChallenge(f.add(next), "signin");
-  const result = await f.service.phonePassword({
+  const result = await f.service.phoneLogin({
     challengeToken: phoneChallenge.challengeToken,
-    password: "Password1!",
     remember: true,
   });
   assert.equal(result.user.id, f.user.id);
   assert.equal(await f.db.user.count(), 1);
   assert.equal(
     (await f.service.session.authenticate(result.accessToken)).method,
-    "phone_otp_password",
+    "phone_otp",
   );
 });
 
@@ -217,9 +216,8 @@ test("phone token, password alone, and challenge capability cannot access a busi
     { code: "SESSION_REVOKED" },
   );
   await assert.rejects(
-    f.service.phonePassword({
+    f.service.phoneLogin({
       challengeToken: "not-a-proof",
-      password: "Password1!",
       remember: true,
     }),
     { code: "CHALLENGE_EXPIRED" },
@@ -227,43 +225,28 @@ test("phone token, password alone, and challenge capability cannot access a busi
   assert.equal(await f.db.authSession.count(), 0);
 });
 
-test("wrong password cannot consume a challenge or issue a session; attempts are bounded", async (t) => {
+test("email password failures never consume or gate an independently verified phone sign-in", async (t) => {
   const f = await fixture(t);
-  const token = f.add(claims("phone-alias", "phone", ""));
-  const proof = await f.service.phoneChallenge(token, "signin");
+  const phone = await f.service.phoneChallenge("phone-alias:phone", "signin");
+  assert.equal(phone.next, "session");
   for (let i = 0; i < 5; i++)
-    await assert.rejects(
-      f.service.phonePassword({
-        challengeToken: proof.challengeToken,
-        password: "wrong",
-        remember: true,
-      }),
-      { code: "INVALID_CREDENTIALS" },
-    );
-  await assert.rejects(
-    f.service.phonePassword({
-      challengeToken: proof.challengeToken,
-      password: "Password1!",
-      remember: true,
-    }),
-    { code: "RATE_LIMITED" },
-  );
+    await assert.rejects(f.service.emailLogin({ email: f.user.email, password: "wrong", remember: true }), { code: "INVALID_CREDENTIALS" });
   assert.equal(await f.db.authSession.count(), 0);
+  const login = await f.service.phoneLogin({ challengeToken: phone.challengeToken, remember: true });
+  assert.equal(login.user.id, f.user.id);
 });
 
 test("successful phone authentication consumes proof and prevents replay", async (t) => {
   const f = await fixture(t);
   const token = f.add(claims("phone-alias", "phone", ""));
   const proof = await f.service.phoneChallenge(token, "signin");
-  await f.service.phonePassword({
+  await f.service.phoneLogin({
     challengeToken: proof.challengeToken,
-    password: "Password1!",
     remember: true,
   });
   await assert.rejects(
-    f.service.phonePassword({
+    f.service.phoneLogin({
       challengeToken: proof.challengeToken,
-      password: "Password1!",
       remember: true,
     }),
     { code: "CHALLENGE_CONSUMED" },
@@ -579,7 +562,7 @@ test("concurrent registration completion creates one User and one authorized ses
   assert.equal(await f.db.authSession.count(), 1);
 });
 
-test("a legacy Firebase identity combining phone and password cannot bypass factor separation", async (t) => {
+test("phone OTP sign-in does not require a separate canonical password identity", async (t) => {
   const f = await fixture(t);
   const identity = f.identities.get("account")!;
   identity.providerData.push({ providerId: "phone" } as any);
@@ -587,15 +570,14 @@ test("a legacy Firebase identity combining phone and password cannot bypass fact
     f.add(claims("phone-alias", "phone", "")),
     "signin",
   );
-  await assert.rejects(
-    f.service.phonePassword({
-      challengeToken: phone.challengeToken,
-      password: "Password1!",
-      remember: true,
-    }),
-    { code: "PHONE_AUTHORITY_CONFLICT" },
-  );
-  assert.equal(await f.db.authSession.count(), 0);
+  const login = await f.service.phoneLogin({
+    challengeToken: phone.challengeToken,
+    remember: true,
+  });
+  assert.equal(login.user.id, f.user.id);
+  const session = await f.service.session.authenticate(login.accessToken);
+  assert.equal(session.method, "phone_otp");
+  assert.equal(JSON.parse(session.proofs)[1].accountOnly, true);
 });
 
 test("adding a password or social provider to a phone alias cannot bypass the canonical password", async (t) => {
@@ -744,11 +726,178 @@ test("account checks detect registered emails, linked phones and legacy formatte
   assert.equal(await f.db.authSession.count(), 0);
 });
 
-test("phone plus password sign-in works without a verified email and still requires both proofs", async t => {
+test("phone OTP sign-in works independently of email verification or password availability", async t => {
   const f = await fixture(t);
-  f.proofs.get("account:password")!.email_verified = false;
+  f.identities.get("account")!.emailVerified = false;
+  f.proofs.delete("account:password");
   const phone = await f.service.phoneChallenge("phone-alias:phone", "signin");
-  await assert.rejects(f.service.phonePassword({ challengeToken: phone.challengeToken, password: "wrong", remember: true }), { code: "INVALID_CREDENTIALS" });
-  const session = await f.service.phonePassword({ challengeToken: phone.challengeToken, password: "Password1!", remember: true });
+  assert.equal(phone.next, "session");
+  const session = await f.service.phoneLogin({ challengeToken: phone.challengeToken, remember: true });
   assert.equal(session.user.id, f.user.id);
+});
+
+test("phone OTP signs in the enrolled member without a password and consumes the proof once", async t => {
+  const f = await fixture(t);
+  // Password verification cannot succeed; OTP sign-in must work independently.
+  f.proofs.delete("account:password");
+  const challenge = await f.service.phoneChallenge("phone-alias:phone", "signin");
+  const input = { challengeToken: challenge.challengeToken, remember: false };
+  const login = await f.service.phoneLogin(input);
+  assert.equal(login.user.id, f.user.id);
+  const session = await f.service.session.authenticate(login.accessToken);
+  assert.equal(session.method, "phone_otp");
+  assert.deepEqual(JSON.parse(session.proofs).map((p: any) => p.uid), ["phone-alias", "account"]);
+  assert.ok(Date.parse(login.sessionExpiresAt) - Date.now() <= 12 * 3600_000);
+  assert.equal((await f.service.session.refresh(login.refreshToken)).user.id, f.user.id);
+  await assert.rejects(f.service.phoneLogin(input), { code: "CHALLENGE_CONSUMED" });
+  await assert.rejects(f.service.phoneChallenge("phone-alias:phone", "signin"), { code: "PROOF_REPLAY" });
+  assert.equal(await f.db.authSession.count(), 1);
+});
+
+test("phone OTP sessions retain canonical revocation, MFA, and mobile role restrictions", async t => {
+  for (const scenario of ["canonical-revocation", "canonical-mfa", "phone-disabled", "phone-mfa", "staff", "inactive"] as const) {
+    await t.test(scenario, async t => {
+      const f = await fixture(t);
+      const challenge = await f.service.phoneChallenge("phone-alias:phone", "signin");
+      const input = { challengeToken: challenge.challengeToken, remember: true };
+      const login = await f.service.phoneLogin(input);
+      let code: string;
+      if (scenario === "canonical-revocation") {
+        f.identities.get("account")!.tokensValidAfterTime = new Date(Date.now() + 60_000).toISOString();
+        code = "SESSION_REVOKED";
+      } else if (scenario === "canonical-mfa" || scenario === "phone-mfa") {
+        f.identities.get(scenario === "canonical-mfa" ? "account" : "phone-alias")!.multiFactor!.enrolledFactors.push({ uid: "factor" } as any);
+        code = "MFA_REQUIRED";
+      } else if (scenario === "phone-disabled") {
+        f.identities.get("phone-alias")!.disabled = true;
+        code = "SESSION_REVOKED";
+      } else {
+        await f.db.user.update({ where: { id: f.user.id }, data: scenario === "staff" ? { role: "admin" } : { active: false } });
+        code = scenario === "staff" ? "MOBILE_ROLE_UNSUPPORTED" : "SESSION_REVOKED";
+      }
+      await assert.rejects(f.service.session.authenticate(login.accessToken), { code });
+      await assert.rejects(f.service.session.refresh(login.refreshToken), { code });
+      const fresh = claims("phone-alias", "phone", "");
+      fresh.auth_time += 1;
+      const token = f.add(fresh);
+      if (scenario === "staff" || scenario === "inactive") {
+        await assert.rejects(f.service.phoneChallenge(token, "signin"), { code: scenario === "staff" ? code : "ACCOUNT_UNAVAILABLE" });
+      } else {
+        const next = await f.service.phoneChallenge(token, "signin");
+        await assert.rejects(f.service.phoneLogin({ ...input, challengeToken: next.challengeToken }), { code });
+      }
+      assert.equal(await f.db.authSession.count(), 1);
+    });
+  }
+});
+
+test("phone session exchange rejects expired, unlinked, mismatched, and non-signin challenges", async t => {
+  for (const scenario of ["expired", "unlinked", "mismatched", "signup", "link"] as const) {
+    await t.test(scenario, async t => {
+      const f = await fixture(t);
+      const challenge = await f.service.phoneChallenge("phone-alias:phone", scenario === "signup" || scenario === "link" ? scenario : "signin");
+      let code = "PHONE_ACCOUNT_CONFLICT";
+      if (scenario === "expired") {
+        await f.db.authChallenge.updateMany({ data: { expiresAt: new Date(0) } });
+        code = "CHALLENGE_EXPIRED";
+      } else if (scenario === "unlinked") {
+        await f.db.authIdentity.deleteMany({ where: { OR: [{ kind: "firebase", value: "phone-alias" }, { kind: "phone", value: "+959421234567" }] } });
+        code = "ACCOUNT_NOT_FOUND";
+      } else if (scenario === "mismatched") {
+        const other = await f.db.user.create({ data: { name: "Other", email: "other@example.test" } });
+        await f.db.authIdentity.updateMany({ where: { kind: "phone", value: "+959421234567" }, data: { userId: other.id } });
+      } else {
+        code = "INVALID_PHONE_PROOF";
+      }
+      await assert.rejects(f.service.phoneLogin({ challengeToken: challenge.challengeToken, remember: true }), { code });
+      assert.equal(await f.db.authSession.count(), 0);
+    });
+  }
+});
+
+test("HTTP phone OTP exchange authorizes the protected API without a password; email still requires one", async t => {
+  const f = await fixture(t);
+  const app = express();
+  app.use(express.json());
+  app.use("/api/auth", createAuthRouter(f.service, f.service.session, f.db));
+  app.get("/api/protected", createAuthMiddleware(f.service.session), (_req, res) => res.json({ ok: true }));
+  app.use((err: any, _req: any, res: any, _next: any) => res.status(err.statusCode || (err.name === "ZodError" ? 400 : 500)).json({ code: err.code }));
+  const server = app.listen(0);
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const post = (path: string, body: unknown, token?: string) => fetch(base + "/api/auth" + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
+    body: JSON.stringify(body),
+  });
+  assert.equal((await post("/mobile/email-login", { email: f.user.email })).status, 400);
+  assert.equal((await post("/mobile/email-login", { email: f.user.email, password: "wrong" })).status, 401);
+  const proof = await post("/mobile/challenge", { intent: "signin" }, "phone-alias:phone");
+  assert.equal(proof.status, 200);
+  const { challengeToken, next } = await proof.json() as { challengeToken: string; next: string };
+  assert.equal(next, "session");
+  assert.equal((await post("/mobile/password", { challengeToken, password: "anything" })).status, 404);
+  assert.equal((await post("/mobile/phone-login", {})).status, 400);
+  assert.equal((await post("/mobile/phone-login", { challengeToken, password: "unneeded" })).status, 400);
+  const response = await post("/mobile/phone-login", { challengeToken });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const login = await response.json() as { accessToken: string; user: { id: string } };
+  assert.equal(login.user.id, f.user.id);
+  const protectedResponse = await fetch(base + "/api/protected", { headers: { Authorization: "Bearer " + login.accessToken } });
+  assert.equal(protectedResponse.status, 200);
+  assert.equal((await post("/mobile/phone-login", { challengeToken })).status, 401);
+});
+
+test("a unique registered contact number signs in through OTP without a prior identity-linking or password step", async t => {
+  const f = await fixture(t);
+  await f.db.user.update({ where: { id: f.user.id }, data: { phone: "09 421 234 568" } });
+  const token = f.add(claims("legacy-contact-phone", "phone", "", "+959421234568"));
+  const challenge = await f.service.phoneChallenge(token, "signin");
+  assert.equal(challenge.next, "session");
+  assert.equal(await f.service.resolve("legacy-contact-phone"), null);
+  assert.equal(await f.db.authSession.count(), 0);
+  const login = await f.service.phoneLogin({ challengeToken: challenge.challengeToken, remember: true });
+  assert.equal(login.user.id, f.user.id);
+  assert.equal((await f.service.resolve("legacy-contact-phone"))?.id, f.user.id);
+  assert.equal((await f.db.authIdentity.findUnique({ where: { kind_value: { kind: "phone", value: "+959421234568" } } }))?.userId, f.user.id);
+  assert.equal((await f.service.session.authenticate(login.accessToken)).method, "phone_otp");
+  assert.equal(await f.db.user.count(), 1);
+  // Enrolling the phone preserves the independent email/password method.
+  const email = await f.service.emailLogin({ email: f.user.email, password: "Password1!", remember: true });
+  assert("user" in email);
+  assert.equal(email.user.id, f.user.id);
+});
+
+test("OTP sign-in refuses ambiguous phone records and UID conflicts without creating accounts or merging users", async t => {
+  for (const scenario of ["duplicate-contact", "different-uid-owner", "unknown-number"] as const) {
+    await t.test(scenario, async t => {
+      const f = await fixture(t);
+      let uid = "unlinked-phone";
+      if (scenario !== "unknown-number") {
+        await f.db.user.update({ where: { id: f.user.id }, data: { phone: "09 421 234 568" } });
+        const other = await f.db.user.create({ data: { name: "Other", email: "other@example.test", phone: scenario === "duplicate-contact" ? "+95 (9) 421-234-568" : null } });
+        if (scenario === "different-uid-owner") {
+          uid = "other-phone";
+          await f.db.authIdentity.create({ data: { userId: other.id, kind: "firebase", value: uid } });
+        }
+      }
+      const count = await f.db.user.count();
+      const token = f.add(claims(uid, "phone", "", "+959421234568"));
+      await assert.rejects(f.service.phoneChallenge(token, "signin"), { code: scenario === "unknown-number" ? "ACCOUNT_NOT_FOUND" : "PHONE_ACCOUNT_CONFLICT" });
+      assert.equal(await f.db.authSession.count(), 0);
+      assert.equal(await f.db.authChallenge.count(), 0);
+      assert.equal(await f.db.user.count(), count);
+    });
+  }
+});
+
+test("concurrent OTP session exchanges consume one proof and issue one session", async t => {
+  const f = await fixture(t);
+  const proof = await f.service.phoneChallenge("phone-alias:phone", "signin");
+  const input = { challengeToken: proof.challengeToken, remember: true };
+  const results = await Promise.allSettled([f.service.phoneLogin(input), f.service.phoneLogin(input)]);
+  assert.equal(results.filter(r => r.status === "fulfilled").length, 1);
+  assert.equal(await f.db.authSession.count(), 1);
 });
