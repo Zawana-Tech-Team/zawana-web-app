@@ -1,3 +1,5 @@
+import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
+import { useBookingClock } from "../hooks/useBookingClock";
 import { SegmentedControl, useDialog } from '../components/Interactions';
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { motionTokens } from '../design/motion';
@@ -214,7 +216,7 @@ function parseSlot(value: string) {
 }
 
 function rangeOf(value: string) {
-  const parts = value.split(/\s*(?:â€”|â€“|-)\s*/);
+  const parts = value.split(/\s*(?:—|–|-)\s*/);
   if (parts.length !== 2) return null;
   const a = parseSlot(parts[0]),
     b = parseSlot(parts[1]);
@@ -230,7 +232,7 @@ function slotOverlaps(a: string, b: string) {
 const courtSlots = Array.from({ length: 15 }, (_, i) => {
   const h = 6 + i;
   const f = (x: number) => `${x % 12 || 12}:00 ${x >= 12 ? 'PM' : 'AM'}`;
-  return `${f(h)} â€” ${f(h + 1)}`
+  return `${f(h)} — ${f(h + 1)}`
 });
 
 const escapeReceiptText = (value: string) =>
@@ -5248,8 +5250,9 @@ function POS({
 
 function CourtDesk({ notify }: { notify: (s: string) => void }) {
   const o = useOperations();
+  const now = useBookingClock();
 
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => bookingClock().date);
 
   const [court, setCourt] = useState<any>(null);
   const [slot, setSlot] = useState('');
@@ -5344,10 +5347,11 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
 
   const isBlocked = (c: any, t: string) =>
     blocks.some(
-      b => b.courtId === c.id && b.active !== false && slotOverlaps(`${b.start} â€” ${b.end}`, t)
+      b => b.courtId === c.id && b.active !== false && slotOverlaps(`${b.start} — ${b.end}`, t)
     );
 
   const isBusy = (c: any, t: string) =>
+    bookingHasStarted(date, t, now) ||
     c.status !== 'available' ||
     bookings.some(
       b => b.court === c.name && slotOverlaps(b.time, t) && !['cancelled'].includes(b.status)
@@ -5355,7 +5359,9 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     isBlocked(c, t);
 
   const status = (c: any, t: string) =>
-    c.status !== 'available'
+    bookingHasStarted(date, t, now)
+      ? 'elapsed'
+      : c.status !== 'available'
       ? 'maintenance'
       : isBlocked(c, t)
         ? 'class'
@@ -5369,7 +5375,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       : Number(c.price) + (courtSlots.indexOf(t) >= 9 ? 5000 : 0);
 
   const reserveClass = async () => {
-    if (!court || !slot || isBusy(court, slot)) {
+    if (!court || !slot || bookingHasStarted(date, slot) || isBusy(court, slot)) {
       notify('Select an open court slot first.');
       return }
 
@@ -5425,7 +5431,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
   };
 
   const bookWalkIn = async () => {
-    if (!court || !slot || isBusy(court, slot)) {
+    if (!court || !slot || bookingHasStarted(date, slot) || isBusy(court, slot)) {
       notify('That court slot is no longer available.');
       return }
     setSaving(true);
@@ -5522,7 +5528,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       {o.managedCourts.map(c => {
         const openSlots = courtSlots.filter(t => status(c, t) === 'open').length;
         const blockedSlots = courtSlots.filter(t =>
-          ['booked', 'class', 'maintenance'].includes(status(c, t))
+          ['booked', 'class', 'maintenance', 'elapsed'].includes(status(c, t))
         ).length;
         return <button
           key={c.id}
@@ -5609,7 +5615,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
                   b =>
                     b.courtId === court.id &&
                     b.active !== false &&
-                    slotOverlaps(`${b.start} â€” ${b.end}`, t)
+                    slotOverlaps(`${b.start} — ${b.end}`, t)
                 );
                 const reserved = st === 'class';
                 return <button
@@ -5650,7 +5656,9 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
                     >
                       {st === 'open'
                         ? `AVAILABLE · ${money(slotPrice(court, t))}`
-                        : court.status !== 'available'
+                        : st === 'elapsed'
+                          ? 'UNAVAILABLE · TIME PASSED'
+                          : court.status !== 'available'
                           ? 'MAINTENANCE'
                           : `BOOKED · ${booking?.customer || 'Reserved'}`}
                     </p>}

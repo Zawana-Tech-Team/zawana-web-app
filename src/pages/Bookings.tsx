@@ -1,3 +1,4 @@
+import { normalizeBookingTime } from "../utils/bookingTime";
 import { SegmentedControl } from '../components/Interactions';
 import { Select } from '../components/Select';
 import { useCallback, useEffect, useState } from "react";
@@ -305,7 +306,7 @@ export function Bookings() {
                     booking.date,
                     { month: "long", day: "numeric", year: "numeric" },
                     locale
-                  )} · {booking.time} · {booking.court?.name || booking.location}
+                  )} · {normalizeBookingTime(booking.time || "")} · {booking.court?.name || booking.location}
                   {booking.coach ? ` · ${booking.coach.name}` : ""}
                 </p>
                 <p className="mt-1 text-xs text-zawana-500">

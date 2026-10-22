@@ -29,11 +29,14 @@ import { toSafeAppUser } from "./services/userSerializer.js";
 import { registerBookingQueryRoutes } from "./routes/bookingQueries.js";
 import { createCourtBooking } from "./services/courtBooking.js";
 import { createCourtBookingRoutes } from "./routes/courtBooking.js";
+import { privateCourseAvailability } from "./services/privateCourseAvailability.js";
+import { range as courseTimeRange } from "./services/courtPolicy.js";
 import { isDateKey } from "./utils/dateKeys.js";
 import { asyncRoute } from "./utils/asyncRoute.js";
 import { isStoredImageUrl } from "./services/mediaStorage.js";
 import { firebaseAdminAuth } from "./services/firebaseAdmin.js";
 import { contentInput } from "./services/contentPolicy.js";
+import { apiFailureDiagnostic, isBookingDatabaseConflict } from "./utils/apiDiagnostics.js";
 import { createPublicStoriesRoutes } from "./routes/publicStories.js";
 
 const app = express();
@@ -898,7 +901,9 @@ async function courtDateOverride(date: string) {
 }
 
 async function courtBlocks(date?: string, courtId?: string) {
-  const dow = date ? new Date(`${date}T00:00:00`).getDay() : undefined;
+  if (date !== undefined && !isDateKey(date))
+    throw Object.assign(new Error("Choose a valid court-block date (YYYY-MM-DD)."), { statusCode: 400 });
+  const dow = date ? new Date(`${date}T12:00:00Z`).getUTCDay() : undefined;
   const override = date ? await courtDateOverride(date) : null;
   const recurring = date && override?.type !== "open";
   const where =
@@ -1985,7 +1990,9 @@ app.post(
   "/api/bookings",
   auth,
   asyncRoute(async (req: AuthRequest, res) => {
+    res.locals.operation = "expire_booking_reservations";
     await expirePrivateCourseReservations();
+    res.locals.operation = "validate_booking_input";
     const b = z
       .object({
         kind: z.enum(["court", "class", "pt", "recovery"]),
@@ -2045,6 +2052,7 @@ app.post(
         return res.status(403).json({message: "This account cannot reserve badminton courts."});
       const keyHeader = req.get("Idempotency-Key");
       const key = keyHeader ? z.string().uuid().parse(keyHeader) : undefined;
+      res.locals.operation = "reserve_court";
       const created = await createCourtBooking(prisma, req.user!, b, key);
       return res.status(201).json(created);
     }
@@ -2230,14 +2238,15 @@ app.patch(
 // Badminton court reservations / class blocks / holiday pricing
 app.get(
   "/api/court-blocks",
-  asyncRoute(async (req, res) =>
-    res.json(
+  asyncRoute(async (req, res) => {
+    res.locals.operation = "list_court_blocks";
+    return res.json(
       await courtBlocks(
         req.query.date ? String(req.query.date) : undefined,
         req.query.courtId ? String(req.query.courtId) : undefined
       )
-    )
-  )
+    );
+  })
 );
 app.post(
   "/api/court-blocks",
@@ -2276,6 +2285,7 @@ app.post(
       return res
         .status(400)
         .json({ message: "Class reservations must be one hour between 6:00 AM and 9:00 PM." });
+    res.locals.operation = "list_existing_court_blocks";
     const existing = await rawQuery<any[]>(
       prisma,
       `SELECT * FROM "CourtBlock" WHERE courtId=? AND dayOfWeek=? AND active=1`,
@@ -2301,18 +2311,18 @@ app.post(
           message: "That court already has a different weekly reservation overlapping this time."
         });
     const dayDates: any[] = [];
-    const now = new Date();
+    const now = new Date(`${today()}T12:00:00Z`);
     for (let i = 0; i < 7; i++) {
       const d = new Date(now);
-      d.setDate(now.getDate() + i);
-      if (d.getDay() === b.dayOfWeek) dayDates.push(d.toISOString().slice(0, 10));
+      d.setUTCDate(now.getUTCDate() + i);
+      if (d.getUTCDay() === b.dayOfWeek) dayDates.push(d.toISOString().slice(0, 10));
     }
     if (dayDates.length) {
       const conflicts = await prisma.booking.findMany({
         where: {
           courtId: b.courtId,
           date: { in: dayDates },
-          status: { in: ["pending", "confirmed"] }
+          status: { in: occupyingStatuses }
         },
         select: { date: true, time: true }
       });
@@ -2338,10 +2348,11 @@ app.post(
           .status(409)
           .json({ message: "A booking already exists in the selected weekly time." });
     }
+    res.locals.operation = "insert_court_block";
     const id = code("CB");
     await rawExec(
       prisma,
-      `INSERT INTO "CourtBlock" (id,courtId,date,start,end,title,type,note,dayOfWeek,active) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO "CourtBlock" ("id","courtId","date","start","end","title","type","note","dayOfWeek","active") VALUES (?,?,?,?,?,?,?,?,?,?)`,
       id,
       b.courtId,
       "",
@@ -2352,6 +2363,7 @@ app.post(
       b.note || null,
       b.dayOfWeek,
       b.active !== false ? (sqliteDatabase ? 1 : true) :(sqliteDatabase ? 0 : false));
+    res.locals.operation = "read_created_court_block";
     res.status(201).json((await courtBlocks(undefined, b.courtId)).find((x: any) => x.id === id));
   })
 );
@@ -4015,6 +4027,16 @@ app.post(
   })
 );
 app.get(
+  "/api/private-courses/availability",
+  auth,
+  roles("member", "admin", "badminton_fo"),
+  asyncRoute(async (req, res) => {
+    await expirePrivateCourseReservations();
+    const input = z.object({ courseId: z.string().min(1), coachId: z.string().min(1), courtId: z.string().min(1), date: z.string(), durationMinutes: z.coerce.number().int().positive() }).parse(req.query);
+    res.json(await privateCourseAvailability(prisma, input));
+  })
+);
+app.get(
   "/api/private-courses",
   auth,
   roles("admin", "owner", "member"),
@@ -4194,31 +4216,20 @@ app.post(
   auth,
   roles("member"),
   asyncRoute(async (req: AuthRequest, res) => {
+    await expirePrivateCourseReservations();
     const b = z
       .object({
         courseId: z.string(),
         courtId: z.string(),
         coachId: z.string(),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        time: z.string()
+        time: z.string(),
+        expectedPrice: z.number().int().nonnegative().optional()
       })
       .parse(req.body);
     if (!isDateKey(b.date) || b.date < today())
       return res.status(400).json({ message: "Choose a valid future date." });
-    const timeRange = (value: string) => {
-      const p = value.split(/\s*(?:—|–|-)\s*/);
-      const min = (v: string) => {
-        const m = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-        if (!m) return NaN;
-        let h = +m[1];
-        if (h === 12) h = 0;
-        if (m[3].toUpperCase() === "PM") h += 12;
-        return h * 60 + +m[2]
-      };
-      const start = min(p[0] || ""),
-        end = min(p[1] || "");
-      return p.length === 2 && end > start ? { start, end } : null
-    };
+    const timeRange = courseTimeRange;
     const wanted = timeRange(b.time);
     if (!wanted) return res.status(400).json({ message: "Choose a valid course time slot." });
     if (wanted.start < 360 || wanted.end > 1260 || wanted.start % 60 !== 0)
@@ -4232,6 +4243,11 @@ app.post(
     const booking = await prisma.$transaction(async tx => {
       await rawExec(tx, `UPDATE "Court" SET status=status WHERE id=?`, b.courtId);
       await rawExec(tx, `UPDATE "Coach" SET status=status WHERE id=?`, b.coachId);
+      const fresh = await privateCourseAvailability(tx, { ...b, durationMinutes: wanted.end - wanted.start });
+      if (b.expectedPrice !== undefined && fresh.price !== b.expectedPrice)
+        throw Object.assign(new Error("The course price changed. Review the latest price before sending."), { statusCode: 409 });
+      if (!fresh.slots.some(slot => slot.time === b.time && slot.available))
+        throw Object.assign(new Error("The selected court or coach has just become unavailable."), { statusCode: 409 });
       const [course, court, coach, member, override] = await Promise.all([
         tx.privateCourse.findFirst({
           where: { id: b.courseId, status: "active", coaches: { some: { id: b.coachId } } }
@@ -4372,7 +4388,6 @@ app.post(
     const id = String(req.params.id),
       now = new Date();
     const result = await prisma.$transaction(async tx => {
-      await rawExec(tx, `UPDATE "Coach" SET status=status WHERE id=?`, coach.id);
       const booking = await tx.booking.findUnique({
         where: { id },
         include: { user: { select: { id: true, name: true } }, court: true, coach: true }
@@ -4425,18 +4440,10 @@ app.post(
           ),
           { statusCode: 409 }
         );
-      const tRange = (v: string) => {
-        const p = v.split(/\s*(?:—|–|-)\s*/);
-        const min = (v: string) => {
-          const m = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-          if (!m) return NaN;
-          let h = +m[1];
-          if (h === 12) h = 0;
-          if (m[3].toUpperCase() === "PM") h += 12;
-          return h * 60 + +m[2]
-        };
-        return p.length === 2 ? [min(p[0]), min(p[1])] : [NaN, NaN]
-      };
+      // Same lock order as submission and court rentals: court, then coach.
+      await rawExec(tx, `UPDATE "Court" SET status=status WHERE id=?`, booking.courtId);
+      await rawExec(tx, `UPDATE "Coach" SET status=status WHERE id=?`, coach.id);
+      const tRange = (value: string) => { const r = courseTimeRange(value); return r ? [r.start, r.end] : [NaN, NaN]; };
       const wanted = tRange(booking.time),
         overlap = (other: string) => {
           const r = tRange(other);
@@ -4729,92 +4736,8 @@ app.post(
           message:
             "This reservation window has expired. Refresh your bookings and choose another time."
         });
-    const booking = await prisma.$transaction(async tx => {
-      const now = new Date();
-      const fallbackDeadline = current.coachAcceptedAt
-        ? new Date(current.coachAcceptedAt.getTime() + 24 * 60 * 60 * 1000)
-        : null;
-      const activeDeadline: [Record<string, unknown>, ...Record<string, unknown>[]] = [
-        { paymentExpiresAt: { gt: now } },
-        { paymentExpiresAt: null, reservationExpiresAt: { gt: now } }
-      ];
-      if (fallbackDeadline && fallbackDeadline > now)
-        activeDeadline.push({
-          paymentExpiresAt: null,
-          reservationExpiresAt: null,
-          coachAcceptedAt: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) }
-        });
-      const changed = await tx.booking.updateMany({
-        where: {
-          id: current.id,
-          userId: req.user!.id,
-          kind: "private_course",
-          status: "AWAITING_PAYMENT",
-          OR: activeDeadline
-        },
-        data: {
-          status: "CONFIRMED",
-          paymentStatus: "pending",
-          reservationExpiresAt: null,
-          paymentExpiresAt: null
-        }
-      });
-      if (!changed.count)
-        throw Object.assign(
-          new Error("This reservation is no longer available. Refresh your bookings."),
-          { statusCode: 409 }
-        );
-      await tx.paymentAttempt.updateMany({
-        where: {
-          resourceType: "private_course",
-          resourceId: current.id,
-          status: { in: ["PENDING", "INITIATING"] }
-        },
-        data: {
-          status: "EXPIRED",
-          failureReason: "Private course checkout is temporarily disabled."
-        }
-      });
-      const confirmed = await tx.booking.findUniqueOrThrow({
-        where: { id: current.id },
-        include: { coach: true, court: true }
-      });
-      await tx.notification.create({
-        data: {
-          userId: req.user!.id,
-          title: "Private course confirmed",
-          body: `${current.title} with ${current.coach?.name || "your coach"} · ${current.date} · ${current.time} is confirmed. Payment has not been collected and will be arranged at the venue.`,
-          link: "/bookings",
-          audience: "member",
-          type: "booking",
-          icon: "check-circle",
-          actionLabel: "View booking",
-          entityType: "booking",
-          entityId: current.id
-        }
-      });
-      if (current.coach?.userId)
-        await tx.notification.create({
-          data: {
-            userId: current.coach.userId,
-            title: "Private course confirmed",
-            body: `${current.user?.name || "A member"} confirmed ${current.title} · ${current.date} · ${current.time} · ${current.court?.name || current.location}. Payment is pending at the venue.`,
-            link: "/coach/schedule",
-            audience: "coach",
-            type: "booking",
-            icon: "calendar",
-            entityType: "booking",
-            entityId: current.id
-          }
-        });
-      return confirmed;
-    });
-    res.json({
-      booking,
-      paymentStatus: "pending",
-      message:
-        "Booking confirmed. Payment has not been collected and will be arranged at the venue."
-    });
+    const payment = await startKPayAttempt(req.user!.id, "private_course", current.id, current.price, `Private course · ${current.title}`, expiresAt);
+    res.json({ payment, booking: current });
   })
 );
 app.get(
@@ -5240,6 +5163,15 @@ app.get(
 
 app.use((_req, res) => res.status(404).json({ message: "Route not found" }));
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const requestId = crypto.randomUUID();
+  res.setHeader("X-Request-Id", requestId);
+  const diagnostic = apiFailureDiagnostic(err, {
+    requestId, method: req.method,
+    route: typeof req.route?.path === "string" ? req.route.path : "/api",
+    operation: res.locals.operation
+  });
+  const writeLog = diagnostic.status >= 500 ? console.error : console.warn;
+  writeLog(JSON.stringify(diagnostic));
   if (err?.name === "ZodError" && req.path.startsWith("/api/auth"))
     return res.status(400).json({ code: "INVALID_INPUT", message: "Check your authentication details and try again." });
   if (err?.name === "ZodError")
@@ -5259,12 +5191,7 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     return res
       .status(409)
       .json({ message: "This record is linked to existing history and cannot be removed." });
-  if (
-    /COURT_OVERLAP|Booking_no_overlap|23P01/i.test(String(err?.message || "")) ||
-    err?.code === "P2034" ||
-    err?.code === "P1008" ||
-    /SQLITE_BUSY|database is locked/i.test(String(err?.message || ""))
-  )
+  if (isBookingDatabaseConflict(err))
     return res
       .status(409)
       .json({ code:"BOOKING_BUSY", message: "Another booking is being confirmed. Check the reservation status and retry with the same request." });
@@ -5277,17 +5204,6 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
         ...(err.conflicts ? { conflicts: err.conflicts } : {}),
         ...(err.code ? { code: err.code } : {})
       });
-  const requestId = crypto.randomUUID();
-  res.setHeader("X-Request-Id", requestId);
-  if (process.env.NODE_ENV === "production")
-    console.error("Unhandled API error", {
-      requestId,
-      method: req.method,
-      path: req.path,
-      code: err?.code || null,
-      name: err?.name || "Error"
-    });
-  else console.error("Unhandled API error", { requestId, method: req.method, path: req.path, name: err?.name });
   res.status(500).json({ message: "Internal server error", requestId });
 });
 

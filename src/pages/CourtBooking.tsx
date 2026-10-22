@@ -1,3 +1,5 @@
+import { bookingClock, bookingHasStarted, normalizeBookingTime } from "../utils/bookingTime";
+import { useBookingClock } from "../hooks/useBookingClock";
 import { DialogSurface } from '../components/Interactions';
 import { AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useState } from "react";
@@ -29,7 +31,7 @@ type Conflict = {
 const key = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const parseDate = (value: string) => new Date(`${value}T00:00:00`);
-const todayKey = () => key(new Date());
+const todayKey = () => bookingClock().date;
 const times = Array.from({ length: 15 }, (_, i) => {
   const hour = 6 + i,
     fmt = (n: number) => `${n % 12 || 12}:00 ${n >= 12 ? "PM" : "AM"}`;
@@ -49,7 +51,7 @@ const minute = (value: string) => {
   return h * 60 + min;
 };
 const span = (value: string) => {
-  const p = String(value || "").split(/\s*(?:—|–|-)\s*/);
+  const p = normalizeBookingTime(String(value || "")).split(/\s*(?:—|–|-|to)\s*/);
   if (p.length !== 2) return null;
   const start = minute(p[0]),
     end = minute(p[1]);
@@ -68,7 +70,7 @@ export function CourtBooking() {
   const dateLabel = (value: string) =>
     parseDate(value).toLocaleDateString(locale, { month: "long", day: "numeric", year: "numeric" });
   const [month, setMonth] = useState(() => {
-    const d = new Date();
+    const d = parseDate(todayKey());
     return new Date(d.getFullYear(), d.getMonth(), 1)
   });
   const [date, setDate] = useState(todayKey());
@@ -111,7 +113,12 @@ export function CourtBooking() {
   const courtOf = (id: string) => courts.find((c: any) => c.id === id);
   const dayBlocksFor = (courtId: string) =>
     blocksForDate.filter((b: any) => b.courtId === courtId && b.active !== false);
+  const now = useBookingClock();
+  const hasPassed = (day: string, time: string) => {
+    return bookingHasStarted(day, time, now);
+  };
   const stateFor = (court: any, time: string) => {
+    if (hasPassed(date, time)) return "Elapsed";
     if (dateOverride?.type === "closed") return "Closed";
     if (court.status !== "available") return "Unavailable";
     if (dayBlocksFor(court.id).some((b: any) => overlaps(`${b.start} — ${b.end}`, time)))
@@ -130,6 +137,7 @@ export function CourtBooking() {
       : Number(court.price) + (start >= 900 ? 5000 : 0);
   };
   const toggle = (court: any, time: string, price: number) => {
+    if (bookingHasStarted(date, time)) return;
     const candidate = { date, courtId: court.id, courtName: court.name, time, price };
     setSelected(prev =>
       prev.some(x => pickKey(x) === pickKey(candidate))
@@ -165,7 +173,7 @@ export function CourtBooking() {
           c.status === "available" &&
           times.some(
             time =>
-              !effectiveBlocks.some(
+              !hasPassed(value, time) && !effectiveBlocks.some(
                 (b: any) =>
                   b.courtId === c.id &&
                   b.active !== false &&
@@ -200,6 +208,7 @@ export function CourtBooking() {
       };
     }
   );
+  const hasElapsedSelection = selected.some(pick => hasPassed(pick.date, pick.time));
   const total = selected.reduce((sum, s) => sum + s.price, 0);
   const grouped = useMemo(() => {
     const byDate = new Map<string, Map<string, SlotPick[]>>();
@@ -216,6 +225,12 @@ export function CourtBooking() {
 
   const confirm = async () => {
     if (!selected.length || busy) return;
+    const elapsed = selected.filter(pick => bookingHasStarted(pick.date, pick.time));
+    if (elapsed.length) {
+      setError("Some selected sessions have already started. Remove them and choose a future time.");
+      setConflicts(elapsed.map(pick => ({ ...pick, reason: "This time has already passed." })));
+      return;
+    }
     setBusy(true);
     setError("");
     setConflicts([]);
@@ -223,7 +238,12 @@ export function CourtBooking() {
       const result = await post<any>("/bookings", {
         kind: "court",
         date: selected[0].date,
-        bookings: selected.map(({ date, courtId, time }) => ({ date, courtId, time }))
+        bookings: selected.map(({ date, courtId, time }) => {
+          const slot = span(time)!;
+          const clock = (minutes: number) =>
+            `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+          return { date, courtId, time: `${clock(slot.start)} - ${clock(slot.end)}` };
+        })
       });
       const bookings = result.bookings || [result.booking];
       setDone(bookings);
@@ -234,7 +254,7 @@ export function CourtBooking() {
       setError(
         e.message || "Your booking could not be confirmed. Refresh availability and try again."
       );
-      setConflicts(Array.isArray(e.details) ? e.details : []);
+      setConflicts(Array.isArray(e.details?.conflicts) ? e.details.conflicts : []);
       setToast(e.message || "Some selected slots are no longer available.");
       await loadMonth();
     } finally {
@@ -266,7 +286,7 @@ export function CourtBooking() {
                 <div>
                   <b>{b.title}</b>
                   <p className="text-sm text-zawana-500">
-                    {dateLabel(b.date)} · {b.time} · Ref {b.code}
+                    {dateLabel(b.date)} · {normalizeBookingTime(b.time || "")} · Ref {b.code}
                   </p>
                 </div>
                 <b>{Number(b.price).toLocaleString(locale)} MMK</b>
@@ -314,6 +334,7 @@ export function CourtBooking() {
       </div>
     }
   >
+    {hasElapsedSelection && <p role="alert" className="mb-4 text-sm text-red-700">A selected session has already started. Remove it from your booking summary to continue.</p>}
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_370px]">
       <div className="space-y-5">
         {error &&
@@ -325,8 +346,8 @@ export function CourtBooking() {
             {conflicts.length > 0 &&
               <ul className="mt-2 space-y-1">
                 {conflicts.map((c, i) =>
-                  <li key={`${c.date}-${c.courtId}-${c.time}-${i}`}>
-                    <b>{c.courtName || courtOf(c.courtId || "")?.name || "Court"}</b> · {c.date ? dateLabel(c.date) : ""} · {c.time} — {c.reason || "No longer available."}
+                  <li key={`${c.date}-${c.courtId}-${normalizeBookingTime(c.time || "")}-${i}`}>
+                    <b>{c.courtName || courtOf(c.courtId || "")?.name || "Court"}</b> · {c.date ? dateLabel(c.date) : ""} · {normalizeBookingTime(c.time || "")} — {c.reason || "No longer available."}
                   </li>
                 )}
               </ul>}
@@ -461,7 +482,7 @@ export function CourtBooking() {
                       const isSelected = selected.some(
                           x => x.date === date && x.courtId === court.id && x.time === time
                         ),
-                        enabled = state === "Available" || isSelected;
+                        enabled = state === "Available" || (isSelected && state !== "Elapsed");
                       return <button
                         type="button"
                         key={time}
@@ -481,7 +502,7 @@ export function CourtBooking() {
                         <span
                           className={`mt-1 block text-[9px] font-black uppercase tracking-wide ${isSelected ? "text-zawana-950" : state === "Available" ? "text-emerald-700" : state === "Reserved" || state === "Closed" ? "text-red-700" : "text-zawana-500"}`}
                         >
-                          {isSelected ? "Selected" : state}
+                          {state === "Elapsed" ? "Unavailable · Time passed" : isSelected ? "Selected" : state}
                         </span>
                         {state === "Available" &&
                           <span className="mt-1 block text-[10px] text-zawana-500">
@@ -553,7 +574,7 @@ export function CourtBooking() {
                   </span>
                   <b>{total.toLocaleString(locale)} MMK</b>
                 </div>
-                <Button disabled={busy || loadingMonth} onClick={confirm} className="mt-5 w-full">
+                <Button disabled={busy || loadingMonth || hasElapsedSelection} onClick={confirm} className="mt-5 w-full">
                   {busy ? "Confirming bookings…" : "Confirm all bookings"} <ChevronRight size={16} />
                 </Button>
                 <p className="mt-3 text-center text-[11px] leading-5 text-zawana-500">The server rechecks every date, court and time. All sessions confirm together, or none are saved.</p>
@@ -628,10 +649,19 @@ export function CourtBooking() {
                 <p className="mt-3 font-black">No sessions selected</p>
                 <p className="mt-1 text-sm text-zawana-500">Choose an available court and time to add it here.</p>
               </div>}
+            {hasElapsedSelection && <p role="alert" className="mb-3 text-sm text-red-700">A selected session has already started. Remove it to continue.</p>}
             {error &&
-              <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">
-                {error}
-              </p>}
+              <div role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">
+                <p>{error}</p>
+                {conflicts.length > 0 &&
+                  <ul className="mt-2 space-y-1">
+                    {conflicts.map((conflict, i) =>
+                      <li key={`${conflict.date}-${conflict.courtId}-${normalizeBookingTime(conflict.time || "")}-${i}`}>
+                        <b>{conflict.courtName || "Court"}</b> · {conflict.date ? dateLabel(conflict.date) : ""} · {normalizeBookingTime(conflict.time || "")} — {conflict.reason || "No longer available."}
+                      </li>
+                    )}
+                  </ul>}
+              </div>}
           </div>
           <footer className="border-t bg-white p-5">
             <div className="mb-4 flex items-center justify-between">
@@ -639,7 +669,7 @@ export function CourtBooking() {
               <b className="text-xl">{total.toLocaleString(locale)} MMK</b>
             </div>
             <Button
-              disabled={!selected.length || busy || loadingMonth}
+              disabled={!selected.length || busy || loadingMonth || hasElapsedSelection}
               onClick={confirm}
               className="w-full"
             >

@@ -3,6 +3,12 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { firebaseAdminAuth } from "../src/services/firebaseAdmin.js";
 
+declare const process: {
+  argv: string[];
+  env: Record<string, string | undefined>;
+  exitCode?: number;
+};
+
 const db = new PrismaClient();
 const uid = process.argv[2];
 const email = process.argv[3]?.trim().toLowerCase();

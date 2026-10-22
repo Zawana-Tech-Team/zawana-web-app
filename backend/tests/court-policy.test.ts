@@ -43,3 +43,15 @@ test("clock parsing still rejects malformed and ambiguous ranges", () => {
   assert.equal(range("19:00 — 18:00"), null);
   assert.equal(range("18:00 — 18:00"), null);
 });
+
+
+test("legacy corrupted dash separators parse and normalize without weakening time validation", () => {
+  for (const separator of ["\u00e2\u20ac\u201d", "\u00e2\u20ac\u201c", "\u00e2\u0080\u0094", "\u00e2\u0080\u0093"]) {
+    const input = `1:00 PM ${separator} 2:00 PM`;
+    assert.deepEqual(range(input), { start: 780, end: 840 });
+    assert.ok(overlaps(input, "13:00 - 14:00"));
+    assert.equal(overlaps(input, "14:00 - 15:00"), false);
+    assert.equal(range(`13:00 PM ${separator} 2:00 PM`), null);
+  }
+  assert.deepEqual(range("13:00 - 14:00"), { start: 780, end: 840 });
+});

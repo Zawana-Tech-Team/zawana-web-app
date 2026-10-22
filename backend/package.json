@@ -22,7 +22,10 @@
     "auth:audit": "tsx scripts/audit-auth-identities.ts",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "auth:migrate-local": "tsx scripts/apply-hybrid-auth-local.ts",
-    "gym:seed": "tsx scripts/seed-gym-catalog.ts"
+    "gym:seed": "tsx scripts/seed-gym-catalog.ts",
+    "build:postgres": "prisma generate --schema prisma/postgresql/schema.prisma && tsc",
+    "court:audit": "tsx scripts/audit-court-bookings.ts",
+    "test:court:postgres": "tsx --test tests/court-postgres.integration.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

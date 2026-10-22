@@ -25,7 +25,15 @@ try {
     }
   console.log(
     JSON.stringify(
-      { activeCourtReservations: rows.length, malformed, conflicts },
+      process.argv.includes("--details")
+        ? { activeCourtReservations: rows.length, malformed, conflicts }
+        : {
+            activeCourtReservations: rows.length,
+            malformedCount: malformed.length,
+            conflictingPairCount: conflicts.length,
+            stored24HourRanges: rows.filter((row) => !/AM|PM/i.test(row.time))
+              .length,
+          },
       null,
       2,
     ),

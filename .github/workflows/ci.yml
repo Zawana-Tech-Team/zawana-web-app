@@ -79,3 +79,42 @@ jobs:
 
       - name: Build Frontend
         run: pnpm run build
+
+  postgres-courts:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: zawana_court_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d zawana_court_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/zawana_court_test
+      DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/zawana_court_test
+      COURT_POSTGRES_TEST_URL: postgresql://ci:ci@127.0.0.1:5432/zawana_court_test
+      AUTH_MODE: firebase
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install backend dependencies
+        run: pnpm --dir backend install --frozen-lockfile --prod=false
+      - name: Apply PostgreSQL migration history to disposable database
+        run: pnpm --dir backend run prisma:migrate:postgres
+      - name: Generate PostgreSQL Prisma Client
+        run: pnpm --dir backend run prisma:generate:postgres
+      - name: Test real PostgreSQL court API and concurrency
+        run: pnpm --dir backend run test:court:postgres

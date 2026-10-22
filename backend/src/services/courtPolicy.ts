@@ -35,7 +35,10 @@ export function toMinute(value: string) {
   return (hour % 12) * 60 + minute + (m[3].toUpperCase() === "PM" ? 720 : 0);
 }
 export function range(value: string) {
-  const parts = value.split(/\s*(?:—|–|-|to)\s*/i);
+  // Older clients can send UTF-8 dashes decoded as Windows-1252/Latin-1.
+  // Normalize only known dash sequences; keep clock validation strict.
+  const normalized = value.replace(/\u00e2\u20ac\u201d|\u00e2\u20ac\u201c|\u00e2\u0080\u0094|\u00e2\u0080\u0093/g, "-");
+  const parts = normalized.split(/\s*(?:—|–|-|to)\s*/i);
   if (parts.length !== 2) return null;
   const start = toMinute(parts[0]),
     end = toMinute(parts[1]);
