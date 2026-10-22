@@ -346,6 +346,7 @@ export default function App() {
       {[
         '/admin',
         '/admin/notifications',
+        '/admin/court-rentals',
         '/admin/badminton-packages',
         '/admin/gym-packages',
         '/admin/finance',
@@ -386,6 +387,7 @@ export default function App() {
           </Guard>
         }
       />
+      <Route path="/admin/gym-coaches" element={<Guard role="admin"><AdminManagement section="coaches" department="Gym" /></Guard>} />
       <Route
         path="/admin/private-courses"
         element={
@@ -434,9 +436,10 @@ export default function App() {
         '/badminton-fo/check-in',
         '/badminton-fo/courts',
         '/badminton-fo/bookings',
-        '/badminton-fo/pos',
+        '/badminton-fo/active-packages',
         '/badminton-fo/transactions'
       ].map(path => operational('badminton_fo', path))}
+      <Route path="/badminton-fo/pos" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/active-packages" replace /></Guard>} />
       <Route
         path="/badminton-fo/packages"
         element={

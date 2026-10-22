@@ -55,7 +55,7 @@ function UserModal({
   const reduced = useReducedMotion();
   return <motion.div
     initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-    transition={{ duration: motionTokens.popover }}
+    transition={{ duration: reduced ? 0 : motionTokens.dialog }}
     className="premium-dialog-backdrop fixed inset-0 z-[100] flex items-end justify-center bg-zawana-950/60 p-0 sm:items-center sm:p-4"
     onMouseDown={e => {
       if (e.target === e.currentTarget) onClose()
@@ -63,9 +63,9 @@ function UserModal({
   >
     <motion.div
       ref={dialogRef} tabIndex={-1} aria-label={title}
-      initial={reduced ? false : { opacity: 0, y: 16, scale: .98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .99 }}
-      transition={reduced ? { duration: 0 } : motionTokens.spring}
+      initial={reduced ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+      transition={{ duration: reduced ? 0 : motionTokens.dialog, ease: motionTokens.ease }}
       role="dialog"
       aria-modal="true"
       className="premium-dialog-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-7"

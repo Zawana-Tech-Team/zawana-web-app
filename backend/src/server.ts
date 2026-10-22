@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { badmintonSaleFields, badmintonSaleTotals } from "./services/badmintonSale.js";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
@@ -2732,7 +2733,7 @@ app.post(
       .object({
         userId: z.string().min(1).optional(),
         packageId: z.string().min(1),
-        paymentMethod: z.literal("Cash"),
+        ...badmintonSaleFields,
         walkIn: z
           .object({
             name: z.string().trim().min(2).max(120),
@@ -2803,11 +2804,8 @@ app.post(
           customer: member?.name || b.walkIn!.name,
           business: "Badminton",
           item: `Package · ${pkg.title}`,
-          amount: pkg.price,
-          discount: 0,
-          tax: 0,
-          finalAmount: pkg.price,
-          paymentMethod: "Cash",
+          ...badmintonSaleTotals(pkg.price, b.discountPercent),
+          paymentMethod: b.paymentMethod,
           staff: staff.name,
           status: "paid"
         }
@@ -2966,7 +2964,7 @@ app.post(
   roles("admin", "badminton_fo"),
   asyncRoute(async (req, res) => {
     const b = z
-        .object({ packageId: z.string().min(1), paymentMethod: z.literal("Cash") })
+        .object({ packageId: z.string().min(1), ...badmintonSaleFields })
         .parse(req.body),
       staff = (req as AuthRequest).user!;
     const current = await prisma.badmintonEnrollment.findUnique({
@@ -3004,8 +3002,8 @@ app.post(
           userId: member.id,
           packageId: pkg.id,
           packageName: pkg.title,
-          price: pkg.price,
-          paymentMethod: "Cash",
+          price: badmintonSaleTotals(pkg.price, b.discountPercent).finalAmount,
+          paymentMethod: b.paymentMethod,
           status: "PAID",
           paidAt: new Date()
         }
@@ -3035,11 +3033,8 @@ app.post(
           customer: member.name,
           business: "Badminton",
           item: `Package renewal · ${pkg.title}`,
-          amount: pkg.price,
-          discount: 0,
-          tax: 0,
-          finalAmount: pkg.price,
-          paymentMethod: "Cash",
+          ...badmintonSaleTotals(pkg.price, b.discountPercent),
+          paymentMethod: b.paymentMethod,
           staff: staff.name,
           status: "paid"
         }

@@ -3,7 +3,7 @@ export const motionTokens = {
   hover: 0.14,
   press: 0.12,
   popover: 0.2,
-  dialog: 0.28,
+  dialog: 0.14,
   page: 0.28,
   ease: [0.22, 1, 0.36, 1] as const,
   spring: { type: 'spring' as const, stiffness: 420, damping: 36, mass: 0.8 }
