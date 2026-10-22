@@ -1,6 +1,6 @@
 import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
-import { SegmentedControl, useDialog } from '../components/Interactions';
+import { DialogSurface, SegmentedControl, useDialog } from '../components/Interactions';
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { motionTokens } from '../design/motion';
 import { Select } from '../components/Select';
@@ -18,6 +18,7 @@ import {
   ShoppingCart,
   Printer,
   ArrowRight,
+  ChevronRight,
   CalendarDays,
   UserPlus,
   PackagePlus,
@@ -131,7 +132,7 @@ function OpsModal({
   const reduced = useReducedMotion();
   return <motion.div
     initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-    transition={{ duration: motionTokens.popover }}
+    transition={{ duration: reduced ? 0 : motionTokens.dialog }}
     className="premium-dialog-backdrop fixed inset-0 z-[120] flex items-center justify-center bg-zawana-950/55 p-4"
     onMouseDown={e => {
       if (e.target === e.currentTarget) onClose()
@@ -139,9 +140,9 @@ function OpsModal({
   >
     <motion.div
       ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
-      initial={reduced ? false : { opacity: 0, y: 16, scale: .98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .99 }}
-      transition={reduced ? { duration: 0 } : motionTokens.spring}
+      initial={reduced ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+      transition={{ duration: reduced ? 0 : motionTokens.dialog, ease: motionTokens.ease }}
       className={`premium-dialog-panel premium-dialog-panel--control w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} overflow-hidden rounded-[30px] border border-white/60 bg-white shadow-[0_40px_120px_rgba(29,27,71,.28)]`}
     >
       <div className="relative overflow-hidden bg-zawana-950 px-6 py-5 text-white">
@@ -293,6 +294,8 @@ export default function OperationsPage({ role }: { role: UserRole }) {
   const [query, setQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState('');
+  const [rentalTab, setRentalTab] = useState('availability');
+  const [noticeType, setNoticeType] = useState<'success' | 'error' | 'info'>('success');
 
   const [cart, setCart] = useState<{ id: string; name: string; price: number; qty: number }[]>([]);
 
@@ -302,10 +305,16 @@ export default function OperationsPage({ role }: { role: UserRole }) {
   const [newPrice, setNewPrice] = useState('');
   const [newQty, setNewQty] = useState('10');
 
-  const notify = (m: string) => {
+  const notify = (m: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotice(m);
-    setTimeout(() => setNotice(''), 2500)
+    setNoticeType(type)
   };
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(''), 4000);
+    return () => window.clearTimeout(timer)
+  }, [notice, noticeType]);
 
   useEffect(() => {
     const h = (e: Event) => notify((e as CustomEvent).detail || 'Done');
@@ -379,7 +388,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   if (isDoctor || isCoach) title = titleMap[view] || 'Professional Dashboard';
 
-  const commonTop = () => <AnimatePresence>{notice && <Toast message={notice} onClose={() => setNotice('')} />}</AnimatePresence>;
+  const commonTop = () => <AnimatePresence>{notice && <Toast message={notice} type={noticeType} onClose={() => setNotice('')} />}</AnimatePresence>;
 
   if (view === 'notifications')
     return <Page title={title} eyebrow={role.replace('_', ' ')}>
@@ -456,6 +465,13 @@ export default function OperationsPage({ role }: { role: UserRole }) {
       <CoachManager />
     </Page>;
 
+  if (isAdmin && view === 'court-rentals')
+    return <Page title="Court Rentals & Time Setup" eyebrow="Badminton" actions={<Link to="/admin/courts"><Button variant="secondary"><Wrench size={15} /> Manage courts</Button></Link>}>
+      {commonTop()}
+      <div className="mb-6"><SegmentedControl label="Court rental view" value={rentalTab} onChange={setRentalTab} options={[{ value: 'availability', label: 'Availability & times' }, { value: 'bookings', label: 'Booking history' }]} /></div>
+      {rentalTab === 'availability' ? <CourtDesk notify={notify} /> : <BookingQueue notify={notify} />}
+    </Page>;
+
   if (isAdmin && view === 'courts')
     return <Page title={title} eyebrow="Badminton">
       <CourtManager />
@@ -471,12 +487,14 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   if (isBad && view === 'dashboard')
     return <Page title="Badminton Operations" eyebrow="Front Office">
+      {commonTop()}
       <FOStats business="badminton" />
       <BookingQueue notify={notify} />
     </Page>;
 
   if (isBad && view === 'bookings')
     return <Page title={title} eyebrow="Badminton FO">
+      {commonTop()}
       <BookingQueue notify={notify} />
     </Page>;
 
@@ -505,7 +523,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     return <Page title={title} eyebrow="Badminton FO">
       <>
         {commonTop()}
-        <BadmintonCheckIn notify={notify} />
+        <BadmintonCheckIn key="check-in" notify={notify} />
       </>
     </Page>;
 
@@ -514,19 +532,10 @@ export default function OperationsPage({ role }: { role: UserRole }) {
       <Transactions business="Badminton" />
     </Page>;
 
-  if (isBad && view === 'pos')
-    return <Page title={title} eyebrow="Badminton FO">
-      <>
-        {commonTop()}
-        <POS
-          mode="badminton"
-          cart={cart}
-          setCart={setCart}
-          discount={discount}
-          setDiscount={setDiscount}
-          notify={notify}
-        />
-      </>
+  if (isBad && view === 'active-packages')
+    return <Page title="Active Packages" eyebrow="Badminton FO">
+      {commonTop()}
+      <BadmintonCheckIn key="active-packages" notify={notify} activationOnly />
     </Page>;
 
   if (isGym && view === 'dashboard')
@@ -736,8 +745,10 @@ export default function OperationsPage({ role }: { role: UserRole }) {
   </Page>;
 }
 
-function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
-  const o = useOperations();
+function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: string) => void; activationOnly?: boolean }) {
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [memberQuery, setMemberQuery] = useState('');
+  const [discountPercent, setDiscountPercent] = useState('0');
 
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
@@ -746,7 +757,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [purchase, setPurchase] = useState(false);
+  const [purchase, setPurchase] = useState(activationOnly);
   const [renew, setRenew] = useState(false);
   const [packageId, setPackageId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -787,11 +798,19 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
         .catch((e: any) => setActionError(e.message || 'Could not load member accounts.'))
   }, [purchase]);
 
+  const isActive = (x: any) => x.status === 'active' && x.expiryDate >= today && x.sessionsRemaining > 0;
   const filtered = enrollments.filter(x =>
-    [x.studentName, x.phone, x.packageName].some((v: string) =>
-      v.toLowerCase().includes(query.toLowerCase())
-    )
+    (statusFilter === 'all' || (statusFilter === 'active' ? isActive(x) : !isActive(x))) &&
+    [x.studentName, x.phone, x.packageName].some(v => String(v || '').toLowerCase().includes(query.trim().toLowerCase()))
   );
+  const matchingMembers = memberAccounts.filter(m =>
+    [m.name, m.phone, m.email].some(v => String(v || '').toLowerCase().includes(memberQuery.trim().toLowerCase()))
+  );
+  const salePackage = packages.find(p => p.id === packageId);
+  const percent = Number(discountPercent);
+  const validDiscount = discountPercent.trim() !== '' && Number.isFinite(percent) && percent >= 0 && percent <= 100;
+  const discountAmount = validDiscount ? Math.round((salePackage?.price || 0) * percent / 100) : 0;
+  const finalAmount = (salePackage?.price || 0) - discountAmount;
 
   const selectedStudent = memberAccounts.find((m: any) => m.id === purchaseStudentId);
 
@@ -802,6 +821,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
 
   const buy = async () => {
     setActionError('');
+    if (!validDiscount) { setActionError('Enter a discount from 0 to 100%.'); return }
     const member = selectedStudent;
     if (customerType === 'member' && !member) {
       setActionError('Select an existing member account.');
@@ -822,10 +842,14 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
           ? { userId: member.id }
           : { walkIn: { name: walkIn.name.trim(), phone: walkIn.phone.trim() } }),
         packageId,
-        paymentMethod
+        paymentMethod,
+        discountPercent: percent
       });
       notify(`${created.studentName} package activated.`);
-      setPurchase(false);
+      setPurchase(activationOnly);
+      setDiscountPercent('0');
+      setPaymentMethod('Cash');
+      setMemberQuery('');
       setPurchaseStudentId('');
       setWalkIn({ name: '', phone: '' });
       setPackageId('');
@@ -842,6 +866,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
 
   const doRenew = async () => {
     setActionError('');
+    if (!validDiscount) { setActionError('Enter a discount from 0 to 100%.'); return }
     if (!current) {
       setActionError('Select a package holder first.');
       return }
@@ -853,7 +878,8 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
       const updated = await post<any>(`/badminton/enrollments/${current.id}/renew`, {
         packageId,
         startDate: today,
-        paymentMethod
+        paymentMethod,
+        discountPercent: percent
       });
       notify(`${current.studentName} package renewed.`);
       setRenew(false);
@@ -897,6 +923,202 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
 
   const expired = current && (current.status === 'expired' || current.expiryDate < today);
   const low = current && !expired && Number(current.sessionsRemaining) <= 2;
+
+  const saleForm = <>
+        <div className="grid gap-4">
+          {purchase &&
+            <>
+              <div className="grid grid-cols-2 rounded-xl bg-zawana-950/5 p-1">
+                <button
+                  className={`rounded-lg px-3 py-2 text-sm font-bold ${customerType === 'member' ? 'bg-white shadow' : ''}`}
+                  onClick={() => setCustomerType('member')}
+                >Member account</button>
+                <button
+                  className={`rounded-lg px-3 py-2 text-sm font-bold ${customerType === 'walkin' ? 'bg-white shadow' : ''}`}
+                  onClick={() => setCustomerType('walkin')}
+                >Walk-in</button>
+              </div>
+              {customerType === 'member' ?
+                <div className="space-y-3">
+                <input aria-label="Search member accounts" placeholder="Search member name, phone or email" className="w-full rounded-xl border p-3" value={memberQuery} onChange={e => setMemberQuery(e.target.value)} />
+                <Select
+                  aria-label="Member account"
+                  className="rounded-xl border p-3"
+                  value={purchaseStudentId}
+                  onChange={e => {
+                    setPurchaseStudentId(e.target.value);
+                    setActionError('')
+                  }}
+                >
+                  <option value="">Select member account</option>
+                  {memberAccounts.filter(m => matchingMembers.includes(m) || m.id === purchaseStudentId).map((m: any) =>
+                    <option key={m.id} value={m.id}>
+                      {m.name} · {m.phone || m.email}
+                    </option>
+                  )}
+                </Select>
+                {!matchingMembers.length && <p className="text-sm text-zawana-500">No members match your search.</p>}
+                </div> :
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-xs font-bold">Customer name<input
+                      className="mt-1 w-full"
+                      value={walkIn.name}
+                      onChange={e => setWalkIn({ ...walkIn, name: e.target.value })}
+                      placeholder="Name"
+                    />
+                  </label>
+                  <label className="text-xs font-bold">Phone<input
+                      className="mt-1 w-full"
+                      value={walkIn.phone}
+                      onChange={e => setWalkIn({ ...walkIn, phone: e.target.value })}
+                      placeholder="09…"
+                      inputMode="tel"
+                    />
+                  </label>
+                </div>}
+            </>}
+          <Select
+            className="rounded-xl border p-3"
+            aria-label="Badminton package"
+            value={packageId}
+            onChange={e => {
+              setPackageId(e.target.value);
+              setActionError('')
+            }}
+          >
+            <option value="">Select active package</option>
+            {packages
+              .filter(p => p.status === 'active')
+              .map(p =>
+                <option key={p.id} value={p.id}>
+                  {p.title} · {p.sessions} sessions · {p.validity} days · {money(p.price)}
+                </option>
+              )}
+          </Select>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-bold">Payment method
+              <Select className="mt-1 w-full rounded-xl border p-3" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                <option value="Cash">Cash</option><option value="KPay">KPay</option>
+              </Select>
+            </label>
+            <label className="text-sm font-bold">Discount (%)
+              <input type="number" min="0" max="100" step="0.01" className="mt-1 w-full rounded-xl border p-3" value={discountPercent} onChange={e => setDiscountPercent(e.target.value)} aria-invalid={!validDiscount} />
+            </label>
+          </div>
+          {!validDiscount && <p role="alert" className="text-sm text-red-700">Enter a discount from 0 to 100%.</p>}
+          <div className="space-y-2 rounded-xl border bg-zawana-950/[.02] p-3 text-sm">
+            <div className="flex justify-between"><span>Package price</span><b>{money(salePackage?.price || 0)}</b></div>
+            <div className="flex justify-between"><span>Discount {validDiscount ? `(${percent}%)` : ''}</span><span>−{money(discountAmount)}</span></div>
+            <div className="flex justify-between border-t pt-2"><b>Total due · {paymentMethod}</b><b>{money(finalAmount)}</b></div>
+            <p className="text-xs text-zawana-500">Confirm payment has been received before activating. Activation and the finance transaction are recorded immediately.</p>
+          </div>
+          {purchase && customerType === 'member' && !memberAccounts.length &&
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <b>No member accounts found.</b> You can still activate a walk-in package.</p>}
+          {!packages.filter(p => p.status === 'active').length &&
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <b>No active packages.</b> Create or activate a badminton package in Admin Package Management.</p>}
+          {actionError &&
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
+              <b>Activation failed:</b> {actionError}
+            </div>}
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          {!activationOnly && <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() => {
+              setPurchase(false);
+              setRenew(false);
+              setActionError('')
+            }}
+          >Cancel</Button>}
+          <Button
+            disabled={
+              busy ||
+              !packageId ||
+              !validDiscount ||
+              (purchase && customerType === 'member' && !selectedStudent) ||
+              (purchase &&
+                customerType === 'walkin' &&
+                (walkIn.name.trim().length < 2 || walkIn.phone.trim().length < 5)) ||
+              (!purchase && !current)
+            }
+            onClick={purchase ? buy : doRenew}
+          >
+            {busy
+              ?(purchase
+                ? 'Activating…'
+                : 'Renewing…'):(purchase
+                ? 'Activate package'
+                : 'Renew package')}
+          </Button>
+        </div>
+  </>;
+
+  if (activationOnly) return <div className="mx-auto max-w-6xl">
+    <div className="mb-7 max-w-xl">
+      <p className="text-xs font-semibold uppercase tracking-[.18em] text-zawana-500">Package activation</p>
+      <h2 className="mt-2 text-3xl font-semibold tracking-tight text-zawana-950">A fresh start, in a few steps.</h2>
+      <p className="mt-2 text-sm leading-relaxed text-zawana-500">Choose your customer and package. Confirm payment to activate.</p>
+    </div>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0 space-y-5">
+        <Card className="p-5 sm:p-7">
+          <div className="mb-5 flex items-center gap-3"><span className="grid h-7 w-7 place-items-center rounded-full border border-zawana-border text-xs font-semibold text-zawana-500">1</span><h3 className="text-base font-semibold">Customer</h3></div>
+          <div className="mb-5 inline-flex rounded-xl bg-zawana-950/[.04] p-1" role="group" aria-label="Customer type">
+            {(['member', 'walkin'] as const).map(type => <button key={type} disabled={busy} aria-pressed={customerType === type} onClick={() => { setCustomerType(type); setActionError('') }} className={`min-h-10 rounded-lg px-5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${customerType === type ? 'bg-white font-semibold text-zawana-950 shadow-sm' : 'text-zawana-500 hover:text-zawana-950'}`}>{type === 'member' ? 'Member account' : 'Walk-in'}</button>)}
+          </div>
+          {customerType === 'member' ? <div>
+            {selectedStudent ? <div className="flex items-center gap-3 rounded-xl border border-zawana-gold/40 bg-zawana-gold/5 p-4">
+              <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zawana-950 text-sm font-semibold text-white">{selectedStudent.name?.slice(0, 1)}</span>
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{selectedStudent.name}</p><p className="truncate text-xs text-zawana-500">{selectedStudent.phone || selectedStudent.email}</p></div>
+              <button disabled={busy} onClick={() => { setPurchaseStudentId(''); setMemberQuery('') }} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-zawana-500 hover:text-zawana-950 focus-visible:ring-2 focus-visible:ring-zawana-gold">Change</button>
+            </div> : <>
+              <div className="flex items-center gap-3 rounded-xl border border-zawana-border bg-zawana-950/[.015] px-4 focus-within:border-zawana-gold focus-within:ring-1 focus-within:ring-zawana-gold">
+                <Search size={17} className="shrink-0 text-zawana-500" aria-hidden="true" />
+                <input disabled={busy} aria-label="Search member accounts" placeholder="Search name, phone or email" className="min-w-0 flex-1 !border-0 !bg-transparent !px-0 !py-3.5 text-sm !shadow-none !outline-none !ring-0" value={memberQuery} onChange={e => setMemberQuery(e.target.value)} />
+              </div>
+              <div className="mt-2 max-h-56 overflow-y-auto" role="group" aria-label="Matching members">
+                {matchingMembers.slice(0, 20).map(m => <button key={m.id} disabled={busy} aria-label={`Select ${m.name}`} onClick={() => { setPurchaseStudentId(m.id); setActionError('') }} className="flex min-h-16 w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-zawana-950/[.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zawana-gold">
+                  <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-zawana-950/5 text-xs font-semibold text-zawana-500">{m.name?.slice(0, 1)}</span>
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{m.name}</span><span className="block truncate text-xs text-zawana-500">{m.phone || m.email}</span></span><Plus size={15} className="text-zawana-500" aria-hidden="true" />
+                </button>)}
+                {!matchingMembers.length && <p className="px-3 py-6 text-center text-sm text-zawana-500">No members found. Try another name or choose Walk-in.</p>}
+                {matchingMembers.length > 20 && <p className="px-3 py-2 text-xs text-zawana-500">Search to narrow down {matchingMembers.length} members.</p>}
+              </div>
+            </>}
+          </div> : <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-xs font-medium text-zawana-500">Customer name<input disabled={busy} autoComplete="name" className="mt-2 w-full rounded-xl border p-3 text-sm text-zawana-950" value={walkIn.name} onChange={e => setWalkIn({ ...walkIn, name: e.target.value })} placeholder="Full name" /></label>
+            <label className="text-xs font-medium text-zawana-500">Phone<input disabled={busy} autoComplete="tel" inputMode="tel" className="mt-2 w-full rounded-xl border p-3 text-sm text-zawana-950" value={walkIn.phone} onChange={e => setWalkIn({ ...walkIn, phone: e.target.value })} placeholder="09…" /></label>
+          </div>}
+        </Card>
+        <Card className="p-5 sm:p-7">
+          <div className="mb-5 flex items-center gap-3"><span className="grid h-7 w-7 place-items-center rounded-full border border-zawana-border text-xs font-semibold text-zawana-500">2</span><h3 className="text-base font-semibold">Choose a package</h3></div>
+          <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Badminton package">
+            {packages.filter(p => p.status === 'active').map(p => <button key={p.id} disabled={busy} aria-pressed={packageId === p.id} aria-label={`Select ${p.title}`} onClick={() => { setPackageId(p.id); setActionError('') }} className={`relative min-w-0 rounded-2xl border p-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${packageId === p.id ? 'border-zawana-950 bg-zawana-950/[.025] ring-1 ring-zawana-950' : 'border-zawana-border hover:border-zawana-500/50'}`}>
+              <span className="flex items-start justify-between gap-3"><span className="text-sm font-semibold">{p.title}</span><span aria-hidden="true" className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${packageId === p.id ? 'border-zawana-950 bg-zawana-950 text-white' : 'border-zawana-border'}`}>{packageId === p.id && <Check size={12} />}</span></span>
+              <span className="mt-2 block text-xs text-zawana-500">{p.sessions} sessions <span className="mx-1">·</span> {p.validity} days</span>
+              <span className="mt-5 block text-lg font-semibold tracking-tight">{money(p.price)}</span>
+            </button>)}
+          </div>
+          {!packages.some(p => p.status === 'active') && <p className="py-6 text-center text-sm text-zawana-500">{loading ? 'Loading packages…' : 'No active packages available.'}</p>}
+        </Card>
+      </div>
+      <Card className="overflow-hidden lg:sticky lg:top-6">
+        <div className="border-b border-zawana-border p-5 sm:p-6"><p className="text-xs font-medium uppercase tracking-[.14em] text-zawana-500">Payment summary</p><h3 className="mt-3 text-lg font-semibold">{salePackage?.title || 'Select a package'}</h3><p className="mt-1 truncate text-xs text-zawana-500">{customerType === 'member' ? selectedStudent?.name || 'Select a customer to continue' : walkIn.name || 'Walk-in customer'}</p></div>
+        <div className="space-y-6 p-5 sm:p-6">
+          <fieldset disabled={busy}><legend className="mb-2 text-xs font-medium text-zawana-500">Payment method</legend><div className="grid grid-cols-2 gap-2">{['Cash', 'KPay'].map(method => <button key={method} type="button" aria-pressed={paymentMethod === method} onClick={() => setPaymentMethod(method)} className={`min-h-11 rounded-xl border text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${paymentMethod === method ? 'border-zawana-950 bg-zawana-950 text-white' : 'border-zawana-border text-zawana-500 hover:border-zawana-500'}`}>{method}</button>)}</div></fieldset>
+          <label className="block text-xs font-medium text-zawana-500">Discount (%)<div className="relative mt-2"><input disabled={busy} type="number" min="0" max="100" step="0.01" className="w-full rounded-xl border !pr-10 text-sm text-zawana-950" value={discountPercent} onChange={e => setDiscountPercent(e.target.value)} aria-invalid={!validDiscount} aria-describedby={!validDiscount ? 'activation-discount-error' : undefined} /><span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-zawana-500">%</span></div></label>
+          {!validDiscount && <p id="activation-discount-error" role="alert" className="text-xs text-red-700">Enter a discount from 0 to 100%.</p>}
+          <dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt className="text-zawana-500">Package price</dt><dd>{money(salePackage?.price || 0)}</dd></div><div className="flex justify-between gap-3"><dt className="text-zawana-500">Discount{validDiscount && percent > 0 ? ` (${percent}%)` : ''}</dt><dd className={discountAmount > 0 ? 'text-emerald-700' : ''}>−{money(discountAmount)}</dd></div></dl>
+          <div className="border-t border-zawana-border pt-5"><p className="text-xs text-zawana-500">Total due · {paymentMethod}</p><p aria-live="polite" className="mt-1 text-3xl font-semibold tracking-tight">{money(finalAmount)}</p></div>
+          {actionError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
+          <div><Button className="w-full" loading={busy} disabled={!packageId || !validDiscount || (customerType === 'member' ? !selectedStudent : walkIn.name.trim().length < 2 || walkIn.phone.trim().length < 5)} onClick={buy}>{busy ? 'Activating…' : 'Activate package'}{!busy && <ArrowRight size={16} aria-hidden="true" />}</Button><p className="mt-3 text-center text-xs leading-relaxed text-zawana-500">Activate after receiving payment.<br />Package access starts immediately.</p></div>
+        </div>
+      </Card>
+    </div>
+  </div>;
 
   return <div className="space-y-6">
     <div className="grid gap-4 sm:grid-cols-3">
@@ -943,7 +1165,9 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
               setWalkIn({ name: '', phone: '' });
               setCustomerType('member');
               setPackageId(packages.find((p: any) => p.status === 'active')?.id || '');
-              setPaymentMethod('Cash')
+              setPaymentMethod('Cash');
+              setDiscountPercent('0');
+              setMemberQuery('')
             }}
           >
             <PackagePlus size={15} /> Activate package</Button>
@@ -954,11 +1178,17 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search student / phone"
+            aria-label="Search package holders"
+            placeholder="Search name, phone or package"
             className="w-full bg-transparent text-sm outline-none"
           />
         </div>
 
+        <Select aria-label="Package status" className="mt-3 w-full rounded-xl border p-3" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="all">All packages</option>
+          <option value="active">Active packages</option>
+          <option value="blocked">Expired / exhausted / inactive</option>
+        </Select>
         <div className="mt-4 space-y-2">
           {loading ?
             <p className="p-5 text-sm text-zawana-500">Loading...</p> :
@@ -1028,6 +1258,8 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
                       onClick={() => {
                         setActionError('');
                         setRenew(true);
+                        setDiscountPercent('0');
+                        setPaymentMethod('Cash');
                         setPackageId(current.packageId)
                       }}
                     >
@@ -1103,115 +1335,7 @@ function BadmintonCheckIn({ notify }: { notify: (s: string) => void }) {
           }
         }}
       >
-        <div className="grid gap-4">
-          {purchase &&
-            <>
-              <div className="grid grid-cols-2 rounded-xl bg-zawana-950/5 p-1">
-                <button
-                  className={`rounded-lg px-3 py-2 text-sm font-bold ${customerType === 'member' ? 'bg-white shadow' : ''}`}
-                  onClick={() => setCustomerType('member')}
-                >Member account</button>
-                <button
-                  className={`rounded-lg px-3 py-2 text-sm font-bold ${customerType === 'walkin' ? 'bg-white shadow' : ''}`}
-                  onClick={() => setCustomerType('walkin')}
-                >Walk-in</button>
-              </div>
-              {customerType === 'member' ?
-                <Select
-                  className="rounded-xl border p-3"
-                  value={purchaseStudentId}
-                  onChange={e => {
-                    setPurchaseStudentId(e.target.value);
-                    setActionError('')
-                  }}
-                >
-                  <option value="">Select member account</option>
-                  {memberAccounts.map((m: any) =>
-                    <option key={m.id} value={m.id}>
-                      {m.name} · {m.email}
-                    </option>
-                  )}
-                </Select> :
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-xs font-bold">Customer name<input
-                      className="mt-1 w-full"
-                      value={walkIn.name}
-                      onChange={e => setWalkIn({ ...walkIn, name: e.target.value })}
-                      placeholder="Name"
-                    />
-                  </label>
-                  <label className="text-xs font-bold">Phone<input
-                      className="mt-1 w-full"
-                      value={walkIn.phone}
-                      onChange={e => setWalkIn({ ...walkIn, phone: e.target.value })}
-                      placeholder="09…"
-                      inputMode="tel"
-                    />
-                  </label>
-                </div>}
-            </>}
-          <Select
-            className="rounded-xl border p-3"
-            value={packageId}
-            onChange={e => {
-              setPackageId(e.target.value);
-              setActionError('')
-            }}
-          >
-            <option value="">Select active package</option>
-            {packages
-              .filter(p => p.status === 'active')
-              .map(p =>
-                <option key={p.id} value={p.id}>
-                  {p.title} · {p.sessions} sessions · {p.validity} days · {money(p.price)}
-                </option>
-              )}
-          </Select>
-          <div className="rounded-xl border bg-zawana-950/[.02] p-3 text-sm">
-            <b>Front-desk sale · Cash</b>
-            <p className="mt-1 text-xs text-zawana-500">Activation, check-in access and a finance transaction are recorded immediately.</p>
-          </div>
-          {purchase && customerType === 'member' && !memberAccounts.length &&
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              <b>No member accounts found.</b> You can still activate a walk-in package.</p>}
-          {!packages.filter(p => p.status === 'active').length &&
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              <b>No active packages.</b> Create or activate a badminton package in Admin Package Management.</p>}
-          {actionError &&
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
-              <b>Activation failed:</b> {actionError}
-            </div>}
-        </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() => {
-              setPurchase(false);
-              setRenew(false);
-              setActionError('')
-            }}
-          >Cancel</Button>
-          <Button
-            disabled={
-              busy ||
-              !packageId ||
-              (purchase && customerType === 'member' && !selectedStudent) ||
-              (purchase &&
-                customerType === 'walkin' &&
-                (walkIn.name.trim().length < 2 || walkIn.phone.trim().length < 5)) ||
-              (!purchase && !current)
-            }
-            onClick={purchase ? buy : doRenew}
-          >
-            {busy
-              ?(purchase
-                ? 'Activating…'
-                : 'Renewing…'):(purchase
-                ? 'Activate package'
-                : 'Renew package')}
-          </Button>
-        </div>
+        {saleForm}
       </OpsModal>}</AnimatePresence>
   </div>;
 }
@@ -1537,7 +1661,19 @@ function CafeStats() {
   </div>
 }
 
-function BookingQueue({ notify }: { notify: (s: string) => void }) {
+function courtBookingRow(b: any) {
+  let customerName = '';
+  try {
+    customerName = JSON.parse(b.meta || '{}')?.customerName || ''
+  } catch {}
+  return {
+    ...b,
+    customer: b.user?.name || customerName || 'Walk-in',
+    court: b.court?.name || b.location
+  }
+}
+
+function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'error' | 'info') => void }) {
   const o = useOperations();
   const [rows, setRows] = useState<any[]>([]),
     [page, setPage] = useState(1),
@@ -1562,19 +1698,7 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
         get<any>(`/bookings?${params}`)
           .then(r => {
             setRows(
-              (r.data || []).map((b: any) => ({
-                ...b,
-                customer:
-                  b.user?.name ||
-                  (() => {
-                    try {
-                      return JSON.parse(b.meta || '{}').customerName || 'Walk-in'
-                    } catch {
-                      return 'Walk-in'
-                    }
-                  })(),
-                court: b.court?.name || b.location
-              }))
+              (r.data || []).map(courtBookingRow)
             );
             setPageInfo(r.pagination || { total: 0, totalPages: 0 });
             setError('')
@@ -1598,10 +1722,12 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
       const params = new URLSearchParams({ page: String(page), limit: '20', kind: 'court' });
       for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
       const r = await get<any>(`/bookings?${params}`);
-      setRows(r.data || []);
+      setRows((r.data || []).map(courtBookingRow));
       setPageInfo(r.pagination)
     } catch (e: any) {
-      setError(e.message || 'Could not update booking.')
+      const message = e.message || 'Could not update booking.';
+      setError(message);
+      notify(message, 'error')
     } finally {
       setBusy('')
     }
@@ -1724,14 +1850,14 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
             </Cell>
             <Cell>
               <div className="flex gap-2">
-                {b.status !== 'CANCELLED' && b.status !== 'COMPLETED' &&
+                {!['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
                   <Button
                     variant="danger"
                     className="px-3 py-2"
                     disabled={busy === b.id}
                     onClick={() => void update(b, 'cancelled')}
                   >Cancel</Button>}
-                {b.status === 'CONFIRMED' && b.date <= today &&
+                {String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
                   <Button
                     variant="secondary"
                     className="px-3 py-2"
@@ -1761,14 +1887,14 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
             {b.date} · {money(b.price)} · {b.paymentStatus}
           </p>
           <div className="mt-3 flex gap-2">
-            {b.status !== 'CANCELLED' && b.status !== 'COMPLETED' &&
+            {!['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
               <Button
                 variant="danger"
                 className="min-h-11 px-4"
                 disabled={busy === b.id}
                 onClick={() => void update(b, 'cancelled')}
               >Cancel</Button>}
-            {b.status === 'CONFIRMED' && b.date <= today &&
+            {String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
               <Button
                 variant="secondary"
                 className="min-h-11 px-4"
@@ -1793,6 +1919,11 @@ function BookingQueue({ notify }: { notify: (s: string) => void }) {
 
 function BadmintonPackages() {
   const o = useOperations();
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const shown = o.badmintonPackages.filter((p: any) =>
+    (statusFilter === 'all' || p.status === statusFilter) && `${p.title} ${p.description || ''}`.toLowerCase().includes(query.trim().toLowerCase())
+  );
   const [purchases, setPurchases] = useState<any[]>([]);
 
   const refreshPurchases = () =>
@@ -1832,49 +1963,10 @@ function BadmintonPackages() {
         </Table>
       </section>}
 
-    <Table
-      headers={[
-        'Package',
-        'Schedule rules',
-        'Sessions',
-        'Validity',
-        'Price',
-        'Status',
-        'Actions'
-      ]}
-    >
-      {o.badmintonPackages.map((p: any) =>
-        <tr key={p.id}>
-          <Cell>
-            <b>{p.title}</b>
-            <p className="text-xs text-zawana-500">{p.description}</p>
-          </Cell>
-          <Cell>
-            <p className="text-xs text-zawana-500">
-              {p.availableFrom && p.availableUntil
-                ? `${p.availableFrom}–${p.availableUntil} · `
-                : ''}
-              {p.scheduleNotes || 'Any schedule'}
-              {p.courtRules ? ` · ${p.courtRules}` : ''}
-            </p>
-          </Cell>
-          <Cell>{p.sessions}</Cell>
-          <Cell>{p.validity} days</Cell>
-          <Cell>{money(p.price)}</Cell>
-          <Cell>
-            <Badge good={p.status === 'active'}>
-              {p.status === 'coming_soon' ? 'Coming Soon' : p.status}
-            </Badge>
-          </Cell>
-          <Cell>
-            <div className="flex gap-2">
-              <PackageEdit item={p} kind="badminton" />
-              <PackageDelete id={p.id} name={p.title} kind="badminton" />
-            </div>
-          </Cell>
-        </tr>
-      )}
-    </Table>
+    <div className="grid gap-3 sm:grid-cols-3">{[['Packages', o.badmintonPackages.length], ['Active', o.badmintonPackages.filter(p => p.status === 'active').length], ['Coming soon', o.badmintonPackages.filter(p => p.status === 'coming_soon').length]].map(([label, value]) => <Card key={label} className="p-5"><p className="text-xs text-zawana-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p></Card>)}</div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3 rounded-xl border bg-white px-4 sm:w-80"><Search size={16} className="shrink-0 text-zawana-500" /><input aria-label="Search packages" placeholder="Search packages" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 w-full !border-0 !bg-transparent !px-0 !shadow-none !outline-none !ring-0" /></div><Select aria-label="Package catalog status" className="min-w-40 text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="active">Active</option><option value="coming_soon">Coming soon</option><option value="inactive">Inactive</option></Select></div>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((p: any) => <Card key={p.id} className="flex flex-col overflow-hidden p-0"><div className="flex-1 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zawana-gold/10 text-zawana-950"><PackagePlus size={18} /></span><Badge good={p.status === 'active'}>{p.status === 'coming_soon' ? 'Coming soon' : p.status}</Badge></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{p.title}</h3><p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zawana-500">{p.description || 'Badminton session package'}</p><p className="mt-5 text-2xl font-semibold tracking-tight">{money(p.price)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zawana-500"><span>{p.sessions} sessions</span><span>{p.validity} days validity</span></div><p className="mt-4 border-t border-zawana-border pt-4 text-xs leading-relaxed text-zawana-500">{p.availableFrom && p.availableUntil ? `${p.availableFrom}–${p.availableUntil} · ` : ''}{p.scheduleNotes || 'Flexible schedule'}{p.courtRules ? ` · ${p.courtRules}` : ''}</p></div><div className="flex items-center justify-between border-t border-zawana-border bg-zawana-950/[.015] px-5 py-3"><span className="text-xs text-zawana-500">Manage package</span><div className="flex gap-2"><PackageEdit item={p} kind="badminton" /><PackageDelete id={p.id} name={p.title} kind="badminton" /></div></div></Card>)}</div>
+    {!shown.length && <Empty title="No matching packages" body="Try another search or create a new package." />}
   </div>
 }
 
@@ -2118,14 +2210,15 @@ function PackageManager({
   };
 
   return <div>
-    <div className="mb-4 flex justify-end">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <p className="max-w-xl text-sm leading-relaxed text-zawana-500">Manage session packages, prices and access rules in one place.</p>
       <Button onClick={() => setShowForm(true)}>
         <Plus size={16} /> New package</Button>
     </div>
     <AnimatePresence>{showForm &&
       <OpsModal
         title={`Create ${kind} package`}
-        subtitle="Set the package data used by front office and POS."
+        subtitle="Set session access, pricing and availability for your members."
         onClose={() => setShowForm(false)}
       >
         <div className="grid gap-4 md:grid-cols-2">
@@ -5250,6 +5343,9 @@ function POS({
 
 function CourtDesk({ notify }: { notify: (s: string) => void }) {
   const o = useOperations();
+  const [courtQuery, setCourtQuery] = useState('');
+  const [floorFilter, setFloorFilter] = useState('all');
+  const [reservationType, setReservationType] = useState('rental');
   const now = useBookingClock();
 
   const [date, setDate] = useState(() => bookingClock().date);
@@ -5343,7 +5439,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
 
   useEffect(() => {
     refreshBlocks()
-  }, [date, o.courtBookings.length, court?.id]);
+  }, [date, o.courtBookings]);
 
   const isBlocked = (c: any, t: string) =>
     blocks.some(
@@ -5463,14 +5559,15 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     b => b.courtId === court?.id && b.type === 'class' && b.active !== false
   );
 
+  const courtStats = useMemo(() => new Map(o.managedCourts.map(c => {
+    const states = courtSlots.map(t => status(c, t));
+    return [c.id, { open: states.filter(s => s === 'open').length, reserved: states.filter(s => s === 'booked' || s === 'class').length, states }];
+  })), [o.managedCourts, o.courtBookings, blocks, date, now]);
+
   return <div>
     <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]">
-      <div className="rounded-[24px] bg-zawana-950 p-5 text-white">
-        <p className="text-[10px] font-black uppercase tracking-[.2em] text-zawana-gold">Cinema-style court board</p>
-        <h2 className="mt-1 text-2xl font-black">Tap a court to inspect 6 AM — 9 PM</h2>
-        <p className="mt-1 text-xs text-white/50">15 one-hour slots. Gold = open · red = booked · 🔒 bright red = weekly class reserved · dark = maintenance.</p>
-      </div>
-      <label className="rounded-[24px] border border-zawana-950/8 bg-white p-5">
+      <div className="py-2"><p className="text-xs font-medium uppercase tracking-[.14em] text-zawana-500">Court operations</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">Court availability</h2><p className="mt-2 text-sm leading-relaxed text-zawana-500">Choose a court to view times, make a rental or reserve a weekly class.</p></div>
+      <label className="rounded-2xl border border-zawana-border bg-white p-4">
         <span className="block text-[10px] font-black uppercase tracking-widest text-zawana-500">Operating day</span>
         <input
           className="mt-2"
@@ -5481,7 +5578,9 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       </label>
     </div>
 
-    <Card className="mb-5 p-5">
+    <details className="mb-5 rounded-2xl border border-zawana-border bg-white p-5" open={!!dateOverride}>
+      <summary className="cursor-pointer text-sm font-semibold">Special opening hours <span className="ml-2 text-xs font-normal text-zawana-500">One-day opening or closure</span></summary>
+      <div className="mt-5">
       <div className="grid gap-4 md:grid-cols-[1fr_180px_1fr_auto] md:items-end">
         <label className="text-xs font-bold">One-day availability override<input
             className="mt-2 w-full"
@@ -5519,61 +5618,25 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
         <p className="mt-2 text-xs font-bold text-zawana-accent">Active for this date: {dateOverride.title} · {dateOverride.type === 'open' ? 'weekly schedule bypassed' : 'courts closed'}
           {dateOverride.reason ? ` · ${dateOverride.reason}` : ''}
         </p>}
-    </Card>
+      </div>
+    </details>
 
     {holiday?.active &&
       <div className="mb-5 rounded-2xl border border-zawana-gold/30 bg-zawana-gold/10 p-4 text-sm font-black">Public holiday · {holiday.title} · {Number(holiday.price).toLocaleString()} MMK / hour</div>}
 
+    <div className="mb-5 flex items-center justify-between gap-4"><div className="flex w-full max-w-sm items-center gap-3 rounded-xl border bg-white px-4"><Search size={16} className="shrink-0 text-zawana-500" /><input aria-label="Search courts" placeholder="Search courts" value={courtQuery} onChange={e => setCourtQuery(e.target.value)} className="min-w-0 w-full !border-0 !bg-transparent !px-0 !shadow-none !outline-none !ring-0" /></div><span className="shrink-0 text-xs text-zawana-500">{o.managedCourts.length} courts</span></div>
+    <div className="mb-5"><SegmentedControl label="Court floor" value={floorFilter} onChange={setFloorFilter} options={[{value:'all',label:'All courts'}, {value:'2',label:'2nd floor'}, {value:'6',label:'6th floor'}]} /></div>
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {o.managedCourts.map(c => {
-        const openSlots = courtSlots.filter(t => status(c, t) === 'open').length;
-        const blockedSlots = courtSlots.filter(t =>
-          ['booked', 'class', 'maintenance', 'elapsed'].includes(status(c, t))
-        ).length;
+      {o.managedCourts.filter(c => c.name.toLowerCase().includes(courtQuery.trim().toLowerCase()) && (floorFilter === 'all' || (floorFilter === '2' ? Number(c.name.match(/(\d+)\D*$/)?.[1]) >= 1 && Number(c.name.match(/(\d+)\D*$/)?.[1]) <= 4 : Number(c.name.match(/(\d+)\D*$/)?.[1]) >= 5 && Number(c.name.match(/(\d+)\D*$/)?.[1]) <= 8))).map(c => {
+        const stats = courtStats.get(c.id)!;
+        const openSlots = stats.open;
         return <button
           key={c.id}
           onClick={() => setCourt(c)}
-          className="group overflow-hidden rounded-[28px] border border-zawana-950/8 bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-2xl"
+          className="group overflow-hidden rounded-2xl border border-zawana-border bg-white text-left transition hover:border-zawana-500/40 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-zawana-gold"
         >
-          <div className="relative h-40 overflow-hidden bg-zawana-950 p-5 text-white">
-            <div className="absolute inset-4 rounded-2xl border border-white/12">
-              <div className="absolute left-1/2 top-0 h-full w-px bg-white/12" />
-              <div className="absolute inset-x-[18%] top-1/2 h-px bg-white/12" />
-              <div className="absolute inset-x-[8%] top-[30%] h-[40%] rounded-xl border border-white/10" />
-            </div>
-            <div className="relative flex items-start justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-zawana-gold">
-                  {c.type} court</p>
-                <h3 className="mt-1 text-2xl font-black">{c.name}</h3>
-              </div>
-              <Badge good={c.status === 'available'}>{c.status}</Badge>
-            </div>
-            <div className="absolute bottom-4 left-5 right-5 flex justify-between text-xs">
-              <span className="text-white/55">{money(c.price)} normal · +5,000 peak</span>
-              <b>{openSlots} open</b>
-            </div>
-          </div>
-          <div className="p-5">
-            <div className="grid grid-cols-3 gap-2 text-center text-xs font-black">
-              <div className="rounded-xl bg-zawana-gold/12 p-3">
-                <b className="block text-lg">{openSlots}</b>
-                <span className="text-[9px] uppercase tracking-wider text-zawana-500">Open</span>
-              </div>
-              <div className="rounded-xl bg-red-50 p-3">
-                <b className="block text-lg text-red-700">{blockedSlots}</b>
-                <span className="text-[9px] uppercase tracking-wider text-zawana-500">Reserved</span>
-              </div>
-              <div className="rounded-xl bg-zawana-900 p-3">
-                <b className="block text-lg">15</b>
-                <span className="text-[9px] uppercase tracking-wider text-zawana-500">Slots</span>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center justify-between text-xs font-bold text-zawana-500">
-              <span>Open court board</span>
-              <Eye size={15} />
-            </div>
-          </div>
+          <div className="flex items-center gap-3 border-b border-zawana-border p-5"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-lg font-semibold ${Number(c.name.match(/(\d+)\D*$/)?.[1]) <= 4 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>{c.name.match(/(\d+)\D*$/)?.[1] || <MapPin size={18} />}</span><div className="min-w-0 flex-1"><h3 className="text-base font-semibold">{c.name}</h3><p className="mt-1 text-xs text-zawana-500">{c.type} court · {c.surface}</p></div><Badge good={c.status === 'available'}>{c.status}</Badge></div>
+          <div className="px-5 py-4"><div className="mb-3 flex items-center justify-between gap-3 text-xs"><span className="text-zawana-500">{openSlots} available <span className="mx-1">·</span> {stats.reserved} reserved</span><span className="font-medium">{money(c.price)} / hr</span></div><div aria-hidden="true" className="flex gap-1">{stats.states.map((st, i) => <span key={i} className={`h-1 flex-1 rounded-full ${st === 'open' ? 'bg-zawana-gold/70' : st === 'class' || st === 'booked' ? 'bg-rose-300' : 'bg-zawana-950/10'}`} />)}</div><p className="mt-3 flex items-center justify-between text-xs text-zawana-500"><span>06:00 — 21:00</span><span className="inline-flex items-center gap-1">View times <ChevronRight size={13} /></span></p></div>
         </button>
       })}
     </div>
@@ -5585,26 +5648,13 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       />}
 
     <AnimatePresence>{court &&
-      <OpsModal
-        wide
-        title={`${court.name} · availability`}
-        subtitle={`${date} · ${dayName} · 06:00 AM — 09:00 PM · one-hour sessions`}
-        onClose={() => {
-          setCourt(null);
-          setSlot('')
-        }}
-      >
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
+      <DialogSurface title={`${court.name} · availability`} onClose={() => { if (!saving) { setCourt(null); setSlot('') } }} className="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-zawana-border px-5 py-5 sm:px-7"><div><p className="text-[10px] font-medium uppercase tracking-[.16em] text-zawana-500">Court reservation</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{court.name}</h2><p className="mt-1 text-xs text-zawana-500">{new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · One-hour sessions</p></div><button type="button" aria-label="Close dialog" disabled={saving} onClick={() => { setCourt(null); setSlot('') }} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-zawana-950/5 text-zawana-500 transition hover:bg-zawana-950/10 focus-visible:ring-2 focus-visible:ring-zawana-gold"><X size={17} /></button></header>
+        <div className="min-h-0 overflow-y-auto p-5 sm:p-7">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_290px]">
           <div>
-            <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
-              <span className="rounded-full bg-zawana-gold/15 px-3 py-2">Normal · {money(court.price)}
-              </span>
-              <span className="rounded-full bg-zawana-purple/15 px-3 py-2">Peak · {money(Number(court.price) + 5000)}
-              </span>
-              <span className="rounded-full bg-red-50 px-3 py-2">Holiday · {money(holiday?.price || 30000)}
-              </span>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            <div className="mb-4 flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold">Choose a time</h3><p className="mt-1 text-xs text-zawana-500">06:00 — 21:00 · Select an available session</p></div><span className="mt-1 flex items-center gap-1.5 text-[10px] text-zawana-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Available</span></div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {courtSlots.map(t => {
                 const st = status(court, t);
                 const booking = bookings.find(
@@ -5625,48 +5675,16 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
                   }}
                   disabled={st !== 'open'}
                   aria-label={`${t} ${reserved ? `reserved every ${dayName}` : st !== 'open' ? st : 'available'}`}
-                  className={`group relative min-h-[118px] overflow-hidden rounded-2xl border-2 p-4 text-left transition ${st === 'open' ? 'border-zawana-gold bg-zawana-gold/8 hover:-translate-y-0.5 hover:shadow-lg' : reserved ? 'border-red-600 bg-red-600 text-white shadow-[0_10px_28px_rgba(220,38,38,.25)]' : 'border-red-200 bg-red-50 text-red-900'} ${slot === t ? 'ring-2 ring-zawana-gold ring-offset-2' : ''}`}
+                  aria-pressed={slot === t}
+                  className={`min-h-20 rounded-xl border p-3 text-left transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${slot === t ? 'border-zawana-950 bg-zawana-950 text-white' : st === 'open' ? 'border-zawana-border bg-white hover:border-zawana-500' : 'border-transparent bg-zawana-950/[.035] text-zawana-400'}`}
                 >
-                  <div className="absolute right-0 top-0 h-16 w-16 rounded-bl-[28px] bg-black/5" />
-
-                  <div className="relative flex items-start justify-between gap-3">
-                    <span
-                      className={`text-sm font-black ${reserved ? 'text-white' : 'text-zawana-950'}`}
-                    >
-                      {t}
-                    </span>
-                    {reserved ?
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-red-700 shadow-sm">
-                        <LockKeyhole size={11} /> RESERVED</span> :
-                      <span
-                        className={`h-3 w-3 rounded-full ring-4 ${st === 'open' ? 'bg-zawana-gold ring-zawana-gold/20' : 'bg-red-500 ring-red-500/15'}`}
-                      />}
-                  </div>
-
-                  {reserved ?
-                    <div className="relative mt-5">
-                      <p className="text-[11px] font-black uppercase tracking-[.12em] text-white">WEEKLY CLASS</p>
-                      <p className="mt-1 truncate text-xs font-bold text-white/85">
-                        {block?.title || 'Class reservation'}
-                      </p>
-                      <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-black/15 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-white">Every {dayName} · Unavailable</p>
-                    </div> :
-                    <p
-                      className={`relative mt-7 text-[10px] font-black uppercase tracking-widest ${st === 'open' ? 'text-zawana-500' : 'text-red-700'}`}
-                    >
-                      {st === 'open'
-                        ? `AVAILABLE · ${money(slotPrice(court, t))}`
-                        : st === 'elapsed'
-                          ? 'UNAVAILABLE · TIME PASSED'
-                          : court.status !== 'available'
-                          ? 'MAINTENANCE'
-                          : `BOOKED · ${booking?.customer || 'Reserved'}`}
-                    </p>}
+                  <span className="flex items-center justify-between gap-2 text-xs font-semibold">{t.split(' — ')[0]}{slot === t && <Check size={13} />}</span>
+                  <span className={`mt-1 block text-[10px] ${slot === t ? 'text-white/70' : st === 'open' ? 'text-zawana-500' : reserved ? 'text-rose-700' : 'text-zawana-400'}`}>{st === 'open' ? money(slotPrice(court, t)) : reserved ? block?.title || 'Weekly class' : st === 'elapsed' ? 'Time passed' : court.status !== 'available' ? 'Maintenance' : `Booked${booking?.customer ? ` · ${booking.customer}` : ''}`}</span>
                 </button>
               })}
             </div>
 
-            <div className="mt-5 rounded-2xl border border-zawana-purple/20 bg-zawana-purple/5 p-4">
+            <details className="mt-5 rounded-xl border border-zawana-border p-4"><summary className="cursor-pointer text-xs font-semibold">Weekly reservations <span className="ml-1 font-normal text-zawana-500">({activeClassBlocks.length})</span></summary><div className="mt-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-zawana-purple">Weekly reservations · {dayName}
@@ -5697,58 +5715,20 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
                   )}
                 </div> :
                 <p className="mt-3 text-xs text-zawana-500">No weekly class reservation for this court/day.</p>}
-            </div>
+            </div></details>
           </div>
-          <div className="rounded-[24px] bg-zawana-950 p-6 text-white">
-            <p className="text-[10px] font-black uppercase tracking-widest text-zawana-gold">Front-office controls</p>
-            <h3 className="mt-2 text-2xl font-black">Reserve this court</h3>
-            <p className="mt-2 text-sm text-white/50">
-              {slot || 'Select an available slot first.'}
-            </p>
-            <label className="mt-5 block text-xs font-bold text-white/60">Walk-in customer<input
-                className="mt-2 w-full bg-white/8 text-white placeholder:text-white/30"
-                value={walkInName}
-                onChange={e => setWalkInName(e.target.value)}
-              />
-            </label>
-            <label className="mt-3 block text-xs font-bold text-white/60">Weekly class / facility block<input
-                className="mt-2 w-full bg-white/8 text-white placeholder:text-white/30"
-                value={classTitle}
-                onChange={e => setClassTitle(e.target.value)}
-              />
-            </label>
-            <div className="mt-5 rounded-2xl bg-white/8 p-4">
-              <div className="flex justify-between text-sm">
-                <span>Court</span>
-                <b>{court.name}</b>
-              </div>
-              <div className="mt-2 flex justify-between text-sm">
-                <span>Rental</span>
-                <b>{slot ? money(slotPrice(court, slot)) : '—'}</b>
-              </div>
-              <div className="mt-2 flex justify-between text-sm">
-                <span>Repeats</span>
-                <b>Every {dayName}</b>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-2">
-              <Button
-                disabled={!slot || saving || isBusy(court, slot)}
-                onClick={bookWalkIn}
-                className="w-full"
-              >
-                {saving ? 'Reserving…' : 'Walk-in booking'}
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={!slot || saving || isBusy(court, slot)}
-                onClick={reserveClass}
-                className="w-full"
-              >Reserve weekly class</Button>
-            </div>
+          <div className="h-fit rounded-2xl border border-zawana-border bg-zawana-950/[.015] p-5 lg:sticky lg:top-0">
+            <p className="text-[10px] font-medium uppercase tracking-[.14em] text-zawana-500">Reservation details</p>
+            <div className="my-5"><SegmentedControl label="Reservation type" value={reservationType} onChange={setReservationType} options={[{ value: 'rental', label: 'Rental' }, { value: 'weekly', label: 'Weekly class' }]} /></div>
+            {reservationType === 'rental' ? <label className="block text-xs font-medium text-zawana-500">Walk-in customer<input disabled={saving} className="mt-2 w-full rounded-xl bg-white text-sm text-zawana-950" value={walkInName} onChange={e => setWalkInName(e.target.value)} /></label> : <label className="block text-xs font-medium text-zawana-500">Weekly class / facility block<input disabled={saving} className="mt-2 w-full rounded-xl bg-white text-sm text-zawana-950" value={classTitle} onChange={e => setClassTitle(e.target.value)} /></label>}
+            <dl className="mt-6 space-y-4 text-xs"><div className="flex justify-between gap-3"><dt className="text-zawana-500">Court</dt><dd className="font-medium">{court.name}</dd></div><div className="flex justify-between gap-3"><dt className="text-zawana-500">Time</dt><dd className="text-right font-medium">{slot || 'Choose a time'}</dd></div><div className="flex justify-between gap-3"><dt className="text-zawana-500">{reservationType === 'weekly' ? 'Repeats' : 'Date'}</dt><dd className="font-medium">{reservationType === 'weekly' ? `Every ${dayName}` : date}</dd></div></dl>
+            <div className="mt-6 border-t border-zawana-border pt-5"><p className="text-xs text-zawana-500">{reservationType === 'rental' ? 'Total rental' : 'Weekly court reservation'}</p><p className="mt-1 text-2xl font-semibold tracking-tight">{reservationType === 'rental' ? slot ? money(slotPrice(court, slot)) : '—' : 'Recurring class'}</p></div>
+            <Button loading={saving} disabled={!slot || saving || isBusy(court, slot)} onClick={reservationType === 'rental' ? bookWalkIn : reserveClass} className="mt-5 w-full">{saving ? 'Reserving…' : reservationType === 'rental' ? 'Walk-in booking' : 'Reserve weekly class'}{!saving && <ArrowRight size={15} />}</Button>
+            <p className="mt-3 text-xs leading-relaxed text-zawana-500">{reservationType === 'rental' ? 'Reserve this one-hour session for your customer.' : `Reserves this time every ${dayName} until you remove it.`}</p>
           </div>
         </div>
-      </OpsModal>}</AnimatePresence>
+        </div>
+      </DialogSurface>}</AnimatePresence>
   </div>
 }
 

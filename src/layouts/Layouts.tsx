@@ -37,7 +37,6 @@ const member: readonly SidebarItem[] = [
   ['/member', 'Overview', Home],
   ['/book/court', 'Badminton courts', CalendarDays],
   ['/private-course', 'Private course', Dumbbell],
-  ['/member/training', 'My Gym Training', Activity],
   ['/bookings', 'Bookings', ClipboardList],
   ['/membership', 'Packages', Users],
   ['/payments', 'Payments', CreditCard],

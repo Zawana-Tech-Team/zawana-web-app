@@ -1,0 +1,146 @@
+import assert from 'node:assert/strict';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { createServer } from 'node:net';
+
+const require = createRequire(new URL('../tooling/gym/package.json', import.meta.url));
+const { chromium } = require('playwright');
+const root = resolve(new URL('..', import.meta.url).pathname);
+const temp = mkdtempSync(join(tmpdir(), 'zawana-admin-browser-'));
+const artifacts = process.env.ADMIN_QA_ARTIFACT_DIR || join(temp, 'artifacts');
+mkdirSync(artifacts, { recursive: true });
+const freePort = async () => {
+  const server = createServer();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  await new Promise(resolve => server.close(resolve));
+  return port;
+};
+const apiPort = await freePort(), uiPort = await freePort();
+const ui = `http://127.0.0.1:${uiPort}`, api = `http://127.0.0.1:${apiPort}/api`;
+const fixture = join(temp, 'fixture.json'), database = join(temp, 'qa.db');
+writeFileSync(database, '');
+const env = { ...process.env, DATABASE_URL: `file:${database}`, NODE_ENV: 'test', AUTH_MODE: 'database', JWT_SECRET: 'content-qa-session-key-more-than-thirty-two-characters', PORT: String(apiPort), CLIENT_URL: ui, PUBLIC_API_URL: `http://127.0.0.1:${apiPort}`, VITE_API_URL: api, VITE_AUTH_MODE: 'database', ADMIN_QA_FIXTURE_PATH: fixture };
+const children = [], errors = [], uploadedFiles = [];
+let logs = '', browser;
+const start = (bin, args, cwd) => {
+  const child = spawn(bin, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  child.stdout.on('data', data => logs += data); child.stderr.on('data', data => logs += data);
+  children.push(child);
+};
+const ready = async url => {
+  for (let i = 0; i < 120; i++) {
+    if (children.some(child => child.exitCode !== null)) throw new Error(logs);
+    if (await fetch(url).then(response => response.ok).catch(() => false)) return;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error(`Server did not become ready: ${logs}`);
+};
+try {
+  execFileSync(join(root, 'backend/node_modules/.bin/prisma'), ['migrate', 'deploy'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  execFileSync(join(root, 'backend/node_modules/.bin/tsx'), ['tests/admin-navigation-browser-fixture.ts'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  const data = JSON.parse(readFileSync(fixture, 'utf8'));
+  start(join(root, 'backend/node_modules/.bin/tsx'), ['src/server.ts'], join(root, 'backend'));
+  start(join(root, 'node_modules/.bin/vite'), ['--host', '127.0.0.1', '--port', String(uiPort), '--strictPort'], root);
+  await Promise.all([ready(`${api}/health`), ready(ui)]);
+  const request = async (path, { token, body, method = 'GET' } = {}) => fetch(`${api}${path}`, {
+    method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {})
+  });
+  const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  browser = await chromium.launch({ headless: true, ...(existsSync(chrome) ? { executablePath: chrome } : {}) });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+  await context.addInitScript(token => localStorage.setItem('zawana_access_token', token), data.token);
+  const page = await context.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${ui}/admin`);
+  const badminton = page.getByRole('button', { name: 'Badminton', exact: true });
+  const gym = page.getByRole('button', { name: 'Gym', exact: true });
+  await badminton.waitFor();
+  assert.equal(await badminton.getAttribute('aria-expanded'), 'false');
+  assert.equal(await gym.getAttribute('aria-expanded'), 'false');
+  await badminton.click();
+  await page.getByRole('link', { name: 'Coach Packages', exact: true }).click();
+  await page.getByRole('heading', { name: 'Badminton Coaches management', exact: true }).waitFor();
+  await page.getByText('QA Badminton Coach', { exact: true }).waitFor();
+  assert.equal(await page.getByText('QA Gym Coach', { exact: true }).count(), 0);
+  await gym.click();
+  await page.getByRole('link', { name: 'Coach Management', exact: true }).click();
+  await page.getByRole('heading', { name: 'Gym Coaches management', exact: true }).waitFor();
+  await page.getByText('QA Gym Coach', { exact: true }).waitFor();
+  assert.equal(await page.getByText('QA Badminton Coach', { exact: true }).count(), 0);
+  await page.getByRole('link', { name: 'Court Rentals', exact: true }).click();
+  await page.getByRole('heading', { name: 'Court Rentals & Time Setup', exact: true }).waitFor();
+  await page.getByLabel('Operating day').fill(data.dates[0]);
+  await page.getByRole('button', { name: /Court 1 Standard court/ }).click();
+  const time = page.getByRole('button', { name: '8:00 AM — 9:00 AM available', exact: true });
+  await time.click();
+  await page.screenshot({ path: join(artifacts, 'court-rental-modal-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: join(artifacts, 'court-rental-modal-mobile.png'), fullPage: true });
+  assert.ok(await page.getByRole('dialog', { name: 'Court 1 · availability', exact: true }).evaluate(node => node.scrollWidth <= node.clientWidth), 'Court modal overflows on mobile');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('group', { name: 'Reservation type', exact: true }).getByRole('button', { name: 'Weekly class', exact: true }).click();
+  await page.getByLabel('Weekly class / facility block').fill('Admin weekly class');
+  const reserve = page.waitForResponse(r => r.url().endsWith('/court-blocks') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Reserve weekly class', exact: true }).click();
+  const reserved = await reserve;
+  assert.equal(reserved.status(), 201, await reserved.text());
+  await page.getByText('Admin weekly class', { exact: true }).first().waitFor();
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('link', { name: 'Manage courts', exact: true }).click();
+  await page.getByRole('heading', { name: 'Courts management', exact: true }).waitFor();
+  assert.equal(await badminton.getAttribute('aria-expanded'), 'true');
+  await page.reload();
+  await page.getByRole('heading', { name: 'Courts management', exact: true }).waitFor();
+  assert.equal(await badminton.getAttribute('aria-expanded'), 'true');
+  await page.screenshot({ path: join(artifacts, 'admin-navigation-desktop.png'), fullPage: true });
+  await page.getByRole('link', { name: 'Badminton Packages', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Search packages', exact: true }).fill('Weekend');
+  await page.getByRole('heading', { name: 'Weekend Sessions', exact: true }).waitFor();
+  await page.screenshot({ path: join(artifacts, 'admin-packages-desktop.png'), fullPage: true });
+  await page.getByRole('textbox', { name: 'Search packages', exact: true }).fill('NoSuchPackage');
+  await page.getByText('No matching packages', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Private Courses', exact: true }).click();
+  await page.getByRole('button', { name: 'New course', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: 'Create private course', exact: true });
+  await editor.waitFor();
+  assert.equal(await editor.evaluate(node => node === document.activeElement), true);
+  await page.keyboard.press('Tab');
+  assert.equal(await editor.evaluate(node => node.contains(document.activeElement)), true);
+  await page.keyboard.press('Escape');
+  await editor.waitFor({ state: 'detached' });
+  assert.equal(await page.getByRole('button', { name: 'New course', exact: true }).evaluate(node => node === document.activeElement), true);
+  await page.getByRole('button', { name: 'New course', exact: true }).click();
+
+  await editor.getByLabel('Course name', { exact: true }).fill('Personal Technique');
+  await editor.getByLabel('Price · MMK', { exact: true }).fill('50000');
+  await editor.getByRole('button', { name: /QA Badminton Coach/ }).click();
+  const courseResponse = page.waitForResponse(r => r.url().endsWith('/private-courses') && r.request().method() === 'POST');
+  await editor.getByRole('button', { name: 'Create course', exact: true }).click();
+  const created = await courseResponse;
+  assert.equal(created.status(), 201, await created.text());
+  await page.getByRole('heading', { name: 'Personal Technique', exact: true }).waitFor();
+  assert.equal(await editor.count(), 0);
+  await page.screenshot({ path: join(artifacts, 'admin-courses-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('textbox', { name: 'Search courses', exact: true }).fill('Personal');
+  await page.screenshot({ path: join(artifacts, 'admin-courses-mobile.png'), fullPage: true });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile catalog overflows');
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  await page.getByRole('link', { name: 'Private Courses', exact: true }).click();
+  await page.waitForURL('**/admin/private-courses');
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).waitFor();
+  assert.equal(await page.getByRole('dialog', { name: 'Mobile navigation', exact: true }).count(), 0);
+  assert.deepEqual(errors, []);
+  console.log('PASS Admin dropdown navigation, department-specific coaches, court rental/time setup, persisted weekly reservation, reload state and mobile drawer navigation');
+} catch (error) {
+  console.error(logs.slice(-5000));
+  throw error;
+} finally {
+  await browser?.close();
+  for (const child of children) child.kill('SIGTERM');
+  rmSync(temp, { recursive: true, force: true });
+}

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useDialog } from '../components/Interactions';
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { motionTokens } from '../design/motion';
@@ -40,7 +41,7 @@ function Modal({
   const reduced = useReducedMotion();
   return <motion.div
     initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-    transition={{ duration: motionTokens.popover }}
+    transition={{ duration: reduced ? 0 : motionTokens.dialog }}
     className="premium-dialog-backdrop fixed inset-0 z-[100] flex items-center justify-center bg-zawana-950/55 p-4"
     onMouseDown={e => {
       if (e.target === e.currentTarget) onClose()
@@ -48,9 +49,9 @@ function Modal({
   >
     <motion.div
       ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
-      initial={reduced ? false : { opacity: 0, y: 16, scale: .98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .99 }}
-      transition={reduced ? { duration: 0 } : motionTokens.spring}
+      initial={reduced ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+      transition={{ duration: reduced ? 0 : motionTokens.dialog, ease: motionTokens.ease }}
       className="premium-dialog-panel premium-dialog-panel--control w-full max-w-2xl overflow-hidden rounded-[30px] border border-white/50 bg-white shadow-[0_35px_100px_rgba(29,27,71,.28)]">
       <div className="relative overflow-hidden bg-zawana-950 px-6 py-5 text-white">
         <div className="absolute -right-12 -top-16 h-40 w-40 rounded-full border border-zawana-gold/30" />
@@ -105,7 +106,7 @@ function ConfirmDelete({
   </Modal>
 }
 
-export function AdminManagement({ section }: { section: Section }) {
+export function AdminManagement({ section, department = "Badminton" }: { section: Section; department?: "Badminton" | "Gym" }) {
   const [rows, setRows] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -121,11 +122,14 @@ export function AdminManagement({ section }: { section: Section }) {
     setNotice(m);
     setTimeout(() => setNotice(""), 2500)
   };
-  const load = () => get<any[]>(`/${section}`).then(setRows);
+  const load = () => get<any[]>(`/${section}`).then(rows => setRows(section === "coaches" ? rows.filter(row => row.department === department) : rows));
   useEffect(() => {
     setPage(1);
+    setOpen(false);
+    setEditing(null);
+    setQuery("");
     load()
-  }, [section]);
+  }, [section, department]);
   useEffect(() => {
     if (section === 'coaches')
       get<any[]>('/users')
@@ -152,7 +156,8 @@ export function AdminManagement({ section }: { section: Section }) {
             }
           : {
               name: "",
-              specialty: "Badminton",
+              specialty: department,
+              department,
               phone: "",
               email: "",
               status: "active",
@@ -174,7 +179,7 @@ export function AdminManagement({ section }: { section: Section }) {
                 .map((x: string) => x.trim())
                 .filter(Boolean)
             }
-          : form;
+          : { ...form, department };
       let saved: any;
       if (editing) {
         saved = await patch(`/${section}/${editing.id}`, payload);
@@ -209,7 +214,7 @@ export function AdminManagement({ section }: { section: Section }) {
     totalPages = Math.max(1, Math.ceil(filtered.length / pageSize)),
     currentPage = Math.min(page, totalPages);
   const visibleRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const title = section === "courts" ? "Courts" : "Coaches";
+  const title = section === "courts" ? "Courts" : `${department} Coaches`;
   const titleFor = (s: Section) =>s === "courts" ? "Court" : "Coach";
   const icon = section === "courts" ? <MapPinned /> : <UserRound />;
 
@@ -218,10 +223,11 @@ export function AdminManagement({ section }: { section: Section }) {
     eyebrow="Administration"
     actions={
       <Button onClick={() => start()}>
-        <Plus size={16} /> Add {title.slice(0, -1).toLowerCase()}
+        <Plus size={16} /> Add {section === "courts" ? "court" : "coach"}
       </Button>
     }
   >
+    {section === 'courts' && <Link to="/admin/court-rentals" className="mb-5 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-zawana-500"><CalendarDays size={16} /> Rental & time setup</Link>}
     <AnimatePresence>{notice && <Toast message={notice} onClose={() => setNotice("")} />}</AnimatePresence>
     <div className="mb-6 flex flex-col gap-3 md:flex-row">
       <div className="relative flex-1">
@@ -312,7 +318,7 @@ export function AdminManagement({ section }: { section: Section }) {
         subtitle={
           section === "courts"
             ? "Set the commercial data and operational availability."
-            : "Link an active coach account to make the profile selectable for badminton courses."
+            : "Link an active coach account to make the profile available in this department."
         }
         onClose={() => setOpen(false)}
       >
@@ -370,7 +376,7 @@ export function AdminManagement({ section }: { section: Section }) {
               />
               <SelectField
                 label="Coaching area"
-                value={form.specialty || "Badminton"}
+                value={form.specialty || department}
                 onChange={(e: any) => setForm({ ...form, specialty: e.target.value })}
               >
                 <option value="Badminton">Badminton</option>
@@ -395,7 +401,7 @@ export function AdminManagement({ section }: { section: Section }) {
                   </option>
                 )}
               </SelectField>
-              <p className="-mt-2 text-xs leading-5 text-zawana-500 md:col-span-2">Link a badminton coach to an active Coach account. All active linked badminton coaches can be booked; no schedule setup is required.</p>
+              <p className="-mt-2 text-xs leading-5 text-zawana-500 md:col-span-2">Link this coach to an active Coach account to make their profile available in the selected department.</p>
               <div className="md:col-span-2">
                 <ImageUpload
                   label="Coach profile image"

@@ -86,7 +86,7 @@ export function useDialog(onClose: () => void) {
     const controls = () => [...dialog.querySelectorAll<HTMLElement>(
       'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'
     )].filter(element => element.getClientRects().length && element.tabIndex >= 0 && !element.closest('[inert], [aria-hidden="true"]'));
-    (controls()[0] || dialog).focus({ preventScroll: true });
+    dialog.focus({ preventScroll: true });
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); close.current(); }
       if (event.key !== 'Tab') return;
@@ -125,14 +125,14 @@ export function DialogSurface({ title, children, onClose, drawer = false, classN
   const reduced = useReducedMotion();
   return <motion.div className={`premium-dialog-backdrop fixed inset-0 z-[120] flex ${drawer ? 'justify-end' : 'items-center justify-center p-3 sm:p-4'}`}
     initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-    transition={{ duration: reduced ? 0 : motionTokens.popover }}
+    transition={{ duration: reduced ? 0 : motionTokens.dialog }}
     onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <motion.div ref={ref} role="dialog" aria-modal="true" aria-label={labelledBy ? undefined : title}
       aria-labelledby={labelledBy} tabIndex={-1} className={`${drawer ? 'premium-drawer-panel' : 'premium-dialog-panel'} ${className}`}
-      initial={reduced ? false : drawer ? { x: '100%' } : { opacity: 0, y: 16, scale: .98 }}
-      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-      exit={drawer ? { x: '100%' } : { opacity: 0, y: 8, scale: .99 }}
-      transition={reduced ? { duration: 0 } : motionTokens.spring}>
+      initial={reduced ? false : drawer ? { x: '100%' } : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, x: 0, y: 0 }}
+      exit={drawer ? { x: '100%' } : { opacity: 0, y: 4 }}
+      transition={{ duration: reduced ? 0 : motionTokens.dialog, ease: motionTokens.ease }}>
       {children}
     </motion.div>
   </motion.div>;
