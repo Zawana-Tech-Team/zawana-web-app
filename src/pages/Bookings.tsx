@@ -1,7 +1,8 @@
+import { normalizeBookingTime } from "../utils/bookingTime";
 import { SegmentedControl } from '../components/Interactions';
 import { Select } from '../components/Select';
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button, Card, Badge, Page, Empty, Pagination } from "../components/UI";
 import { get, patch, post } from "../api";
 import { formatBookingDate, localDateKey, type BookingDatePreset } from "../utils/bookingDates";
@@ -30,6 +31,7 @@ const ACTIVE_STATUSES = [
 ];
 
 export function Bookings() {
+  const navigate = useNavigate();
   const { locale } = useLanguage();
   const [bookings, setBookings] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
@@ -130,10 +132,8 @@ export function Bookings() {
     setMessage("");
     try {
       const result = await post<any>(`/member/private-courses/${booking.id}/pay`, {});
-      setMessage(
-        result.message || "Private course confirmed. Payment will be arranged at the venue."
-      );
-      await load();
+      if (!result.payment?.id) throw new Error("Could not start secure checkout.");
+      navigate(`/payment/${encodeURIComponent(result.payment.id)}`);
     } catch (e: any) {
       setError(e.message || "Could not confirm this private course.");
     } finally {
@@ -293,7 +293,7 @@ export function Bookings() {
                       {booking.paymentStatus === "paid"
                         ? "Paid"
                         : booking.status === "AWAITING_PAYMENT"
-                          ? "Payment step · venue payment"
+                          ? "Payment required"
                           : booking.status === "CONFIRMED" && booking.paymentStatus !== "paid"
                             ? "Payment due at venue"
                             : booking.status === "PENDING_COACH_CONFIRMATION"
@@ -306,13 +306,13 @@ export function Bookings() {
                     booking.date,
                     { month: "long", day: "numeric", year: "numeric" },
                     locale
-                  )} · {booking.time} · {booking.court?.name || booking.location}
+                  )} · {normalizeBookingTime(booking.time || "")} · {booking.court?.name || booking.location}
                   {booking.coach ? ` · ${booking.coach.name}` : ""}
                 </p>
                 <p className="mt-1 text-xs text-zawana-500">
                   {booking.code} · {Number(booking.price).toLocaleString(locale)} MMK</p>
                 {booking.kind === "private_course" && booking.status === "AWAITING_PAYMENT" &&
-                  <p className="mt-2 text-sm font-bold text-amber-800">Coach confirmed. Confirm this booking to complete it; payment is arranged at the venue.</p>}
+                  <p className="mt-2 text-sm font-bold text-amber-800">Coach accepted. Complete verified payment within 24 hours to confirm your session.</p>}
                 {booking.kind === "private_course" &&
                   booking.status === "CONFIRMED" &&
                   booking.paymentStatus !== "paid" &&
@@ -324,7 +324,7 @@ export function Bookings() {
               <div className="flex flex-wrap gap-2">
                 {booking.kind === "private_course" && booking.status === "AWAITING_PAYMENT" &&
                   <Button disabled={paying === booking.id} onClick={() => confirmCourse(booking)}>
-                    {paying === booking.id ? "Confirming…" : "Confirm booking"}
+                    {paying === booking.id ? "Starting checkout…" : "Pay & confirm"}
                   </Button>}
                 {ACTIVE_STATUSES.includes(booking.status) &&
                   <Button

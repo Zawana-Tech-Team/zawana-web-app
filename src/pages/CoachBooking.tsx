@@ -1,3 +1,5 @@
+import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
+import { useBookingClock } from "../hooks/useBookingClock";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check } from "lucide-react";
@@ -6,22 +8,23 @@ import { get, post } from "../api";
 import { mediaImageSrc } from "../components/ImageUpload";
 
 const days = Array.from({ length: 7 }, (_, i) => {
-  const d = new Date();
+  const d = new Date(`${bookingClock().date}T12:00:00`);
   d.setDate(d.getDate() + i);
   return d
 });
-const fmt = (d: Date) => d.toISOString().slice(0, 10);
+const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const label = (d: Date) => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 const slots = [
-  "5:00 PM â€” 6:00 PM",
-  "5:30 PM â€” 6:30 PM",
-  "6:00 PM â€” 7:00 PM",
-  "6:30 PM â€” 7:30 PM",
-  "7:00 PM â€” 8:00 PM",
-  "7:30 PM â€” 8:30 PM"
+  "5:00 PM — 6:00 PM",
+  "5:30 PM — 6:30 PM",
+  "6:00 PM — 7:00 PM",
+  "6:30 PM — 7:30 PM",
+  "7:00 PM — 8:00 PM",
+  "7:30 PM — 8:30 PM"
 ];
 
 export function CoachBooking() {
+  const now = useBookingClock();
   const [date, setDate] = useState(fmt(days[0]));
   const [coaches, setCoaches] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
@@ -42,9 +45,13 @@ export function CoachBooking() {
   useEffect(() => {
     if (coaches.length && !selected) setSelected(coaches[0])
   }, [coaches]);
-  const available = (c: any, t: string) => !busy.some(b => b.coachId === c.id && b.time === t);
+  const available = (c: any, t: string) => !bookingHasStarted(date, t, now) && !busy.some(b => b.coachId === c.id && b.time === t);
   const confirm = async () => {
     if (!selected) return;
+    if (bookingHasStarted(date, time) || !available(selected, time)) {
+      setError("Choose an available session that has not started yet.");
+      return;
+    }
     try {
       const result = await post<any>("/bookings", {
         kind: "pt",
@@ -68,7 +75,7 @@ export function CoachBooking() {
         </div>
         <h2 className="mt-5 text-3xl font-black">{selected.name}</h2>
         <p className="mt-2 text-zawana-500">
-          {date} Â· {time}
+          {date} · {time}
         </p>
         <p className="mt-5 text-xs tracking-widest text-zawana-500">BOOKING ID</p>
         <p className="mt-1 font-bold">{done.code}</p>
@@ -138,7 +145,7 @@ export function CoachBooking() {
             {slots.map(t =>
               <button
                 key={t}
-                disabled={selected && !available(selected, t)}
+                disabled={bookingHasStarted(date, t, now) || !!selected && !available(selected, t)}
                 onClick={() => setTime(t)}
                 className={`rounded-xl border p-3 text-sm font-bold disabled:opacity-40 ${time === t ? "border-zawana-accent bg-zawana-accent/10" : "border-zawana-950/8"}`}
               >
@@ -166,7 +173,7 @@ export function CoachBooking() {
             <b>30,000 MMK</b>
           </div>
         </div>
-        <Button disabled={!selected} onClick={confirm} className="mt-5 w-full">Confirm booking</Button>
+        <Button disabled={!selected || !available(selected, time)} onClick={confirm} className="mt-5 w-full">Confirm booking</Button>
       </Card>
     </div>
   </Page>

@@ -141,6 +141,124 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
     time: `${hour}:00 AM — ${hour + 1}:00 ${hour + 1 === 12 ? "PM" : "AM"}`,
   });
   await t.test(
+    "court blocks retrieve date/court/weekly filters and preserve the courtName alias",
+    async () => {
+      const day = new Date(`${keyDate}T12:00:00Z`).getUTCDay();
+      const weekly = await db.courtBlock.create({
+        data: {
+          courtId: court.id,
+          date: "",
+          dayOfWeek: day,
+          start: "18:00",
+          end: "19:00",
+          title: "Weekly QA",
+        },
+      });
+      const dated = await db.courtBlock.create({
+        data: {
+          courtId: second.id,
+          date: keyDate,
+          start: "10:00",
+          end: "11:00",
+          title: "Date QA",
+        },
+      });
+      const inactive = await db.courtBlock.create({
+        data: {
+          courtId: court.id,
+          date: "",
+          dayOfWeek: day,
+          start: "20:00",
+          end: "21:00",
+          title: "Inactive QA",
+          active: false,
+        },
+      });
+      try {
+        let result = await request(
+          `/court-blocks?date=${keyDate}&courtId=${court.id}`,
+        );
+        assert.equal(result.status, 200);
+        assert.deepEqual(
+          result.value.map((b: any) => b.id),
+          [weekly.id],
+        );
+        assert.equal(result.value[0].courtName, court.name);
+        result = await request(`/court-blocks?date=${keyDate}`);
+        assert.equal(result.value.length, 2);
+        assert.equal((await request("/court-blocks?date=invalid")).status, 400);
+        await db.courtDateOverride.create({
+          data: { date: keyDate, type: "open", title: "Open QA" },
+        });
+        assert.equal(
+          (await request(`/court-blocks?date=${keyDate}&courtId=${court.id}`))
+            .value.length,
+          0,
+        );
+        assert.equal(
+          (await request(`/court-blocks?date=${keyDate}&courtId=${second.id}`))
+            .value[0].id,
+          dated.id,
+        );
+      } finally {
+        await db.courtDateOverride.deleteMany({ where: { date: keyDate } });
+        await db.courtBlock.deleteMany({
+          where: { id: { in: [weekly.id, dated.id, inactive.id] } },
+        });
+      }
+    },
+  );
+  await t.test(
+    "staff can create and update court blocks through the real routes",
+    async () => {
+      const staff = await db.user.create({
+        data: {
+          name: "Block QA",
+          email: "blocks@example.test",
+          role: "badminton_fo",
+        },
+      });
+      const token = (await sessions.issue(db, staff, "database_password", []))
+        .accessToken;
+      const response = await request(
+        "/court-blocks",
+        "POST",
+        {
+          courtId: court.id,
+          dayOfWeek: 1,
+          start: "18:00",
+          end: "19:00",
+          title: "Class QA",
+        },
+        token,
+      );
+      assert.equal(response.status, 201, JSON.stringify(response.value));
+      assert.equal(response.value.end, "19:00");
+      assert.equal(response.value.courtName, court.name);
+      const updated = await request(
+        `/court-blocks/${response.value.id}`,
+        "PATCH",
+        { end: "20:00", start: "19:00" },
+        token,
+      );
+      assert.equal(updated.status, 200);
+      assert.equal(updated.value.end, "20:00");
+      assert.equal(
+        (
+          await request("/court-blocks", "POST", {
+            courtId: court.id,
+            dayOfWeek: 1,
+            start: "19:00",
+            end: "20:00",
+            title: "Forbidden",
+          })
+        ).status,
+        403,
+      );
+      await db.courtBlock.delete({ where: { id: response.value.id } });
+    },
+  );
+  await t.test(
     "authenticated server-generated availability and date validation",
     async () => {
       assert.equal(
@@ -359,6 +477,33 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
           )
         ).status,
         404,
+      );
+    },
+  );
+  await t.test(
+    "weekly block creation respects uppercase confirmed bookings",
+    async () => {
+      const staff = await db.user.findUniqueOrThrow({
+        where: { email: "blocks@example.test" },
+      });
+      const token = (await sessions.issue(db, staff, "database_password", []))
+        .accessToken;
+      const response = await request(
+        "/court-blocks",
+        "POST",
+        {
+          courtId: court.id,
+          dayOfWeek: new Date(`${keyDate}T12:00:00Z`).getUTCDay(),
+          start: "08:00",
+          end: "09:00",
+          title: "Must not hide a confirmed booking",
+        },
+        token,
+      );
+      assert.equal(response.status, 409);
+      assert.equal(
+        await db.courtBlock.count({ where: { courtId: court.id } }),
+        0,
       );
     },
   );

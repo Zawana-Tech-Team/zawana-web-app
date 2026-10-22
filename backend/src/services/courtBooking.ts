@@ -225,7 +225,7 @@ export async function createCourtBooking(
           const r = range(item.time),
             court = currentById.get(item.courtId);
           const override = overrideByDate.get(item.date),
-            dow = new Date(`${item.date}T00:00:00`).getDay();
+            dow = new Date(`${item.date}T12:00:00Z`).getUTCDay();
           const dateBlocks = blocks.filter(
             (x) =>
               x.courtId === item.courtId &&

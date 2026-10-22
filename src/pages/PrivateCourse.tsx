@@ -142,7 +142,8 @@ export function PrivateCourse() {
         courtId: court.id,
         coachId: coach.id,
         date,
-        time
+        time,
+        expectedPrice: coursePrice
       });
       navigate('/bookings')
     } catch (e: any) {
