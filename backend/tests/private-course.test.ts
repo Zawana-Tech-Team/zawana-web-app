@@ -538,20 +538,25 @@ test("badminton private courses: independent availability, concurrency, acceptan
       );
       assert.equal(activated.status, 201);
       const enrollment = activated.value.enrollment;
+      const qrStaff = await db.user.create({ data: { name: 'QR desk', email: 'qr-desk@test.local', role: 'badminton_fo' } });
+      const qrSession = await sessions.issue(db, qrStaff, 'database_password', []);
+      const issued = await request('/check-in/qr', 'POST', {}, qrSession.accessToken);
+      assert.equal(issued.status, 201);
+      const qrToken = issued.value.token;
       assert.equal(
         (
           await request(
-            "/member/check-in",
+            "/check-in/scan",
             "POST",
-            { enrollmentId: enrollment.id },
+            { token: qrToken },
             otherSession.accessToken,
           )
         ).status,
-        404,
+        409,
       );
       const results = await Promise.all([
-        request("/member/check-in", "POST", { enrollmentId: enrollment.id }),
-        request("/member/check-in", "POST", { enrollmentId: enrollment.id }),
+        request("/check-in/scan", "POST", { token: qrToken }),
+        request("/check-in/scan", "POST", { token: qrToken }),
       ]);
       assert.equal(results.filter((r) => r.status === 201).length, 1);
       assert.equal(
@@ -570,8 +575,8 @@ test("badminton private courses: independent availability, concurrency, acceptan
       );
       assert.equal(
         (
-          await request("/member/check-in", "POST", {
-            enrollmentId: enrollment.id,
+          await request("/check-in/scan", "POST", {
+            token: qrToken,
           })
         ).status,
         409,

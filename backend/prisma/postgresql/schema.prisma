@@ -268,6 +268,7 @@ model Schedule {
 }
 
 model Booking {
+  attendance BookingAttendance?
   id                   String        @id @default(cuid())
   code                 String        @unique
   userId               String
@@ -882,4 +883,28 @@ model GymAuditLog {
   after Json?
   createdAt DateTime @default(now())
   @@index([entityType, entityId, createdAt])
+}
+
+// A single immutable check-in per paid private-course booking.
+model BookingAttendance {
+  id String @id @default(cuid())
+  bookingId String @unique
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  recordedById String
+  checkedInAt DateTime @default(now())
+}
+
+model BadmintonEntryQr {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  createdById String
+  expiresAt DateTime
+  revokedAt DateTime?
+}
+model BadmintonQrVisit {
+  id String @id @default(cuid())
+  userId String
+  date String
+  checkInId String @unique
+  @@unique([userId, date])
 }

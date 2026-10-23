@@ -1,3 +1,4 @@
+import '../components/member-premium.css';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Trophy } from 'lucide-react';
@@ -49,6 +50,7 @@ export function Membership() {
     purchases.find(p => p.packageId === id && p.status === 'PENDING');
 
   return <Page title="Badminton packages" eyebrow="Sessions & membership">
+    <div className="member-refined">
     {notice &&
       <p
         role="status"
@@ -64,7 +66,7 @@ export function Membership() {
       <Card className="h-40 animate-pulse bg-zawana-950/5" /> :
       <>
         {enrollment &&
-          <Card className="mb-6 overflow-hidden">
+          <Card className="package-active mb-6 overflow-hidden">
             <div className="bg-zawana-950 p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
@@ -93,8 +95,8 @@ export function Membership() {
                   <b>{enrollment.lastCheckIn || '—'}</b>
                 </div>
               </div>
-              <Link to="/member" className="mt-5 inline-block">
-                <Button variant="secondary">Go to package check-in</Button>
+              <Link to="/check-in" className="mt-5 inline-block">
+                <Button variant="secondary">Scan to check in</Button>
               </Link>
             </div>
           </Card>}
@@ -149,7 +151,7 @@ export function Membership() {
             {shown.map(p => {
               const pending = pendingFor(p.id);
               const comingSoon = p.status === 'coming_soon';
-              return <Card key={p.id} className="p-6">
+              return <Card key={p.id} className="package-offer p-6">
                 {p.imageUrl &&
                   <img
                     src={p.imageUrl}
@@ -203,5 +205,6 @@ export function Membership() {
             body="There are no active packages listed right now."
           />}
       </>}
+    </div>
   </Page>;
 }

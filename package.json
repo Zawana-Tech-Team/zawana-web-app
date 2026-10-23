@@ -25,6 +25,8 @@
     "firebase": "12.19.0",
     "framer-motion": "latest",
     "lucide-react": "latest",
+    "qr-scanner": "^1.4.2",
+    "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "latest",
@@ -34,6 +36,7 @@
     "vite": "latest"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",

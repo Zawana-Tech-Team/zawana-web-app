@@ -40,6 +40,9 @@ import { contentInput } from "./services/contentPolicy.js";
 import { apiFailureDiagnostic, isBookingDatabaseConflict } from "./utils/apiDiagnostics.js";
 import { createPublicStoriesRoutes } from "./routes/publicStories.js";
 
+import { createQrCheckInRouter } from "./routes/qrCheckIn.js";
+import { createAttendanceRouter } from "./routes/attendance.js";
+
 const app = express();
 const PORT = env.port;
 const sqliteDatabase = env.databaseUrl.startsWith("file:");
@@ -84,6 +87,8 @@ app.use(
 app.use("/api/store", storeRoutes);
 app.use("/api/menu", menuRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/attendance", createAttendanceRouter());
+app.use("/api/check-in", createQrCheckInRouter());
 app.use("/api/media", mediaRoutes);
 app.use("/api/cafe", cafeRoutes);
 app.use("/api", gymTrainingRoutes);
@@ -3948,78 +3953,8 @@ app.get(
     });
   })
 );
-app.post(
-  "/api/member/check-in",
-  auth,
-  roles("member"),
-  asyncRoute(async (req: AuthRequest, res) => {
-    const current = (
-      await rawQuery<any[]>(
-        prisma,
-        `SELECT * FROM "BadmintonEnrollment" WHERE id=? AND (userId=? OR studentId=?)`,
-        String(req.body.enrollmentId || ""),
-        req.user!.id,
-        req.user!.id
-      )
-    )[0];
-    if (!current)
-      return res.status(404).json({ message: "No badminton package was found for your account." });
-    if (current.expiryDate < today() || current.status !== "active")
-      return res.status(409).json({ message: "This badminton package has expired." });
-    if (Number(current.sessionsRemaining) <= 0)
-      return res.status(409).json({ message: "No sessions remain on this package." });
-    const date = today(),
-      time = businessNow().clock,
-      id = code("CHK");
-    try {
-      const result = await prisma.$transaction(async tx => {
-        const updated = (
-          await rawQuery<any[]>(
-            tx,
-            "UPDATE \"BadmintonEnrollment\" SET sessionsRemaining=sessionsRemaining-1,lastCheckIn=? WHERE id=? AND (userId=? OR studentId=?) AND status='active' AND expiryDate>=? AND sessionsRemaining>0 AND NOT EXISTS (SELECT 1 FROM \"BadmintonCheckIn\" WHERE enrollmentId=? AND date=?) RETURNING *",
-            `${date} ${time}`,
-            current.id,
-            req.user!.id,
-            req.user!.id,
-            date,
-            current.id,
-            date
-          )
-        )[0];
-        if (!updated) {
-          const already = await rawQuery<any[]>(
-            tx,
-            `SELECT id FROM "BadmintonCheckIn" WHERE enrollmentId=? AND date=? LIMIT 1`,
-            current.id,
-            date
-          );
-          throw Object.assign(
-            new Error(
-              already.length
-                ? "You have already checked in today."
-                : "This package can no longer be used."
-            ),
-            { statusCode: 409 }
-          );
-        }
-        const checkIn = (
-          await rawQuery<any[]>(
-            tx,
-            `INSERT INTO "BadmintonCheckIn" (id,enrollmentId,date,time,sessionsUsed,note) VALUES (?,?,?,?,1,'Member self check-in') RETURNING *`,
-            id,
-            current.id,
-            date,
-            time
-          )
-        )[0];
-        return { enrollment: updated, checkIn };
-      });
-      res.status(201).json(result);
-    } catch (error: any) {
-      if (error.statusCode === 409) return res.status(409).json({ message: error.message });
-      throw error;
-    }
-  })
+app.post("/api/member/check-in", auth, roles("member"), (_req, res) =>
+  res.status(410).json({ code: "QR_REQUIRED", message: "Scan the front desk QR code to check in." })
 );
 app.get(
   "/api/private-courses/availability",

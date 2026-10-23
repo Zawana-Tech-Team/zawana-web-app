@@ -1,4 +1,5 @@
 import {
+  Children,
   cloneElement,
   createContext,
   isValidElement,
@@ -738,7 +739,9 @@ export function useLanguage() {
 
 function localizeNode(node: ReactNode, t: (text: string) => string): ReactNode {
   if (typeof node === 'string') return t(node);
-  if (Array.isArray(node)) return node.map(child => localizeNode(child, t));
+  // Children.map assigns stable keys to static JSX siblings and preserves keys
+  // from dynamic lists when cloneElement rebuilds their translated children.
+  if (Array.isArray(node)) return Children.map(node, child => localizeNode(child, t));
   if (!isValidElement(node)) return node;
 
   const props = node.props as Record<string, unknown>;

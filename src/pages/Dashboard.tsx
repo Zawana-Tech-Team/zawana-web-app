@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   Bell,
@@ -11,7 +11,7 @@ import {
   Trophy
 } from 'lucide-react';
 import { Badge, Button, Card, Empty, Page, Stat, PageSkeleton } from '../components/UI';
-import { get, post } from '../api';
+import { get } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { formatBookingDate, localDateKey } from '../utils/bookingDates';
 import { useLanguage } from '../context/LanguageContext';
@@ -43,8 +43,8 @@ export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const busy = false;
+  const message = '';
   const load = () =>
     get<DashboardData>(`/member/dashboard?referenceDate=${localDateKey()}`)
       .then(setData)
@@ -53,20 +53,8 @@ export function Dashboard() {
   useEffect(() => {
     load()
   }, []);
-  const checkIn = async () => {
-    if (!data?.enrollment) return;
-    setBusy(true);
-    setMessage('');
-    try {
-      await post('/member/check-in', { enrollmentId: data.enrollment.id });
-      setMessage('Checked in. One session was used from your package.');
-      await load()
-    } catch (e: any) {
-      setMessage(e.message || 'Check-in could not be completed.')
-    } finally {
-      setBusy(false)
-    }
-  };
+  const navigate = useNavigate();
+  const checkIn = () => navigate('/check-in');
   const today = todayKey();
   const valid = (b: any) =>
     !['cancelled', 'CANCELLED', 'COACH_DECLINED', 'EXPIRED', 'completed', 'COMPLETED'].includes(
@@ -284,7 +272,7 @@ export function Dashboard() {
                   }
                   onClick={checkIn}
                 >
-                  {busy ? 'Checking in…' : checkedToday ? 'Checked in today' : 'Check in'} <Check size={16} />
+                  {busy ? 'Checking in…' : checkedToday ? 'Checked in today' : 'Scan to check in'} <Check size={16} />
                 </Button>
                 <span className="text-xs text-zawana-500">Check-in uses one session. One check-in per day.</span>
               </div>

@@ -30,10 +30,11 @@ function RenderController({ progress, active }: { progress: MotionValue<number>;
   return null;
 }
 
-export default function SceneCanvas({ progress, compact, active, stage, onReady, onFailure }: {
-  progress: MotionValue<number>; compact: boolean; active: boolean; stage: RefObject<HTMLDivElement | null>;
+export default function SceneCanvas({ progress, compact, lowPower = false, active, stage, onReady, onFailure }: {
+  progress: MotionValue<number>; compact: boolean; lowPower?: boolean; active: boolean; stage: RefObject<HTMLDivElement | null>;
   onReady: () => void; onFailure: () => void;
 }) {
+  const economy = compact || lowPower;
   const pointer = useRef<PointerPosition>({ x: 0, y: 0 });
   const invalidator = useRef<(() => void) | null>(null);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -61,13 +62,13 @@ export default function SceneCanvas({ progress, compact, active, stage, onReady,
     invalidator.current = invalidate; setCanvas(gl.domElement); onReady();
   }, [onReady]);
   return <Canvas aria-hidden="true" camera={{ position: [11, 6, 18], fov: 42, near: .08, far: 120 }}
-    dpr={compact ? Math.min(devicePixelRatio, 1.1) : Math.min(devicePixelRatio, 1.5)}
-    shadows={compact ? false : 'soft'} frameloop={active ? 'demand' : 'never'}
-    gl={{ alpha: false, antialias: !compact, powerPreference: 'low-power' }} onCreated={created} fallback={null}>
+    dpr={economy ? Math.min(devicePixelRatio, 1.1) : Math.min(devicePixelRatio, 1.5)}
+    shadows={economy ? false : 'soft'} frameloop={active ? 'demand' : 'never'}
+    gl={{ alpha: false, antialias: !economy, powerPreference: 'low-power' }} onCreated={created} fallback={<span>3D rendering is unavailable in this browser.</span>}>
     <RenderController progress={progress} active={active} />
     <CameraRig progress={progress} compact={compact} pointer={pointer} />
     <SceneLighting progress={progress} compact={compact} />
-    <ArenaEnvironment progress={progress} compact={compact} />
+    <ArenaEnvironment progress={progress} compact={economy} />
     <Suspense fallback={null}><ShuttlecockModel progress={progress} compact={compact} /></Suspense>
   </Canvas>;
 }
