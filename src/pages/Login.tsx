@@ -54,7 +54,7 @@ export function Login() {
     if (result === 'profile') navigate('/complete-profile', { replace: true });
     else if (result === 'ready') {
       const account = await refreshUser();
-      navigate(home(account?.role || user?.role || 'member'), { replace: true });
+      navigate((account?.role || user?.role) === 'member' && sessionStorage.getItem('zawana_pending_checkin') ? '/check-in' : home(account?.role || user?.role || 'member'), { replace: true });
     } else if (result === 'mfa')
       setNotice('Enter the verification code sent to your enrolled phone.');
     else setNotice('Verify your email using the link we sent, then return here to sign in.');

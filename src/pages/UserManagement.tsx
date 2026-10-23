@@ -1,4 +1,5 @@
-import { SegmentedControl, useDialog } from '../components/Interactions';
+import '../components/member-premium.css';
+import { useDialog } from '../components/Interactions';
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { motionTokens } from '../design/motion';
 import { Select } from '../components/Select';
@@ -272,6 +273,8 @@ export default function UserManagement() {
         <Plus size={16} /> Create account</Button>
     }
   >
+    <div className="member-refined">
+    <p className="users-intro">Manage members, team access, and account activity.</p>
     <AnimatePresence>{notice && <Toast message={notice} onClose={() => setNotice("")} />}</AnimatePresence>
     {error &&
       <div
@@ -281,20 +284,20 @@ export default function UserManagement() {
         {error}
       </div>}
     <div className="mb-5 grid gap-3 sm:grid-cols-3">
-      <Card className="p-4">
+      <Card className="user-summary p-4">
         <p className="text-xs text-zawana-500">Matching accounts</p>
         <b className="text-2xl">{pageInfo.total}</b>
       </Card>
-      <Card className="p-4">
+      <Card className="user-summary p-4">
         <p className="text-xs text-zawana-500">Members in results</p>
         <b className="text-2xl">{summary.members}</b>
       </Card>
-      <Card className="p-4">
+      <Card className="user-summary p-4">
         <p className="text-xs text-zawana-500">Active in results</p>
         <b className="text-2xl">{summary.active}</b>
       </Card>
     </div>
-    <Card className="overflow-hidden p-0">
+    <Card className="user-list overflow-hidden p-0">
       <div className="flex flex-col gap-3 border-b p-4 lg:flex-row">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-3 text-zawana-500" />
@@ -309,8 +312,9 @@ export default function UserManagement() {
             }}
           />
         </div>
-        <SegmentedControl value={filter} onChange={value => { setFilter(value); setPage(1); }} label="Account role"
-          options={["all", ...roles].map(value => ({ value, label: label(value) }))} />
+        <select className="users-role-filter" aria-label="Account role" value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}>
+          {["all", ...roles].map(value => <option key={value} value={value}>{value === 'all' ? 'All account roles' : label(value)}</option>)}
+        </select>
       </div>
       {loading ?
         <div className="animate-pulse p-8 text-sm text-zawana-500">Loading accounts…</div> : users.length ?
@@ -330,7 +334,7 @@ export default function UserManagement() {
               {users.map(u =>
                 <tr key={u.id} className="hover:bg-zawana-900/60">
                   <td className="px-4 py-4">
-                    <b>{u.name}</b>
+                    <div className="user-name"><span className="user-avatar" aria-hidden="true">{u.name.trim().split(/\s+/).slice(0, 2).map(n => n[0]).join('')}</span><b>{u.name}</b></div>
                     <p className="text-xs text-zawana-500">
                       {u.email}
                       {u.phone ? ` · ${u.phone}` : ""}
@@ -413,20 +417,20 @@ export default function UserManagement() {
               <p className="p-8 text-center text-sm text-zawana-500">Loading account activity…</p> :
               <div className="space-y-5">
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Card className="p-4">
+                  <Card className="user-summary p-4">
                     <p className="text-xs text-zawana-500">Bookings</p>
                     <b className="text-xl">{activity.bookings?.length || 0}</b>
                   </Card>
-                  <Card className="p-4">
+                  <Card className="user-summary p-4">
                     <p className="text-xs text-zawana-500">Badminton packages</p>
                     <b className="text-xl">{activity.badmintonEnrollments?.length || 0}</b>
                   </Card>
-                  <Card className="p-4">
+                  <Card className="user-summary p-4">
                     <p className="text-xs text-zawana-500">Payments & transactions</p>
                     <b className="text-xl">{activity.transactions?.length || 0}</b>
                   </Card>
                 </div>
-                <Card className="p-4">
+                <Card className="user-summary p-4">
                   <h3 className="font-black">Recent activity</h3>
                   <div className="mt-3 space-y-2">
                     {[
@@ -635,6 +639,7 @@ export default function UserManagement() {
       </UserModal>}</AnimatePresence>
     <div className="mt-5 flex items-center gap-2 text-xs text-zawana-500">
       <ShieldCheck size={14} /> Public signups remain members. Staff roles can only be provisioned here by an administrator.<UserRound size={14} />
+    </div>
     </div>
   </Page>
 }

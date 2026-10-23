@@ -1,3 +1,4 @@
+import { QrDesk } from '../components/QrDesk';
 import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
 import { DialogSurface, SegmentedControl, useDialog } from '../components/Interactions';
@@ -523,6 +524,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     return <Page title={title} eyebrow="Badminton FO">
       <>
         {commonTop()}
+        <QrDesk />
         <BadmintonCheckIn key="check-in" notify={notify} />
       </>
     </Page>;

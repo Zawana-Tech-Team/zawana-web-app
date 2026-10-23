@@ -89,6 +89,8 @@ const Settings = lazy(() =>
 const PaymentStatus = lazy(() =>
   import('./pages/PaymentStatus').then(module => ({ default: module.PaymentStatus }))
 );
+const QrCheckIn = lazy(() => import('./pages/QrCheckIn'));
+const Attendance = lazy(() => import('./pages/Attendance'));
 const MemberTraining = lazy(() => import('./pages/MemberTraining'));
 
 function RouteLoading() { return <PageSkeleton />; }
@@ -142,6 +144,8 @@ export default function App() {
   return <Suspense fallback={<RouteLoading />}>
     <ScrollToTop />
     <Routes>
+      <Route path="/check-in" element={<QrCheckIn />} />
+      {(['member', 'coach', 'admin', 'badminton_fo'] as const).map(role => <Route key={`attendance-${role}`} path={role === 'member' ? '/attendance' : `/${role === 'badminton_fo' ? 'badminton-fo' : role}/attendance`} element={<Guard role={role}><Attendance /></Guard>} />)}
       <Route path="/" element={<Home />} />
       <Route
         path="/facilities"

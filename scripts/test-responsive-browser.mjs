@@ -18,7 +18,7 @@ const url = process.env.RESPONSIVE_QA_URL || `http://127.0.0.1:${port}`;
 const errors = [], results = [];
 let browser, child;
 const noOverflow = async page => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No horizontal page overflow');
-const ready = page => page.waitForFunction(() => document.querySelector('.journey-pin[data-renderer="webgl"]') || document.querySelector('.journey-still[data-reason="compact-viewport"]'));
+const ready = page => page.waitForFunction(() => document.querySelector('.journey-pin[data-renderer="webgl"]'));
 const chapterTo = async (page, value) => {
   await page.evaluate(value => {
     const track = document.querySelector('.cinematic-journey');
@@ -46,10 +46,12 @@ try {
     });
     return page;
   };
-  for (const [width, height] of [[320,568],[320,640],[360,640],[375,667],[390,844],[414,736],[480,640],[600,650],[600,800],[767,701],[768,650],[768,1024],[1024,700],[1024,701],[1024,768],[1280,720],[1366,768],[1440,900],[1920,1080],[844,390],[915,412]]) {
+  const viewports = process.env.RESPONSIVE_QA_VIEWPORTS ? JSON.parse(process.env.RESPONSIVE_QA_VIEWPORTS) : [[320,568],[320,640],[360,640],[375,667],[390,844],[414,736],[480,640],[600,650],[600,800],[767,701],[768,650],[768,1024],[1024,700],[1024,701],[1024,768],[1280,720],[1366,650],[1366,768],[1440,900],[1920,1080],[844,390],[915,412]];
+  for (const [width, height] of viewports) {
     const page = await createPage(width, height);
     await page.goto(url); await ready(page); await page.evaluate(() => document.fonts.ready);
     const cinematic = Boolean(await page.locator('.journey-pin').count());
+    if (width === 1366 && height === 650) assert.ok(cinematic, 'A wide laptop window must not switch to still images solely because it is below 700px tall');
     const measurements = [];
     if (cinematic) {
       for (const progress of [0,.23,.43,.68,.9]) {
@@ -62,7 +64,7 @@ try {
             linksFit: [...content.querySelectorAll('a')].every(link => { const rect = link.getBoundingClientRect(); return rect.left >= -1 && rect.right <= innerWidth + 1 && rect.bottom < controls.top; }) };
         });
         assert.ok(metrics.top >= metrics.header + 8, `${width}×${height} ${metrics.chapter}: content clears fixed header`);
-        assert.ok(metrics.bottom <= metrics.controls - 8, `${width}×${height} ${metrics.chapter}: content clears chapter controls`);
+        assert.ok(metrics.bottom <= metrics.controls - 8, `${width}×${height} ${metrics.chapter}: content clears chapter controls ${JSON.stringify(metrics)}`);
         assert.ok(!metrics.clipped && metrics.linksFit, `${width}×${height}: headlines and actions fit`);
         measurements.push(metrics);
         if (progress === 0 || progress === .9) await page.screenshot({ path: join(artifacts, `${width}-${height}-${progress === 0 ? 'hero' : 'booking'}.png`) });
@@ -102,6 +104,20 @@ try {
     console.log(`PASS ${width}×${height}: chapter fit, controls, services, menu, footer and gold theme`);
     await page.context().close();
   }
+  const lowPower = await createPage(1366, 650);
+  await lowPower.addInitScript(() => {
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 2 });
+    Object.defineProperty(navigator, 'deviceMemory', { get: () => 2 });
+  });
+  await lowPower.goto(url);
+  await lowPower.locator('.journey-pin[data-renderer="webgl"]').waitFor();
+  assert.equal(await lowPower.locator('.journey-still').count(), 0);
+  const reduced = await createPage(1366, 650);
+  await reduced.emulateMedia({ reducedMotion: 'reduce' });
+  await reduced.goto(url);
+  await reduced.locator('.journey-pin[data-renderer="webgl"]').waitFor();
+  console.log('PASS Low-power desktop keeps 3D; reduced-motion preference retains cinematic mode');
+  await lowPower.context().close(); await reduced.context().close();
   const rotation = await createPage(390, 844);
   await rotation.goto(url); await ready(rotation);
   await rotation.getByRole('tab', { name: /ZAWANA CAFE/ }).click();
@@ -112,7 +128,7 @@ try {
     if (viewport.width < 768) assert.ok(await rotation.getByRole('tab', { name: /ZAWANA CAFE/ }).evaluate(button => { const box = button.getBoundingClientRect(), menu = button.parentElement.getBoundingClientRect(); return box.left >= menu.left - 1 && box.right <= menu.right + 1; }));
   }
   await rotation.setViewportSize({ width: 844, height: 390 });
-  await rotation.locator('.journey-still[data-reason="compact-viewport"]').waitFor();
+  await rotation.locator('.journey-pin[data-renderer="webgl"]').waitFor();
   await rotation.setViewportSize({ width: 390, height: 844 }); await ready(rotation);
   await rotation.locator('canvas').waitFor();
   console.log('PASS Orientation changes and selected service preservation');

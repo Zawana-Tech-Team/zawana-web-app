@@ -124,32 +124,47 @@ try {
   }
   for (const [name, init, reduced] of [
     ['reduced-motion', undefined, 'reduce'],
-    ['webgl-unavailable', () => { const original = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function(type, ...args) { return String(type).includes('webgl') ? null : original.call(this, type, ...args); }; }, 'no-preference'],
     ['data-saving', () => Object.defineProperty(navigator, 'connection', { value: { saveData: true }, configurable: true }), 'no-preference'],
   ]) {
     const page = await newPage({ width: 390, height: 844 }, reduced, init);
-    const heavy = []; page.on('request', request => { if (/SceneCanvas|shuttlecock\.glb|three-core/.test(request.url())) heavy.push(request.url()); });
     await page.goto(url);
-    await page.locator('[data-experience="still"]').waitFor();
-    await page.waitForTimeout(400);
-    assert.equal(await page.locator('canvas').count(), 0);
-    assert.equal(await page.locator('.journey-chapter').count(), 5);
-    assert.equal(await page.locator('.journey-chapter[aria-hidden="true"]').count(), 0);
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    assert.deepEqual(heavy, []);
-    await capture(page, name);
-    report.push({ name, staticChapters: 5, heavyAssets: heavy.length });
-    console.log(`PASS ${name}: all messages and CTAs available with no 3D download or canvas`);
+    await page.locator('.journey-pin[data-renderer="webgl"]').waitFor();
+    assert.equal(await page.locator('[data-experience="still"]').count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Use still experience' }).count(), 0);
+    await progressTo(page, .65); await progressTo(page, 0);
+    assert.equal(await page.locator('.journey-pin').getAttribute('data-chapter'), 'reveal');
+    console.log(`PASS ${name}: cinematic rendering and reverse scroll remain active`);
     await page.context().close();
   }
+  const unavailable = await newPage({ width: 1440, height: 1000 }, 'no-preference', () => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(type, ...args) { return String(type).includes('webgl') ? null : original.call(this, type, ...args); };
+  });
+  await unavailable.goto(url);
+  await unavailable.locator('[data-experience="fallback"]').waitFor();
+  assert.equal(await unavailable.locator('[data-experience="still"]').count(), 0);
+  assert.equal(await unavailable.locator('.journey-photo-backdrop').count(), 0);
+  for (const width of [1440, 768, 390, 320]) {
+    await unavailable.setViewportSize({ width, height: 844 });
+    await unavailable.evaluate(() => document.fonts.ready);
+    await unavailable.locator('.arena-editorial__photo').evaluate(img => img.decode());
+    assert.ok(await unavailable.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    const cta = unavailable.locator('.arena-editorial').getByRole('link', { name: 'Book a Court', exact: true });
+    assert.equal(await cta.getAttribute('href'), '/book/court');
+    await capture(unavailable, `premium-fallback-${width}`);
+  }
+  await unavailable.locator('.arena-editorial').getByRole('link', { name: 'Book a Court', exact: true }).click();
+  await unavailable.waitForURL('**/login');
+  await unavailable.context().close();
   const lost = await newPage({ width: 1440, height: 1000 });
   await lost.goto(url);
   await lost.locator('.journey-pin[data-renderer="webgl"]').waitFor();
   await lost.locator('canvas').evaluate(canvas => canvas.getContext('webgl2').getExtension('WEBGL_lose_context').loseContext());
-  await lost.locator('[data-experience="still"]').waitFor();
-  await capture(lost, 'context-loss');
-  assert.equal(await lost.locator('.journey-chapter--reveal').getByRole('link', { name: 'Book a Court', exact: true }).getAttribute('href'), '/book/court');
-  console.log('PASS Lost WebGL context switches to a usable photographic story');
+  await lost.locator('[data-experience="fallback"]').waitFor();
+  assert.equal(await lost.locator('[data-experience="still"]').count(), 0);
+  await lost.getByRole('button', { name: 'Explore in 3D' }).click();
+  await lost.locator('.journey-pin[data-renderer="webgl"]').waitFor();
+  console.log('PASS Premium fallback at four widths, booking navigation and recovery after context loss');
   const tiny = await newPage({ width: 320, height: 640 });
   await tiny.goto(url);
   await tiny.locator('.journey-pin[data-renderer="webgl"]').waitFor();

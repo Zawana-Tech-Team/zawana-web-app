@@ -46,6 +46,7 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     eyebrow: "Central Management",
     items: [
       { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/admin/attendance", label: "Attendance", icon: CalendarDays },
       { to: "/admin/users", label: "Users", icon: Users },
       {
         to: "/admin/badminton",
@@ -100,6 +101,7 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     eyebrow: "Court Operations",
     items: [
       { to: "/badminton-fo", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/badminton-fo/attendance", label: "Attendance", icon: CalendarDays },
       {
         to: "/badminton-fo/check-in",
         label: "Package Check-In & Sales",
@@ -210,6 +212,7 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     eyebrow: "My Coaching Workspace",
     items: [
       { to: "/coach", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/coach/attendance", label: "Attendance", icon: CalendarDays },
       { to: "/coach/schedule", label: "My Calendar", icon: CalendarDays },
       { to: "/coach/training", label: "Gym Training", icon: Dumbbell },
       { to: "/coach/bookings", label: "Bookings", icon: ClipboardList },
