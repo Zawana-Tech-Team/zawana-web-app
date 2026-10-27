@@ -49,7 +49,7 @@ try {
   const request = async (path, { token, body, method = 'GET' } = {}) => fetch(`${api}${path}`, {
     method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {})
   });
-  const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  const chrome = process.env.COURT_BROWSER_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   browser = await chromium.launch({ headless: true, ...(existsSync(chrome) ? { executablePath: chrome } : {}) });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, reducedMotion: 'no-preference' });
   await context.addInitScript(token => localStorage.setItem('zawana_access_token', token), data.token);

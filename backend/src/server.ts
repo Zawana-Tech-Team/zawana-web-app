@@ -1,4 +1,6 @@
+import { categoryCodeInput, packageCategory, checkInTransaction, classifyLegacyPackage } from "./services/badmintonCategory.js";
 import "dotenv/config";
+import { createBadmintonVisit } from "./services/badmintonAttendance.js";
 import { badmintonSaleFields, badmintonSaleTotals } from "./services/badmintonSale.js";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
@@ -41,6 +43,8 @@ import { apiFailureDiagnostic, isBookingDatabaseConflict } from "./utils/apiDiag
 import { createPublicStoriesRoutes } from "./routes/publicStories.js";
 
 import { createQrCheckInRouter } from "./routes/qrCheckIn.js";
+import { createCourtChangeRouter } from "./routes/courtChanges.js";
+import { requestCourtCancellation, reviewCourtCancellation } from "./services/courtChanges.js";
 import { createAttendanceRouter } from "./routes/attendance.js";
 
 const app = express();
@@ -87,6 +91,7 @@ app.use(
 app.use("/api/store", storeRoutes);
 app.use("/api/menu", menuRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/court-booking/bookings", createCourtChangeRouter(prisma));
 app.use("/api/attendance", createAttendanceRouter());
 app.use("/api/check-in", createQrCheckInRouter());
 app.use("/api/media", mediaRoutes);
@@ -2156,6 +2161,9 @@ app.patch(
       })
       .parse(req.body);
     if (existing.kind === "court") {
+      if (!["admin", "badminton_fo"].includes(req.user!.role)) return res.status(403).json({ message: "Only badminton staff can manage court reservations." });
+      if (b.date !== undefined || b.time !== undefined || b.price !== undefined || b.status !== undefined)
+        return res.status(409).json({ code: "DEDICATED_WORKFLOW_REQUIRED", message: "Use the court rescheduling or cancellation workflow to change this reservation." });
       const time = b.time || existing.time;
       const date = b.date || existing.date;
       const p = time.split(/\s*(?:—|–|-)\s*/);
@@ -2204,7 +2212,13 @@ app.delete(
       return res
         .status(409)
         .json({ message: "Private course history is preserved. Cancel the booking instead." });
-    await prisma.booking.update({ where: { id: existing.id }, data: { status: "cancelled" } });
+    if (existing.kind === "court") {
+      if (!["admin", "badminton_fo"].includes(req.user!.role)) return res.status(403).json({ message: "Only badminton staff can cancel court reservations." });
+      if (!["cancelled", "CANCELLED"].includes(existing.status)) {
+        const request = await requestCourtCancellation(prisma, existing.id, req.user!, "Staff cancellation from booking management");
+        if (request.status === "requested") await reviewCourtCancellation(prisma, existing.id, request.id, req.user!, true, "Staff approved cancellation; financial review remains separate");
+      }
+    } else await prisma.booking.update({ where: { id: existing.id }, data: { status: "cancelled" } });
     res.status(204).end();
   })
 );
@@ -2229,13 +2243,21 @@ app.patch(
     }
     if (existing.kind === "private_course")
       return res.status(403).json({ message: "Private course status is managed through its booking workflow." });
-    if (existing.kind === "court" && req.user!.role === "member") {
-      if (existing.status === "cancelled" || existing.status === "CANCELLED") return res.json(existing);
-      if (!["pending", "confirmed", "CONFIRMED"].includes(existing.status) || existing.paymentStatus !== "pending")
-        return res.status(409).json({message:"Only active unpaid reservations can be cancelled in the app. Contact ZAWANA staff for paid bookings."});
-      const changed = await prisma.booking.updateMany({where:{id:existing.id,userId:req.user!.id,status:existing.status,paymentStatus:"pending"},data:{status:"cancelled"}});
-      if (!changed.count) return res.status(409).json({message:"This reservation has changed. Refresh before cancelling."});
-      return res.json(await prisma.booking.findUniqueOrThrow({where:{id:existing.id}}));
+    if (existing.kind === "court") {
+      if (!["admin", "badminton_fo", "member"].includes(req.user!.role)) return res.status(403).json({ message: "Only badminton staff can manage court reservations." });
+      if (b.status === "cancelled") {
+        if (["cancelled", "CANCELLED"].includes(existing.status)) return res.json(existing);
+        // Preserve the existing legacy customer API: paid cancellation uses the request endpoint.
+        if (req.user!.role === "member" && existing.paymentStatus !== "pending")
+          return res.status(409).json({ message: "Paid cancellations require staff review. Submit a cancellation request." });
+        const request = await requestCourtCancellation(prisma, existing.id, req.user!, "Cancellation from booking management");
+        if (request.status === "requested" && req.user!.role !== "member")
+          await reviewCourtCancellation(prisma, existing.id, request.id, req.user!, true, "Staff approved cancellation; financial review remains separate");
+        return res.json(await prisma.booking.findUniqueOrThrow({ where: { id: existing.id } }));
+      }
+      if (!["admin", "badminton_fo"].includes(req.user!.role) || !["completed", "COMPLETED"].includes(b.status) ||
+          !["confirmed", "CONFIRMED"].includes(existing.status))
+        return res.status(409).json({ message: "Use the dedicated court workflow. Terminal reservations cannot be reactivated." });
     }
     res.json(await prisma.booking.update({where:{id:String(req.params.id)},data:{status:b.status}}));
   })
@@ -2584,12 +2606,12 @@ app.post(
   auth,
   roles("admin"),
   asyncRoute(async (req: AuthRequest, res) => {
-    const name = String(req.body.name || "").trim();
+    const { name, code: categoryCode } = z.object({ name: z.string().trim().min(1), code: categoryCodeInput }).strict().parse(req.body);
     if (!name) return res.status(400).json({ message: "Category name is required." });
     res
       .status(201)
       .json(
-        await prisma.badmintonPackageCategory.create({ data: { name, createdBy: req.user!.id } })
+        await prisma.badmintonPackageCategory.create({ data: { name, code: categoryCode, createdBy: req.user!.id } })
       )
   })
 );
@@ -2601,7 +2623,7 @@ app.patch(
     res.json(
       await prisma.badmintonPackageCategory.update({
         where: { id: req.params.id },
-        data: { name: req.body.name, active: req.body.active }
+        data: z.object({ name: z.string().trim().min(1).optional(), active: z.boolean().optional() }).strict().parse(req.body)
       })
     )
   )
@@ -2613,7 +2635,7 @@ const badmintonPackageInput = z.object({
   validity: z.coerce.number().int().positive(),
   description: z.string().default(""),
   status: z.enum(["active", "inactive", "coming_soon"]).default("active"),
-  categoryId: z.string().nullable().optional(),
+  categoryId: z.string().min(1),
   availableDays: z.array(z.string()).optional(),
   availableFrom: z.string().nullable().optional(),
   availableUntil: z.string().nullable().optional(),
@@ -2621,29 +2643,22 @@ const badmintonPackageInput = z.object({
   courtRules: z.string().nullable().optional(),
   imageUrl: z.string().nullable().optional()
 });
-app.post(
-  "/api/packages/badminton",
-  auth,
-  roles("admin", "badminton_fo"),
-  asyncRoute(async (req, res) =>
-    res
-      .status(201)
-      .json(await prisma.badmintonPackage.create({ data: badmintonPackageInput.parse(req.body) }))
-  )
-);
-app.patch(
-  "/api/packages/badminton/:id",
-  auth,
-  roles("admin", "badminton_fo"),
-  asyncRoute(async (req, res) =>
-    res.json(
-      await prisma.badmintonPackage.update({
-        where: { id: req.params.id },
-        data: badmintonPackageInput.partial().parse(req.body)
-      })
-    )
-  )
-);
+app.post('/api/packages/badminton', auth, roles('admin', 'badminton_fo'), asyncRoute(async (req, res) => {
+  const data = badmintonPackageInput.parse(req.body);
+  const category = await prisma.badmintonPackageCategory.findFirst({ where: { id: data.categoryId, active: true, code: { in: ['FOUNDATION', 'SOCIAL', 'PATHWAY'] } } });
+  if (!category) return res.status(400).json({ code: 'CATEGORY_REQUIRED', message: 'Choose Foundation, Social, or Pathway.' });
+  res.status(201).json(await prisma.badmintonPackage.create({ data }));
+}));
+app.patch('/api/packages/badminton/:id', auth, roles('admin', 'badminton_fo'), asyncRoute(async (req, res) => {
+  const data = badmintonPackageInput.partial().parse(req.body);
+  if (data.categoryId && !await prisma.badmintonPackageCategory.findFirst({ where: { id: data.categoryId, active: true, code: { in: ['FOUNDATION', 'SOCIAL', 'PATHWAY'] } } }))
+    return res.status(400).json({ code: 'CATEGORY_REQUIRED', message: 'Choose Foundation, Social, or Pathway.' });
+  res.json(await prisma.badmintonPackage.update({ where: { id: req.params.id }, data }));
+}));
+app.post('/api/packages/badminton/:id/classify-legacy', auth, roles('admin'), asyncRoute(async (req, res) => {
+  z.object({ reviewed: z.literal(true) }).strict().parse(req.body);
+  res.json(await checkInTransaction(prisma, tx => classifyLegacyPackage(tx, String(req.params.id), (req as AuthRequest).user!.id)));
+}));
 app.delete(
   "/api/packages/badminton/:id",
   auth,
@@ -2791,6 +2806,7 @@ app.post(
           phone: member?.phone || b.walkIn!.phone,
           packageId: pkg.id,
           packageName: pkg.title,
+          categoryCode: await packageCategory(tx, pkg.id),
           sessionsTotal: pkg.sessions,
           sessionsRemaining: pkg.sessions,
           startDate: start,
@@ -2876,6 +2892,7 @@ app.post(
           phone: user.phone || "",
           packageId: pkg.id,
           packageName: pkg.title,
+          categoryCode: await packageCategory(tx, pkg.id),
           sessionsTotal: pkg.sessions,
           sessionsRemaining: pkg.sessions,
           startDate: start,
@@ -2992,15 +3009,6 @@ app.post(
     const start = today(),
       expiry = addDaysIso(start, pkg.validity);
     const enrollment = await prisma.$transaction(async tx => {
-      const locked = await tx.badmintonEnrollment.updateMany({
-        where: { id: current.id, status: current.status },
-        data: { status: "renewed" }
-      });
-      if (!locked.count)
-        throw Object.assign(
-          new Error("This package was updated by another staff member. Refresh and try again."),
-          { statusCode: 409 }
-        );
       const purchase = await tx.badmintonPackagePurchase.create({
         data: {
           code: code("BP"),
@@ -3021,6 +3029,7 @@ app.post(
           phone: member.phone || "",
           packageId: pkg.id,
           packageName: pkg.title,
+          categoryCode: await packageCategory(tx, pkg.id),
           sessionsTotal: pkg.sessions,
           sessionsRemaining: pkg.sessions,
           startDate: start,
@@ -3084,86 +3093,7 @@ app.post(
     const b = z
       .object({ enrollmentId: z.string().min(1), note: z.string().optional() })
       .parse(req.body);
-    const current = (
-      await rawQuery<any[]>(
-        prisma,
-        `SELECT * FROM "BadmintonEnrollment" WHERE id=?`,
-        b.enrollmentId
-      )
-    )[0];
-    if (!current) return res.status(404).json({ message: "Student package not found" });
-    if (current.status !== "expired" && current.expiryDate < today()) {
-      await rawExec(
-        prisma,
-        `UPDATE "BadmintonEnrollment" SET status='expired' WHERE id=?`,
-        b.enrollmentId
-      );
-      current.status = 'expired';
-    }
-    if (current.status !== "active")
-      return res
-        .status(409)
-        .json({
-          code: "PACKAGE_EXPIRED",
-          message: "This student's package has expired. Renew the package before check-in."
-        });
-    if (Number(current.sessionsRemaining) <= 0)
-      return res
-        .status(409)
-        .json({
-          code: "NO_SESSIONS",
-          message: "This student has no sessions remaining. Renew the package before check-in."
-        });
-    const time = businessNow().clock;
-    const id = code("CHK");
-    const result = await prisma.$transaction(async(tx)=> {
-      const date = today();
-      const updated = (
-        await rawQuery<any[]>(
-          tx,
-          `UPDATE "BadmintonEnrollment" SET sessionsRemaining=sessionsRemaining-1,lastCheckIn=? WHERE id=? AND status='active' AND expiryDate>=? AND sessionsRemaining>0 AND NOT EXISTS (SELECT 1 FROM "BadmintonCheckIn" WHERE enrollmentId=? AND date=?) RETURNING *`,
-          `${date} ${time}`,
-          b.enrollmentId,
-          date,
-          b.enrollmentId,
-          date
-        )
-      )[0];
-      if (!updated) {
-        const already = await rawQuery<any[]>(
-          tx,
-          `SELECT id FROM "BadmintonCheckIn" WHERE enrollmentId=? AND date=? LIMIT 1`,
-          b.enrollmentId,
-          date
-        );
-        throw Object.assign(
-          new Error(
-            already.length
-              ? "This package has already been checked in today."
-              : "Package is no longer available."
-          ),
-          { statusCode: 409 }
-        );
-      }
-      const check = (
-        await rawQuery<any[]>(
-          tx,
-          `INSERT INTO "BadmintonCheckIn" (id,enrollmentId,date,time,sessionsUsed,staffId,note) VALUES (?,?,?,?,?,?,?) RETURNING *`,
-          id,
-          b.enrollmentId,
-          date,
-          time,
-          1,
-          (req as AuthRequest).user?.id || null,
-          b.note || null
-        )
-      )[0];
-      return {
-        enrollment: updated,
-        checkIn: check,
-        warning: Number(updated.sessionsRemaining) <= 2
-      };
-    });
+    const result = await checkInTransaction(prisma, tx => createBadmintonVisit(tx, b.enrollmentId, (req as AuthRequest).user!.id, b.note));
     res.status(201).json(result);
   })
 );
@@ -3909,7 +3839,7 @@ app.get(
       }),
       rawQuery<any[]>(
         prisma,
-        `SELECT * FROM "BadmintonEnrollment" WHERE userId=? OR studentId=? ORDER BY createdAt DESC`,
+        `SELECT * FROM "BadmintonEnrollment" WHERE userId=? OR (userId IS NULL AND studentId=?) ORDER BY createdAt DESC`,
         req.user!.id,
         req.user!.id
       ),
@@ -3922,13 +3852,10 @@ app.get(
       enrollments.find(
         e => e.status === "active" && e.expiryDate >= today() && Number(e.sessionsRemaining) > 0
       ) || null;
-    const checkIns = active
-      ? await rawQuery<any[]>(
-          prisma,
-          `SELECT * FROM "BadmintonCheckIn" WHERE enrollmentId=? ORDER BY date DESC,time DESC LIMIT 12`,
-          active.id
-        )
-      : [];
+    const checkIns = await prisma.badmintonCheckIn.findMany({
+      where: { enrollment: { OR: [{ userId: req.user!.id }, { userId: null, studentId: req.user!.id }] } },
+      orderBy: [{ date: 'desc' }, { time: 'desc' }], take: 100,
+    });
     const bookings = [
       ...new Map(
         [...todayBookings, ...upcomingBookings, ...recentBookings].map(booking => [
@@ -3946,6 +3873,7 @@ app.get(
       upcomingBookingCount,
       packages,
       notifications,
+      enrollments,
       enrollment: active,
       enrollmentHistory: enrollments,
       checkIns,
@@ -4907,24 +4835,12 @@ app.post(
         const start = today(),
           expiry = addDaysIso(start, purchase.package.validity),
           enrollmentId = code("BM");
-        await rawExec(
-          tx,
-          `INSERT INTO "BadmintonEnrollment" (id,studentId,userId,studentName,phone,packageId,packageName,sessionsTotal,sessionsRemaining,startDate,expiryDate,status,renewalCount,purchaseId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          enrollmentId,
-          user.id,
-          user.id,
-          user.name,
-          user.phone || "",
-          purchase.packageId,
-          purchase.packageName,
-          purchase.package.sessions,
-          purchase.package.sessions,
-          start,
-          expiry,
-          "active",
-          0,
-          purchase.id
-        );
+        await tx.badmintonEnrollment.create({ data: {
+          id: enrollmentId, studentId: user.id, userId: user.id, studentName: user.name, phone: user.phone || '',
+          packageId: purchase.packageId, packageName: purchase.packageName,
+          categoryCode: await packageCategory(tx, purchase.packageId), sessionsTotal: purchase.package.sessions,
+          sessionsRemaining: purchase.package.sessions, startDate: start, expiryDate: expiry, purchaseId: purchase.id,
+        } });
         await tx.transaction.create({
           data: {
             userId: user.id,

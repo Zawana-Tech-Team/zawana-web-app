@@ -1,3 +1,5 @@
+import { courtReschedulePath } from '../types/courtChanges';
+import { CourtChangeDialog } from "../components/CourtChangeDialog";
 import { normalizeBookingTime } from "../utils/bookingTime";
 import { SegmentedControl } from '../components/Interactions';
 import { Select } from '../components/Select';
@@ -39,6 +41,7 @@ export function Bookings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [changeBooking, setChangeBooking] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState("");
   const [paying, setPaying] = useState("");
   const [page, setPage] = useState(1);
@@ -109,6 +112,7 @@ export function Bookings() {
     updateFilters({ datePreset, from: "", to: "" });
 
   const cancel = async (booking: any) => {
+    if (booking.kind === "court") { setChangeBooking(booking.id); return; }
     if (!window.confirm("Cancel this booking?")) return;
     setCancelling(booking.id);
     setError("");
@@ -322,6 +326,8 @@ export function Bookings() {
                     <p className="mt-2 text-sm text-amber-800">Waiting for coach confirmation. Your selected court and time are reserved.</p>}
               </div>
               <div className="flex flex-wrap gap-2">
+                {booking.kind === "court" && <Button variant="secondary" onClick={() => setChangeBooking(booking.id)}>Details & history</Button>}
+                {booking.kind === "court" && booking.status.toLowerCase() === "confirmed" && <Link to={courtReschedulePath(booking.id)}><Button variant="secondary">Change Date / Time</Button></Link>}
                 {booking.kind === "private_course" && booking.status === "AWAITING_PAYMENT" &&
                   <Button disabled={paying === booking.id} onClick={() => confirmCourse(booking)}>
                     {paying === booking.id ? "Starting checkout…" : "Pay & confirm"}
@@ -354,5 +360,6 @@ export function Bookings() {
           onPage={setPage}
         />
       </div>}
+    {changeBooking && <CourtChangeDialog bookingId={changeBooking} onClose={() => setChangeBooking(null)} onChanged={() => void load()} />}
   </Page>;
 }

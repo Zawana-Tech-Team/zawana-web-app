@@ -91,6 +91,7 @@ const PaymentStatus = lazy(() =>
 );
 const QrCheckIn = lazy(() => import('./pages/QrCheckIn'));
 const Attendance = lazy(() => import('./pages/Attendance'));
+const CourtReschedule = lazy(() => import('./pages/CourtReschedule'));
 const MemberTraining = lazy(() => import('./pages/MemberTraining'));
 
 function RouteLoading() { return <PageSkeleton />; }
@@ -145,6 +146,11 @@ export default function App() {
     <ScrollToTop />
     <Routes>
       <Route path="/check-in" element={<QrCheckIn />} />
+      {([
+        ['member', '/bookings/:id/reschedule'],
+        ['badminton_fo', '/badminton-fo/bookings/:id/reschedule'],
+        ['admin', '/admin/court-rentals/:id/reschedule'],
+      ] as const).map(([role, path]) => <Route key={path} path={path} element={<Guard role={role}><CourtReschedule /></Guard>} />)}
       {(['member', 'coach', 'admin', 'badminton_fo'] as const).map(role => <Route key={`attendance-${role}`} path={role === 'member' ? '/attendance' : `/${role === 'badminton_fo' ? 'badminton-fo' : role}/attendance`} element={<Guard role={role}><Attendance /></Guard>} />)}
       <Route path="/" element={<Home />} />
       <Route

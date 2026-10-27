@@ -118,3 +118,44 @@ jobs:
         run: pnpm --dir backend run prisma:generate:postgres
       - name: Test real PostgreSQL court API and concurrency
         run: pnpm --dir backend run test:court:postgres
+
+  postgres-badminton:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: zawana_badminton_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d zawana_badminton_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/zawana_badminton_test
+      DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/zawana_badminton_test
+      BADMINTON_POSTGRES_TEST_URL: postgresql://ci:ci@127.0.0.1:5432/zawana_badminton_test
+      BADMINTON_ONLY_POSTGRES: "1"
+      AUTH_MODE: firebase
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install backend dependencies
+        run: pnpm --dir backend install --frozen-lockfile --prod=false
+      - name: Apply PostgreSQL migration history to disposable database
+        run: pnpm --dir backend run prisma:migrate:postgres
+      - name: Generate PostgreSQL Prisma Client
+        run: pnpm --dir backend run prisma:generate:postgres
+      - name: Test PostgreSQL category deductions, migration preservation and concurrency
+        working-directory: backend
+        run: pnpm exec tsx --test tests/badminton-category.test.ts

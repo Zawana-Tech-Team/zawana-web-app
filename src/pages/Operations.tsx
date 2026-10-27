@@ -1,3 +1,6 @@
+import { BadmintonCategoryField, BadmintonCategorySettings, categoryLabel } from '../components/BadmintonCategoryField';
+import { courtReschedulePath } from '../types/courtChanges';
+import { CourtChangeDialog } from "../components/CourtChangeDialog";
 import { QrDesk } from '../components/QrDesk';
 import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
@@ -748,11 +751,14 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 }
 
 function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: string) => void; activationOnly?: boolean }) {
+  const today = bookingClock().date;
   const [statusFilter, setStatusFilter] = useState('all');
   const [memberQuery, setMemberQuery] = useState('');
   const [discountPercent, setDiscountPercent] = useState('0');
 
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [visits, setVisits] = useState<any[]>([]);
+  const [visitsError, setVisitsError] = useState('');
   const [selected, setSelected] = useState<any>(null);
   const [packages, setPackages] = useState<any[]>([]);
 
@@ -803,7 +809,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
   const isActive = (x: any) => x.status === 'active' && x.expiryDate >= today && x.sessionsRemaining > 0;
   const filtered = enrollments.filter(x =>
     (statusFilter === 'all' || (statusFilter === 'active' ? isActive(x) : !isActive(x))) &&
-    [x.studentName, x.phone, x.packageName].some(v => String(v || '').toLowerCase().includes(query.trim().toLowerCase()))
+    [x.studentName, x.phone, x.packageName, x.categoryCode].some(v => String(v || '').toLowerCase().includes(query.trim().toLowerCase()))
   );
   const matchingMembers = memberAccounts.filter(m =>
     [m.name, m.phone, m.email].some(v => String(v || '').toLowerCase().includes(memberQuery.trim().toLowerCase()))
@@ -817,6 +823,13 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
   const selectedStudent = memberAccounts.find((m: any) => m.id === purchaseStudentId);
 
   const current = selected;
+  useEffect(() => {
+    setVisits([]); setVisitsError('');
+    if (!selected?.id) return;
+    let active = true;
+    get<any[]>(`/badminton/enrollments/${selected.id}/check-ins`).then(rows => { if (active) setVisits(rows); }).catch(e => { if (active) setVisitsError(e.message); });
+    return () => { active = false; };
+  }, [selected?.id, selected?.lastCheckIn]);
 
   const selectStudent = (id: string) =>
     setSelected(enrollments.find(x => x.studentId === id) || null);
@@ -904,18 +917,10 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
       notify(
         r.warning
           ? `${current.studentName} checked in. Only ${r.enrollment.sessionsRemaining} sessions remain.`
-          : `${current.studentName} checked in successfully.`
+          : `${current.studentName} · ${categoryLabel(r.categoryCode)} · ${r.enrollment.packageName}: ${r.enrollment.sessionsRemaining} sessions left.`
       );
       await load();
-      setSelected((x: any) =>
-        x
-          ? {
-              ...x,
-              sessionsRemaining: r.enrollment.sessionsRemaining,
-              lastCheckIn: r.enrollment.lastCheckIn
-            }
-          : x
-      )
+      setSelected(r.enrollment)
     } catch (e: any) {
       notify(e.message || 'Check-in denied.')
     } finally {
@@ -993,7 +998,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
               .filter(p => p.status === 'active')
               .map(p =>
                 <option key={p.id} value={p.id}>
-                  {p.title} · {p.sessions} sessions · {p.validity} days · {money(p.price)}
+                  {p.category?.name || 'Category needs review'} · {p.title} · {p.sessions} sessions · {p.validity} days · {money(p.price)}
                 </option>
               )}
           </Select>
@@ -1100,7 +1105,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
           <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Badminton package">
             {packages.filter(p => p.status === 'active').map(p => <button key={p.id} disabled={busy} aria-pressed={packageId === p.id} aria-label={`Select ${p.title}`} onClick={() => { setPackageId(p.id); setActionError('') }} className={`relative min-w-0 rounded-2xl border p-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${packageId === p.id ? 'border-zawana-950 bg-zawana-950/[.025] ring-1 ring-zawana-950' : 'border-zawana-border hover:border-zawana-500/50'}`}>
               <span className="flex items-start justify-between gap-3"><span className="text-sm font-semibold">{p.title}</span><span aria-hidden="true" className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${packageId === p.id ? 'border-zawana-950 bg-zawana-950 text-white' : 'border-zawana-border'}`}>{packageId === p.id && <Check size={12} />}</span></span>
-              <span className="mt-2 block text-xs text-zawana-500">{p.sessions} sessions <span className="mx-1">·</span> {p.validity} days</span>
+              <span className="mt-2 block text-xs text-zawana-500">{p.category?.name || 'Category needs review'} · {p.sessions} sessions <span className="mx-1">·</span> {p.validity} days</span>
               <span className="mt-5 block text-lg font-semibold tracking-tight">{money(p.price)}</span>
             </button>)}
           </div>
@@ -1205,18 +1210,16 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
                   <span
                     className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${x.status === 'active' && x.expiryDate >= today && x.sessionsRemaining > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}
                   >
-                    {x.status === 'active' && x.expiryDate >= today && x.sessionsRemaining > 0
-                      ? 'ACTIVE'
-                      : 'BLOCKED'}
+                    {!x.categoryCode ? 'REVIEW' : x.expiryDate < today ? 'EXPIRED' : x.sessionsRemaining <= 0 ? 'EXHAUSTED' : x.startDate > today ? 'PENDING' : x.status.toUpperCase()}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-zawana-500">
-                  {x.phone} · {x.packageName}
+                  {x.phone} · {x.packageName} · {categoryLabel(x.categoryCode)}
                 </p>
                 <div className="mt-3 flex justify-between text-xs">
                   <span>
                     {x.sessionsRemaining}/{x.sessionsTotal} sessions</span>
-                  <span>Expires {x.expiryDate}</span>
+                  <span>{x.startDate} – {x.expiryDate}</span>
                 </div>
               </button>
           )}
@@ -1251,7 +1254,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
                     <p className="text-xs font-black uppercase tracking-widest text-white/60">Selected student</p>
                     <h2 className="mt-1 text-3xl font-black">{current.studentName}</h2>
                     <p className="mt-1 text-sm text-white/60">
-                      {current.phone} · {current.packageName}
+                      {current.phone} · {current.packageName} · {categoryLabel(current.categoryCode)}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -1267,7 +1270,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
                     >
                       <RotateCcw size={15} /> Renew</Button>
                     <Button
-                      disabled={busy || !!expired || Number(current.sessionsRemaining) <= 0}
+                      disabled={busy || !current.categoryCode}
                       onClick={checkIn}
                     >
                       <Check size={16} /> Check in</Button>
@@ -1309,13 +1312,14 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
 
               {(expired || Number(current.sessionsRemaining) <= 0) &&
                 <div className="mx-6 mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                  <b>Check-in blocked.</b> {expired
+                  <b>Selected package unavailable.</b> {expired
                     ? 'This package has expired.'
-                    : 'This package has no sessions remaining.'} Renew the package before the student can join.</div>}
+                    : 'This package has no sessions remaining.'} Check-in will use another eligible package in the same category if available.</div>}
 
               {low && !expired && Number(current.sessionsRemaining) > 0 &&
                 <div className="mx-6 mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                   <b>Low-session warning.</b> Only {current.sessionsRemaining} session{Number(current.sessionsRemaining) === 1 ? '' : 's'} remain. Consider renewing after this visit.</div>}
+              <section className="border-t border-zawana-border p-5 sm:p-6" aria-label="Package attendance history"><h3 className="text-sm font-semibold">Session history</h3><p className="mt-1 text-xs text-zawana-500">{categoryLabel(current.categoryCode)} · {current.packageName}</p>{visitsError ? <p role="alert" className="mt-3 text-xs text-red-700">{visitsError}</p> : !visits.length ? <p className="mt-4 text-xs text-zawana-500">No recorded visits for this package.</p> : <ol className="mt-3 divide-y divide-zawana-border">{visits.map(v => <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-xs"><span>{v.date} · {v.time}<span className="mt-1 block text-zawana-500">{v.source || 'Legacy'} · {categoryLabel(v.categoryCode)}</span></span><span>{v.sessionsUsed} session{v.sessionsUsed === 1 ? '' : 's'} · {v.status}</span></li>)}</ol>}</section>
             </Card>
           </>}
       </div>
@@ -1327,7 +1331,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
         subtitle={
           purchase
             ? 'Start package access for an online or walk-in member.'
-            : 'Replace the current entitlement with a fresh package term.'
+            : 'Add a new package term. Existing packages keep their balances and expiry dates.'
         }
         onClose={() => {
           if (!busy) {
@@ -1676,6 +1680,8 @@ function courtBookingRow(b: any) {
 }
 
 function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'error' | 'info') => void }) {
+  const [changeBooking, setChangeBooking] = useState<string | null>(null);
+  const { user } = useAuth();
   const o = useOperations();
   const [rows, setRows] = useState<any[]>([]),
     [page, setPage] = useState(1),
@@ -1735,6 +1741,8 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
     }
   };
   return <div>
+    {changeBooking && <CourtChangeDialog bookingId={changeBooking} onClose={() => setChangeBooking(null)} onChanged={() => { setFilters(f => ({ ...f })); notify('Booking updated.'); }} />}
+
     <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
       <input
         aria-label="Search bookings"
@@ -1851,13 +1859,15 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
               <Badge>{String(b.status).replaceAll('_', ' ')}</Badge>
             </Cell>
             <Cell>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => setChangeBooking(b.id)}>Details & history</Button>
+                {String(b.status).toLowerCase() === 'confirmed' && <Link to={courtReschedulePath(b.id, user?.role)}><Button variant="secondary">Reschedule</Button></Link>}
                 {!['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
                   <Button
                     variant="danger"
                     className="px-3 py-2"
                     disabled={busy === b.id}
-                    onClick={() => void update(b, 'cancelled')}
+                    onClick={() => setChangeBooking(b.id)}
                   >Cancel</Button>}
                 {String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
                   <Button
@@ -1888,13 +1898,15 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
           <p className="mt-1 text-xs text-zawana-500">
             {b.date} · {money(b.price)} · {b.paymentStatus}
           </p>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setChangeBooking(b.id)}>Details & history</Button>
+                {String(b.status).toLowerCase() === 'confirmed' && <Link to={courtReschedulePath(b.id, user?.role)}><Button variant="secondary">Reschedule</Button></Link>}
             {!['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
               <Button
                 variant="danger"
                 className="min-h-11 px-4"
                 disabled={busy === b.id}
-                onClick={() => void update(b, 'cancelled')}
+                onClick={() => setChangeBooking(b.id)}
               >Cancel</Button>}
             {String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
               <Button
@@ -1937,7 +1949,7 @@ function BadmintonPackages() {
     void refreshPurchases()
   }, []);
 
-  return <div className="space-y-6">
+  return <div className="space-y-6"><BadmintonCategorySettings />
     {purchases.length > 0 &&
       <section>
         <div className="mb-3">
@@ -1967,19 +1979,24 @@ function BadmintonPackages() {
 
     <div className="grid gap-3 sm:grid-cols-3">{[['Packages', o.badmintonPackages.length], ['Active', o.badmintonPackages.filter(p => p.status === 'active').length], ['Coming soon', o.badmintonPackages.filter(p => p.status === 'coming_soon').length]].map(([label, value]) => <Card key={label} className="p-5"><p className="text-xs text-zawana-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p></Card>)}</div>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3 rounded-xl border bg-white px-4 sm:w-80"><Search size={16} className="shrink-0 text-zawana-500" /><input aria-label="Search packages" placeholder="Search packages" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 w-full !border-0 !bg-transparent !px-0 !shadow-none !outline-none !ring-0" /></div><Select aria-label="Package catalog status" className="min-w-40 text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="active">Active</option><option value="coming_soon">Coming soon</option><option value="inactive">Inactive</option></Select></div>
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((p: any) => <Card key={p.id} className="flex flex-col overflow-hidden p-0"><div className="flex-1 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zawana-gold/10 text-zawana-950"><PackagePlus size={18} /></span><Badge good={p.status === 'active'}>{p.status === 'coming_soon' ? 'Coming soon' : p.status}</Badge></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{p.title}</h3><p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zawana-500">{p.description || 'Badminton session package'}</p><p className="mt-5 text-2xl font-semibold tracking-tight">{money(p.price)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zawana-500"><span>{p.sessions} sessions</span><span>{p.validity} days validity</span></div><p className="mt-4 border-t border-zawana-border pt-4 text-xs leading-relaxed text-zawana-500">{p.availableFrom && p.availableUntil ? `${p.availableFrom}–${p.availableUntil} · ` : ''}{p.scheduleNotes || 'Flexible schedule'}{p.courtRules ? ` · ${p.courtRules}` : ''}</p></div><div className="flex items-center justify-between border-t border-zawana-border bg-zawana-950/[.015] px-5 py-3"><span className="text-xs text-zawana-500">Manage package</span><div className="flex gap-2"><PackageEdit item={p} kind="badminton" /><PackageDelete id={p.id} name={p.title} kind="badminton" /></div></div></Card>)}</div>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((p: any) => <Card key={p.id} className="flex flex-col overflow-hidden p-0"><div className="flex-1 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zawana-gold/10 text-zawana-950"><PackagePlus size={18} /></span><Badge good={p.status === 'active'}>{p.status === 'coming_soon' ? 'Coming soon' : p.status}</Badge></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{p.title}</h3><p className="mt-1 text-xs text-zawana-500">{p.category?.name || 'Category needs review'}{p.category?.code ? ` · ${p.category.code}` : ''}</p><p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zawana-500">{p.description || 'Badminton session package'}</p><p className="mt-5 text-2xl font-semibold tracking-tight">{money(p.price)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zawana-500"><span>{p.sessions} sessions</span><span>{p.validity} days validity</span></div><p className="mt-4 border-t border-zawana-border pt-4 text-xs leading-relaxed text-zawana-500">{p.availableFrom && p.availableUntil ? `${p.availableFrom}–${p.availableUntil} · ` : ''}{p.scheduleNotes || 'Flexible schedule'}{p.courtRules ? ` · ${p.courtRules}` : ''}</p></div><div className="flex items-center justify-between border-t border-zawana-border bg-zawana-950/[.015] px-5 py-3"><span className="text-xs text-zawana-500">Manage package</span><div className="flex gap-2"><PackageEdit item={p} kind="badminton" /><PackageDelete id={p.id} name={p.title} kind="badminton" /></div></div></Card>)}</div>
     {!shown.length && <Empty title="No matching packages" body="Try another search or create a new package." />}
   </div>
 }
 
 function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
   const o = useOperations();
+  const { user } = useAuth();
+  const [classifyLegacy, setClassifyLegacy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({
     ...item,
     benefits: Array.isArray(item.benefits) ? item.benefits.join(', ') : item.benefits || ''
   });
   const save = async () => {
+    setSaving(true); setSaveError('');
     try {
       if (kind === 'badminton')
         await o.updateBadmintonPackage(item.id, {
@@ -1988,7 +2005,8 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
           sessions: +form.sessions,
           validity: +form.validity,
           description: form.description,
-          status: form.status
+          status: form.status,
+          categoryId: form.categoryId
         });
       else
         await o.updateGymPackage(item.id, {
@@ -2003,6 +2021,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
             .filter(Boolean),
           status: form.status
         });
+      if (kind === 'badminton' && classifyLegacy) await post(`/packages/badminton/${item.id}/classify-legacy`, { reviewed: true });
       window.dispatchEvent(
         new CustomEvent('zawana-toast', {
           detail: `${kind === 'badminton' ? 'Badminton' : 'Gym'} package updated.`
@@ -2010,10 +2029,11 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
       );
       setOpen(false)
     } catch (e: any) {
+      setSaveError(e.message || 'Update failed.');
       window.dispatchEvent(
         new CustomEvent('zawana-toast', { detail: e.message || 'Update failed.' })
       )
-    }
+    } finally { setSaving(false); }
   };
   return <>
     {/* eslint-disable-next-line */}
@@ -2021,6 +2041,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
       className="rounded-xl p-2 hover:bg-zawana-900"
       onClick={() => setOpen(true)}
       title="Edit"
+      aria-label={`Edit ${item.title}`}
     >
       <Edit3 size={15} />
     </button>
@@ -2030,7 +2051,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
         subtitle="Update pricing, sessions, validity and status."
         onClose={() => setOpen(false)}
       >
-        <div className="grid gap-4 md:grid-cols-2">
+        {kind === 'badminton' && <div className="mb-5 space-y-3"><BadmintonCategoryField value={form.categoryId} onChange={categoryId => setForm({ ...form, categoryId })} />{user?.role === 'admin' && <label className="flex items-start gap-3 text-xs leading-relaxed"><input type="checkbox" checked={classifyLegacy} onChange={e => setClassifyLegacy(e.target.checked)} /><span>I reviewed this package’s legacy records. Apply this category to its unclassified enrollments and matching attendance history. Existing classified categories and session balances stay unchanged.</span></label>}</div>}{saveError && <p role="alert" className="mb-4 text-sm text-red-700">{saveError}</p>}<div className="grid gap-4 md:grid-cols-2">
           <label>Title<input
               value={form.title || ''}
               onChange={e => setForm({ ...form, title: e.target.value })}
@@ -2094,7 +2115,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={save}>
+          <Button disabled={saving} onClick={save}>
             <Check size={15} /> Save changes</Button>
         </div>
       </OpsModal>}</AnimatePresence>
@@ -2150,6 +2171,7 @@ function PackageManager({
   notify: (s: string) => void
 }) {
   const o = useOperations();
+  const [categoryId, setCategoryId] = useState('');
   const [name, setName] = useState(''),
     [price, setPrice] = useState(''),
     [number, setNumber] = useState('30'),
@@ -2165,13 +2187,14 @@ function PackageManager({
     [imageUrl, setImageUrl] = useState('');
 
   const save = async () => {
-    if (!name.trim() || !price) {
-      notify('Please enter a package title and price.');
+    if (!name.trim() || !price || (kind === 'badminton' && !categoryId)) {
+      notify('Please enter a package title, category and price.');
       return }
     try {
       if (kind === 'badminton')
         await o.addBadmintonPackage({
           title: name,
+          categoryId,
           price: +price,
           sessions: +number,
           validity: +validity,
@@ -2236,7 +2259,7 @@ function PackageManager({
             onChange={e => setPrice(e.target.value)}
           />
           {kind === 'badminton' ?
-            <>
+            <><BadmintonCategoryField value={categoryId} onChange={setCategoryId} />
               <input
                 type="number"
                 placeholder="Sessions"

@@ -1,3 +1,6 @@
+import { CourtBookingSteps } from '../components/CourtBookingSteps';
+import { CourtRescheduleSummary } from '../components/CourtRescheduleSummary';
+import type { CourtChangeDetail } from '../types/courtChanges';
 import {
   bookingClock,
   bookingHasStarted,
@@ -26,7 +29,7 @@ import { Button, Card, Empty, Page, Toast } from "../components/UI";
 import { get, post } from "../api";
 import { LocalizedTree, useLanguage } from "../context/LanguageContext";
 
-type SlotPick = {
+export type SlotPick = {
   date: string;
   courtId: string;
   courtName: string;
@@ -88,6 +91,7 @@ const CourtDateCalendar = memo(function CourtDateCalendar({
   loadingMonth,
   dateLabel,
   toggleDate,
+  singleDate = false,
 }: {
   month: Date;
   setMonth: (month: Date) => void;
@@ -97,6 +101,7 @@ const CourtDateCalendar = memo(function CourtDateCalendar({
   loadingMonth: boolean;
   dateLabel: (day: string) => string;
   toggleDate: (day: string) => void;
+  singleDate?: boolean;
 }) {
   return (
     <LocalizedTree>
@@ -107,7 +112,7 @@ const CourtDateCalendar = memo(function CourtDateCalendar({
               Make time to play.
             </h2>
             <p className="mt-1 text-sm text-zawana-500">
-              Select one or more dates for your next sessions.
+              {singleDate ? "Select a new date for your court session." : "Select one or more dates for your next sessions."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -219,7 +224,20 @@ const CourtDateCalendar = memo(function CourtDateCalendar({
   );
 });
 
-export function CourtBooking() {
+type RescheduleOptions = {
+  detail: CourtChangeDetail;
+  backTo: string;
+  step: 1 | 2;
+  onStepChange: (step: 1 | 2) => void;
+  onReview: (selection: SlotPick) => Promise<void>;
+  exceptionReason: string;
+  onExceptionReason: (reason: string) => void;
+  availabilityVersion: number;
+  error: string;
+};
+
+export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } = {}) {
+  const isRescheduling = !!reschedule;
   const { locale } = useLanguage();
   const dateFormatter = useMemo(
     () =>
@@ -236,11 +254,13 @@ export function CourtBooking() {
   );
 
   const [month, setMonth] = useState(() => {
-    const d = parseDate(todayKey());
+    const d = parseDate(reschedule?.detail.booking.date || todayKey());
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
-  const [date, setDate] = useState(todayKey());
-  const [step, setStep] = useState<1 | 2>(1);
+  const [date, setDate] = useState(reschedule?.detail.booking.date || todayKey());
+  const [localStep, setLocalStep] = useState<1 | 2>(1);
+  const step = reschedule?.step || localStep;
+  const setStep = (next: 1 | 2) => reschedule ? reschedule.onStepChange(next) : setLocalStep(next);
   const [dates, setDates] = useState<string[]>([]);
   const [preferredTimes, setPreferredTimes] = useState<string[]>([]);
   const [openCourt, setOpenCourt] = useState("");
@@ -263,12 +283,17 @@ export function CourtBooking() {
       setDate(day);
       setError("");
       setConflicts([]);
+      if (isRescheduling) {
+        setDates(prev => prev.includes(day) ? [] : [day]);
+        setSelected([]);
+        return;
+      }
       if (dates.includes(day)) {
         setDates((prev) => prev.filter((d) => d !== day));
         setSelected((prev) => prev.filter((pick) => pick.date !== day));
       } else setDates((prev) => [...prev, day].sort());
     },
-    [dates],
+    [dates, isRescheduling],
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -297,7 +322,7 @@ export function CourtBooking() {
   };
   useEffect(() => {
     void loadMonth();
-  }, [monthKey]);
+  }, [monthKey, reschedule?.availabilityVersion]);
 
   const courts = monthData?.courts || [];
   const pickedDate = parseDate(date);
@@ -363,7 +388,7 @@ export function CourtBooking() {
     setSelected((prev) =>
       prev.some((x) => pickKey(x) === pickKey(candidate))
         ? prev.filter((x) => pickKey(x) !== pickKey(candidate))
-        : [...prev, candidate],
+        : isRescheduling ? [candidate] : [...prev, candidate],
     );
     setConflicts((prev) =>
       prev.filter(
@@ -486,7 +511,7 @@ export function CourtBooking() {
   }, [selected]);
 
   const confirm = async () => {
-    if (!selected.length || busy) return;
+    if (isRescheduling || !selected.length || busy) return;
     const elapsed = selected.filter((pick) =>
       bookingHasStarted(pick.date, pick.time),
     );
@@ -541,6 +566,17 @@ export function CourtBooking() {
       setBusy(false);
     }
   };
+
+  useEffect(() => { if (reschedule?.error) setError(reschedule.error); }, [reschedule?.error]);
+  const reviewSelection = async () => {
+    if (!reschedule || selected.length !== 1 || busy || hasElapsedSelection) return;
+    setBusy(true); setError('');
+    try { await reschedule.onReview(selected[0]); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Could not review this change. Try another slot.'); await loadMonth(); }
+    finally { setBusy(false); }
+  };
+  const rescheduleDisabled = busy || loadingMonth || hasElapsedSelection || selected.length !== 1 ||
+    (!!reschedule && !reschedule.detail.eligibility.eligible && reschedule.exceptionReason.trim().length < 5);
 
   if (done)
     return (
@@ -625,14 +661,14 @@ export function CourtBooking() {
 
   return (
     <Page
-      title="Book a court"
+      title={isRescheduling ? "Reschedule your court" : "Book a court"}
       eyebrow="Zawana Badminton Arena"
       actions={
         <div className="flex items-center gap-2">
           <div className="hidden items-center gap-2 rounded-full bg-zawana-900 px-4 py-2 text-xs font-black sm:flex">
             <CalendarDays size={14} /> Live availability
           </div>
-          <button
+          {!isRescheduling && <button
             type="button"
             onClick={() => setCheckoutOpen(true)}
             aria-label={`Open checkout, ${selected.length} selected sessions`}
@@ -644,7 +680,8 @@ export function CourtBooking() {
                 {selected.length}
               </span>
             )}
-          </button>
+          </button>}
+          {reschedule && <Link className="text-xs text-zawana-500 underline underline-offset-4" to={reschedule.backTo}>Back to bookings</Link>}
         </div>
       }
     >
@@ -682,40 +719,11 @@ export function CourtBooking() {
               )}
             </div>
           )}
-          <nav
-            aria-label="Booking steps"
-            className="flex items-center gap-3 rounded-2xl border border-zawana-border bg-white p-4 sm:gap-5 sm:p-5"
-          >
-            {([1, 2] as const).map((n) => (
-              <button
-                key={n}
-                type="button"
-                aria-current={step === n ? "step" : undefined}
-                disabled={n === 2 && !dates.length}
-                onClick={() => {
-                  if (n === 2)
-                    changeDate(dates.includes(date) ? date : dates[0]);
-                  setStep(n);
-                }}
-                className={`flex min-h-11 flex-1 items-center gap-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold disabled:opacity-40 ${step === n ? "text-zawana-950" : "text-zawana-500"}`}
-              >
-                <span
-                  className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border text-xs font-semibold ${step === n ? "border-zawana-950 bg-zawana-950 text-white" : "border-zawana-border"}`}
-                >
-                  {n === 1 && step === 2 ? <Check size={14} /> : n}
-                </span>
-                <span className="font-semibold">
-                  {n === 1 ? "Dates & times" : "Courts & sessions"}
-                </span>
-                {n === 1 && (
-                  <ChevronRight
-                    size={16}
-                    className="ml-auto shrink-0 text-zawana-500"
-                  />
-                )}
-              </button>
-            ))}
-          </nav>
+          <CourtBookingSteps step={step} includeReview={isRescheduling} canChooseCourts={dates.length > 0} canReview={isRescheduling && !rescheduleDisabled} busy={busy} onChange={n => {
+            if (n === 3) { void reviewSelection(); return; }
+            if (n === 2) changeDate(dates.includes(date) ? date : dates[0]);
+            setStep(n);
+          }} />
           <motion.div
             key={step}
             initial={reduceMotion ? false : { opacity: 0, y: 12 }}
@@ -735,6 +743,7 @@ export function CourtBooking() {
                   loadingMonth={loadingMonth}
                   dateLabel={dateLabel}
                   toggleDate={toggleDate}
+                  singleDate={isRescheduling}
                 />
                 <Card className="p-5 sm:p-6">
                   <div className="flex items-start justify-between gap-3">
@@ -743,8 +752,7 @@ export function CourtBooking() {
                         When would you like to play?
                       </h2>
                       <p className="mt-1 text-sm text-zawana-500">
-                        Choose multiple hourly times, or leave open to see every
-                        time.
+                        {isRescheduling ? "Choose an hourly time, or leave open to see every time." : "Choose multiple hourly times, or leave open to see every time."}
                       </p>
                     </div>
                     <Clock3
@@ -763,7 +771,7 @@ export function CourtBooking() {
                           setPreferredTimes((prev) =>
                             prev.includes(time)
                               ? prev.filter((t) => t !== time)
-                              : [...prev, time],
+                              : isRescheduling ? [time] : [...prev, time],
                           )
                         }
                         className={`min-h-11 rounded-xl border px-2 py-3 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${preferredTimes.includes(time) ? "border-zawana-950 bg-zawana-950 text-white" : "border-zawana-border text-zawana-500 hover:border-zawana-500"}`}
@@ -803,7 +811,7 @@ export function CourtBooking() {
                       Find your court.
                     </h2>
                     <p className="mt-1 text-sm text-zawana-500">
-                      Choose a date, open a court, then select your sessions.
+                      {isRescheduling ? "Open a court, then choose one replacement session." : "Choose a date, open a court, then select your sessions."}
                     </p>
                   </div>
                   <button
@@ -1119,6 +1127,7 @@ export function CourtBooking() {
           </motion.div>
         </div>
 
+        {reschedule ? <aside id="reschedule-summary" aria-label="Rescheduling summary"><CourtRescheduleSummary detail={reschedule.detail} selection={selected[0]} backTo={reschedule.backTo} busy={busy} disabled={rescheduleDisabled} exceptionReason={reschedule.exceptionReason} onExceptionReason={reschedule.onExceptionReason} onReview={() => void reviewSelection()} /></aside> : <>
         <div id="booking-summary">
           <Card className="h-fit overflow-hidden p-0 xl:sticky xl:top-24">
             <div className="bg-zawana-950 p-5 text-white">
@@ -1214,10 +1223,18 @@ export function CourtBooking() {
               </Link>
             </div>
           </Card>
-        </div>
+        </div></>}
+
       </div>
+      {reschedule && step === 2 && selected.length === 1 && <>
+        <div className="h-24 lg:hidden" aria-hidden="true" />
+        <div role="region" aria-label="Selected replacement" className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-4 border-t border-zawana-border bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(23,25,28,.04)] lg:hidden">
+          <div className="min-w-0"><p className="truncate text-xs font-semibold">{selected[0].courtName}</p><p className="mt-1 truncate text-[11px] text-zawana-500">{selected[0].time}</p></div>
+          <Button aria-label="Review selected reschedule" disabled={rescheduleDisabled} loading={busy} onClick={() => void reviewSelection()}>Review change<ArrowRight size={14} /></Button>
+        </div>
+      </>}
       <AnimatePresence>
-        {checkoutOpen && (
+        {!isRescheduling && checkoutOpen && (
           <DialogSurface
             title="Review checkout"
             labelledBy="mobile-checkout-title"

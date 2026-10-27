@@ -77,6 +77,8 @@ test(
       await db.authSession.deleteMany({
         where: { userId: { in: [member.id, staff.id] } },
       });
+      await db.bookingCancellationRequest.deleteMany({ where: { booking: { userId: { in: [member.id, staff.id] } } } });
+      await db.bookingChangeHistory.deleteMany({ where: { booking: { userId: { in: [member.id, staff.id] } } } });
       await db.user.deleteMany({
         where: { id: { in: [member.id, staff.id] } },
       });

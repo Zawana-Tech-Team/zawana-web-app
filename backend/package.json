@@ -19,13 +19,15 @@
     "prisma:validate:sqlite": "prisma validate --schema prisma/schema.prisma",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
+    "attendance:migrate:recover": "node --env-file=.env scripts/recover-attendance-migration.mjs",
     "auth:audit": "tsx scripts/audit-auth-identities.ts",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "auth:migrate-local": "tsx scripts/apply-hybrid-auth-local.ts",
     "gym:seed": "tsx scripts/seed-gym-catalog.ts",
     "build:postgres": "prisma generate --schema prisma/postgresql/schema.prisma && tsc",
     "court:audit": "tsx scripts/audit-court-bookings.ts",
-    "test:court:postgres": "tsx --test tests/court-postgres.integration.test.ts"
+    "test:court:postgres": "tsx --test tests/court-postgres.integration.test.ts",
+    "badminton:category:preflight": "tsx scripts/badminton-category-preflight.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

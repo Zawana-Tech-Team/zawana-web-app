@@ -510,6 +510,16 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
   await t.test("calendar, ownership and authorisation", async () => {
     const list = await request("/bookings?kind=court");
     assert.equal(list.value.length, 2);
+    const staff = await db.user.findUniqueOrThrow({ where: { email: "blocks@example.test" } });
+    const staffToken = (await sessions.issue(db, staff, "database_password", [])).accessToken;
+    const bypass = await request(`/bookings/${ids[0]}`, "PATCH", { date: keyDate, time: "12:00 PM — 1:00 PM" }, staffToken);
+    assert.equal(bypass.status, 409);
+    assert.equal(bypass.value.code, "DEDICATED_WORKFLOW_REQUIRED");
+    const unrelated = await db.booking.create({ data: { userId: other.id, kind: "recovery", title: "Private clinic record", date: keyDate, time: "10:00 AM — 11:00 AM", code: randomUUID(), location: "Clinic", price: 10000 } });
+    try {
+      const scoped = await request("/bookings?kind=recovery", "GET", undefined, staffToken);
+      assert.equal(scoped.status, 200); assert.deepEqual(scoped.value, []);
+    } finally { await db.booking.delete({ where: { id: unrelated.id } }); }
     assert.equal(
       (await request(`/court-booking/bookings/${ids[0]}`)).status,
       200,

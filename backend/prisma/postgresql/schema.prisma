@@ -268,6 +268,8 @@ model Schedule {
 }
 
 model Booking {
+  changes BookingChangeHistory[]
+  cancellationRequests BookingCancellationRequest[]
   attendance BookingAttendance?
   id                   String        @id @default(cuid())
   code                 String        @unique
@@ -624,6 +626,7 @@ model PaymentAttempt {
 }
 
 model BadmintonPackageCategory {
+  code String? @unique
   id        String @id @default(cuid())
   name      String @unique
   active    Boolean @default(true)
@@ -634,6 +637,8 @@ model BadmintonPackageCategory {
 }
 
 model BadmintonEnrollment {
+  categoryCode String?
+  @@index([userId, categoryCode, status, expiryDate])
   id                String             @id @default(cuid())
   studentId         String
   userId            String?
@@ -660,6 +665,19 @@ model BadmintonEnrollment {
 }
 
 model BadmintonCheckIn {
+  memberId String?
+  categoryCode String?
+  attendanceKey String? @unique
+  source String @default("STAFF")
+  actorId String?
+  qrId String?
+  qr BadmintonEntryQr? @relation(fields: [qrId], references: [id], onDelete: Restrict)
+  qrVisit BadmintonQrVisit?
+  @@index([memberId, categoryCode, date])
+  // One guard per enrollment/day; extra historical visits retain a null guard.
+  dailyKey String? @unique
+  status String @default("present")
+  packageSnapshot String?
   id           String              @id @default(cuid())
   enrollmentId String
   enrollment   BadmintonEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
@@ -887,6 +905,8 @@ model GymAuditLog {
 
 // A single immutable check-in per paid private-course booking.
 model BookingAttendance {
+  status String @default("present")
+  notes String?
   id String @id @default(cuid())
   bookingId String @unique
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
@@ -895,6 +915,10 @@ model BookingAttendance {
 }
 
 model BadmintonEntryQr {
+  categoryCode String?
+  createdAt DateTime? @default(now())
+  visits BadmintonQrVisit[]
+  checkIns BadmintonCheckIn[]
   id String @id @default(cuid())
   tokenHash String @unique
   createdById String
@@ -902,9 +926,54 @@ model BadmintonEntryQr {
   revokedAt DateTime?
 }
 model BadmintonQrVisit {
+  categoryCode String?
+  qrId String?
+  qr BadmintonEntryQr? @relation(fields: [qrId], references: [id], onDelete: Restrict)
+  checkIn BadmintonCheckIn @relation(fields: [checkInId], references: [id], onDelete: Restrict)
   id String @id @default(cuid())
   userId String
   date String
   checkInId String @unique
-  @@unique([userId, date])
+  @@unique([userId, categoryCode, date])
+}
+
+model AttendanceModification {
+  id String @id @default(cuid())
+  bookingId String
+  actorId String
+  reason String
+  previous String
+  current String
+  createdAt DateTime @default(now())
+  @@index([bookingId, createdAt])
+}
+
+model BookingChangeHistory {
+  id String @id @default(cuid())
+  bookingId String
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  action String
+  previous String
+  current String
+  requestedById String
+  approvedById String?
+  reason String
+  policyException Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@index([bookingId, createdAt])
+}
+
+model BookingCancellationRequest {
+  id String @id @default(cuid())
+  bookingId String
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  requestedById String
+  reason String
+  status String @default("requested")
+  refundStatus String @default("manual_review")
+  reviewedById String?
+  reviewReason String?
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([bookingId, createdAt])
 }
