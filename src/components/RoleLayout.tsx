@@ -45,6 +45,7 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     label: "Zawana Admin",
     eyebrow: "Central Management",
     items: [
+      { to: "/admin/course-finance", label: "Course Bookings & Finance", icon: CalendarDays },
       { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
       { to: "/admin/attendance", label: "Attendance", icon: CalendarDays },
       { to: "/admin/users", label: "Users", icon: Users },
@@ -100,6 +101,7 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     label: "Badminton Front Office",
     eyebrow: "Court Operations",
     items: [
+      { to: "/badminton-fo/course-finance", label: "Course Bookings & Finance", icon: CalendarDays },
       { to: "/badminton-fo", label: "Dashboard", icon: LayoutDashboard },
       { to: "/badminton-fo/attendance", label: "Attendance", icon: CalendarDays },
       {
@@ -211,6 +213,7 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     label: "Coach Portal",
     eyebrow: "My Coaching Workspace",
     items: [
+      { to: "/coach/course-finance", label: "Course Bookings & Finance", icon: CalendarDays },
       { to: "/coach", label: "Dashboard", icon: LayoutDashboard },
       { to: "/coach/attendance", label: "Attendance", icon: CalendarDays },
       { to: "/coach/schedule", label: "My Calendar", icon: CalendarDays },

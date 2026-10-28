@@ -502,6 +502,12 @@ test("badminton private courses: independent availability, concurrency, acceptan
       const confirmed = await db.booking.findUniqueOrThrow({ where: { id } });
       assert.equal(confirmed.status, "CONFIRMED");
       assert.equal(confirmed.paymentStatus, "paid");
+      const receipt = await db.privateCoursePayment.findUniqueOrThrow({ where: { bookingId: id } });
+      assert.equal(receipt.paymentSource, 'ONLINE');
+      assert.equal(receipt.paymentAttemptId, attempt.id);
+      assert.equal(receipt.collectedByUserId, null);
+      assert.ok(receipt.transactionId);
+
       assert.equal(confirmed.reservationExpiresAt, null);
       assert.equal((await callback(payload)).status, 200);
       assert.equal(

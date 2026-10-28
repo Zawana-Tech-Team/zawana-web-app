@@ -305,6 +305,7 @@ export function Bookings() {
                               : "Private course"}
                     </Badge>}
                 </div>
+                {booking.kind === 'private_course' && booking.paymentStatus !== 'pending' && <p className="mt-2 text-xs text-zawana-500">{({ ONLINE: 'Paid Online', BADMINTON_FO: 'Paid at Badminton Front Office', COACH: 'Paid directly to Coach' } as Record<string, string>)[booking.privateCoursePayment?.paymentSource] || 'Legacy Payment — Source Unknown'}</p>}
                 <p className="mt-2 text-sm text-zawana-500">
                   {formatBookingDate(
                     booking.date,

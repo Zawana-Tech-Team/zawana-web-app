@@ -14,5 +14,8 @@ try {
   const coach = await db.coach.create({ data: { name: coachUser.name, userId: coachUser.id, department: 'Badminton', specialty: 'Footwork & technique', phone: '', email: coachUser.email, status: 'active' } });
   const course = await db.privateCourse.create({ data: { title: 'Personal badminton', description: 'Build confidence and technique with individual coaching.', duration: 90, price: 50000, coaches: { connect: { id: coach.id } } } });
   const token = (await createSessionService(db).issue(db, member, 'database_password', [])).accessToken;
-  writeFileSync(process.env.PRIVATE_QA_FIXTURE_PATH, JSON.stringify({ token, dates, courts, coach, course }));
+  const staff = await db.user.create({ data: { name: 'FO Cashier', email: 'staff@course.test', role: 'badminton_fo' } });
+  const staffToken = (await createSessionService(db).issue(db, staff, 'database_password', [])).accessToken;
+  const coachToken = (await createSessionService(db).issue(db, coachUser, 'database_password', [])).accessToken;
+  writeFileSync(process.env.PRIVATE_QA_FIXTURE_PATH, JSON.stringify({ token, dates, courts, coach, course, staffToken, coachToken }));
 } finally { await db.$disconnect(); }

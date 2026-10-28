@@ -90,6 +90,7 @@ const PaymentStatus = lazy(() =>
   import('./pages/PaymentStatus').then(module => ({ default: module.PaymentStatus }))
 );
 const QrCheckIn = lazy(() => import('./pages/QrCheckIn'));
+const StaffPrivateCourses = lazy(() => import('./pages/StaffPrivateCourses'));
 const Attendance = lazy(() => import('./pages/Attendance'));
 const CourtReschedule = lazy(() => import('./pages/CourtReschedule'));
 const MemberTraining = lazy(() => import('./pages/MemberTraining'));
@@ -145,6 +146,10 @@ export default function App() {
   return <Suspense fallback={<RouteLoading />}>
     <ScrollToTop />
     <Routes>
+      <Route path="/admin/course-finance" element={<Guard role="admin"><StaffPrivateCourses /></Guard>} />
+      <Route path="/coach/course-finance" element={<Guard role="coach"><StaffPrivateCourses /></Guard>} />
+      <Route path="/badminton-fo/course-finance" element={<Guard role="badminton_fo"><StaffPrivateCourses /></Guard>} />
+
       <Route path="/check-in" element={<QrCheckIn />} />
       {([
         ['member', '/bookings/:id/reschedule'],

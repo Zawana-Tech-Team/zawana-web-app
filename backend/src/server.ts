@@ -1,3 +1,4 @@
+import { createPrivateCourseFinanceRouter } from './routes/privateCourseFinance.js';
 import { categoryCodeInput, packageCategory, checkInTransaction, classifyLegacyPackage } from "./services/badmintonCategory.js";
 import "dotenv/config";
 import { createBadmintonVisit } from "./services/badmintonAttendance.js";
@@ -79,6 +80,7 @@ app.use(
     }
   })
 );
+app.use("/api/staff/private-courses", createPrivateCourseFinanceRouter(prisma));
 app.use("/uploads/coaches", express.static(coachUploadPath));
 app.use("/uploads/courses", express.static(courseUploadPath));
 app.use("/uploads/profiles", express.static(profileUploadPath));
@@ -3899,10 +3901,13 @@ app.post("/api/member/check-in", auth, roles("member"), (_req, res) =>
 app.get(
   "/api/private-courses/availability",
   auth,
-  roles("member", "admin", "badminton_fo"),
+  roles("member", "admin", "badminton_fo", "coach"),
   asyncRoute(async (req, res) => {
     await expirePrivateCourseReservations();
     const input = z.object({ courseId: z.string().min(1), coachId: z.string().min(1), courtId: z.string().min(1), date: z.string(), durationMinutes: z.coerce.number().int().positive() }).parse(req.query);
+    const actor = (req as AuthRequest).user!;
+    if (actor.role === "coach" && !await prisma.coach.findFirst({ where: { id: input.coachId, userId: actor.id } }))
+      return res.status(403).json({ message: "Coaches may only check availability for their own sessions." });
     res.json(await privateCourseAvailability(prisma, input));
   })
 );
@@ -4772,7 +4777,7 @@ app.post(
         const isCourse = booking.kind === "private_course",
           isCourt = booking.kind === "court",
           business = isCourt || isCourse ? "Badminton" : "Gym";
-        await tx.transaction.create({
+        const postedTransaction = await tx.transaction.create({
           data: {
             userId: user.id,
             date: booking.date,
@@ -4792,6 +4797,12 @@ app.post(
             status: "paid"
           }
         });
+        if (isCourse) await tx.privateCoursePayment.create({ data: {
+          bookingId: booking.id, transactionId: postedTransaction.id, paymentAttemptId: attempt.id,
+          amount: attempt.amount, paymentSource: "ONLINE", paymentMethod: attempt.provider,
+          providerReference: attempt.providerReference, receivedAt: new Date(), verifiedAt: new Date(),
+          notes: "Verified signed provider callback"
+        } });
         await tx.notification.create({
           data: {
             userId: user.id,
