@@ -16,6 +16,7 @@ import menuRoutes from "./routes/menu.js";
 import authRoutes from "./routes/auth.js";
 import { hybrid } from "./modules/auth/hybrid.service.js";
 import { requireRecentSession } from "./modules/auth/hybrid.policy.js";
+import { releaseDeletedAccountEmail } from "./services/deletedAccount.js";
 import mediaRoutes from "./routes/media.js";
 import cafeRoutes from "./routes/cafe.js";
 import gymTrainingRoutes from "./routes/gymTraining.js";
@@ -1039,7 +1040,7 @@ app.get(
     if (role !== "all" && !Object.values(Role).includes(role as Role))
       return res.status(400).json({ message: "Choose a valid role filter." });
     const where: any = {
-      deletedAt: null,
+      deletedAt: req.query.status === 'deleted' ? { not: null } : null,
       ...(role !== "all" ? { role: Role[role as keyof typeof Role] || "__invalid__" } : {}),
       ...(search
         ? {
@@ -1060,6 +1061,7 @@ app.get(
       membership: true,
       avatar: true,
       active: true,
+      deletedAt: true,
       createdAt: true,
       lastLoginAt: true,
       coachProfile: { select: { id: true, department: true, imageUrl: true } },
@@ -1337,6 +1339,16 @@ app.patch(
       throw error;
     }
     res.json(updated);
+  })
+);
+app.post(
+  '/api/users/:id/release-email',
+  auth,
+  roles('admin'),
+  asyncRoute(async (req: AuthRequest, res) => {
+    requireRecentSession(req.authSession);
+    const { confirmationName } = z.object({ confirmationName: z.string().min(1) }).parse(req.body);
+    res.json(await releaseDeletedAccountEmail(prisma, String(req.params.id), confirmationName));
   })
 );
 app.delete(
