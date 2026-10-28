@@ -168,6 +168,7 @@ export function registerBookingQueryRoutes({
       if (from || to) where.date = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
 
       const include = {
+        privateCoursePayment: { select: { paymentSource: true, paymentMethod: true, status: true } },
         court: true,
         coach: true,
         user: { select: { id: true, name: true, email: true, phone: true } }

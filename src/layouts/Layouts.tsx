@@ -45,6 +45,7 @@ const member: readonly SidebarItem[] = [
 ];
 
 const coach: readonly SidebarItem[] = [
+  ['/coach/course-finance', 'Courses & collections', CreditCard],
   ['/coach', 'Overview', Home],
   ['/coach/schedule', 'Schedule', CalendarDays],
   ['/coach/bookings', 'Requests', ClipboardList],

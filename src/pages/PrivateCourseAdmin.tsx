@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { SegmentedControl, SelectionContent } from "../components/Interactions";
 import { DialogSurface } from "../components/Interactions";
 import { Select } from "../components/Select";
@@ -124,6 +125,7 @@ export function PrivateCourseAdmin() {
       title="Private course management"
       eyebrow="Administration · Badminton"
     >
+      <Link className="mb-4 inline-block underline" to="/admin/course-finance">Create booking · Finance & settlements</Link>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">
