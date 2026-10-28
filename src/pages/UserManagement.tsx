@@ -17,6 +17,7 @@ type Account = {
   phone?: string | null;
   membership?: string | null;
   active: boolean;
+  deletedAt?: string | null;
   createdAt: string;
   lastLoginAt?: string | null;
   coachId?: string | null;
@@ -113,14 +114,15 @@ export default function UserManagement() {
   });
   const [coachImage, setCoachImage] = useState<string | null>(null);
   const [coachImageDirty, setCoachImageDirty] = useState(false);
+  const [status, setStatus] = useState('current');
   const load = useCallback(async () => {
     const result = await get<AccountPage>(
-      `/users?page=${page}&limit=20&role=${encodeURIComponent(filter)}&search=${encodeURIComponent(query)}`
+      `/users?page=${page}&limit=20&status=${status}&role=${encodeURIComponent(filter)}&search=${encodeURIComponent(query)}`
     );
     setUsers(result.data);
     setPageInfo(result.pagination);
     setSummary(result.summary)
-  }, [page, filter, query]);
+  }, [page, filter, query, status]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -242,11 +244,14 @@ export default function UserManagement() {
     setBusy(true);
     setDeleteError("");
     try {
-      await del(`/users/${target.id}`, { confirmationName });
+      if (target.deletedAt) await post(`/users/${target.id}/release-email`, { confirmationName });
+      else await del(`/users/${target.id}`, { confirmationName });
       setDeleteTarget(null);
       setConfirmationName("");
       setNotice(
-        `${target.name} was removed from Users. Their booking and payment history was retained.`
+        target.deletedAt
+          ? 'Email released. Sign in with the new Google account and complete a fresh member profile.'
+          : `${target.name} was removed from Users. Their booking and payment history was retained.`
       );
       if (users.length === 1 && page > 1) setPage(current => Math.max(1, current - 1));
       else {
@@ -315,6 +320,10 @@ export default function UserManagement() {
         <select className="users-role-filter" aria-label="Account role" value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}>
           {["all", ...roles].map(value => <option key={value} value={value}>{value === 'all' ? 'All account roles' : label(value)}</option>)}
         </select>
+        <select aria-label="Account status" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+          <option value="current">Current accounts</option>
+          <option value="deleted">Deleted accounts</option>
+        </select>
       </div>
       {loading ?
         <div className="animate-pulse p-8 text-sm text-zawana-500">Loading accounts…</div> : users.length ?
@@ -344,7 +353,7 @@ export default function UserManagement() {
                     <Badge>{label(u.role)}</Badge>
                   </td>
                   <td className="px-4 py-4">
-                    <Badge good={u.active}>{u.active ? "Active" : "Inactive"}</Badge>
+                    <Badge good={u.active}>{u.deletedAt ? 'Deleted' : u.active ? "Active" : "Inactive"}</Badge>
                   </td>
                   <td className="px-4 py-4 text-xs">
                     {new Date(u.createdAt).toLocaleDateString()}
@@ -354,6 +363,11 @@ export default function UserManagement() {
                     {u._count?.bookings || 0} bookings · {u._count?.badmintonEnrollments || 0} packages</td>
                   <td className="px-4 py-4">
                     <div className="flex gap-1">
+                      {u.deletedAt ? <Button
+                        variant="secondary"
+                        disabled={busy || u.email === `deleted-${u.id}@accounts.invalid`}
+                        onClick={() => remove(u)}
+                      >{u.email === `deleted-${u.id}@accounts.invalid` ? 'Email released' : 'Release email for fresh signup'}</Button> : <>
                       <button
                         title="View activity"
                         onClick={() => openView(u)}
@@ -383,6 +397,7 @@ export default function UserManagement() {
                         onClick={() => remove(u)}
                       >
                         <Trash2 size={14} /> Delete</Button>
+                      </>}
                     </div>
                   </td>
                 </tr>
@@ -586,7 +601,7 @@ export default function UserManagement() {
       </UserModal>}</AnimatePresence>
     <AnimatePresence>{deleteTarget &&
       <UserModal
-        title="Delete user account?"
+        title={deleteTarget.deletedAt ? 'Release email for fresh signup?' : 'Delete user account?'}
         onClose={() => {
           if (!busy) {
             setDeleteTarget(null);
@@ -595,7 +610,9 @@ export default function UserManagement() {
         }}
       >
         <div className="space-y-5">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">This removes <b>{deleteTarget.name}</b> from the Users list and disables their sign-in. Existing bookings, packages, and payment history are kept for records.</div>
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">{deleteTarget.deletedAt
+            ? <>Release <b>{deleteTarget.email}</b> so its owner can create a fresh member profile using a new sign-in identity. This account stays deleted, and its bookings, packages, and payments remain archived. Existing sign-in identities stay attached to the deleted account.</>
+            : <>This removes <b>{deleteTarget.name}</b> from the Users list and disables their sign-in. Existing bookings, packages, and payment history are kept for records.</>}</div>
           <label
             htmlFor="confirm-delete-user"
             className="block text-sm font-bold text-zawana-950"
@@ -632,7 +649,7 @@ export default function UserManagement() {
               onClick={() => void confirmDelete()}
             >
               <Trash2 size={15} />
-              {busy ? "Deleting…" : "Delete account"}
+              {busy ? 'Processing…' : deleteTarget.deletedAt ? 'Release email' : 'Delete account'}
             </Button>
           </div>
         </div>

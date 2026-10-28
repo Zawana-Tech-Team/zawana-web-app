@@ -12,6 +12,7 @@ import { createHybridAuth } from "../src/modules/auth/hybrid.service.js";
 import { createAuthRouter } from "../src/routes/auth.js";
 import { createAuthMiddleware } from "../src/middleware/auth.js";
 import { credentialHash } from "../src/services/authSession.js";
+import { releaseDeletedAccountEmail } from '../src/services/deletedAccount.js';
 import {
   requirePhone,
   requireFresh,
@@ -149,6 +150,32 @@ async function fixture(t: TestContext) {
   });
   return { db, identities, proofs, add, service, user, requests };
 }
+
+test('email release preserves deleted identity ownership and permits a separate fresh account', async t => {
+  const f = await fixture(t);
+  await assert.rejects(releaseDeletedAccountEmail(f.db, f.user.id, f.user.name), { statusCode: 409 });
+  await f.service.webSession('account:password');
+  await f.db.user.update({ where: { id: f.user.id }, data: { active: false, deletedAt: new Date() } });
+  await f.db.notification.create({ data: { userId: f.user.id, title: 'Historical record', body: 'Retained', type: 'info' } });
+  await assert.rejects(releaseDeletedAccountEmail(f.db, f.user.id, 'wrong name'), { statusCode: 400 });
+  assert.equal((await f.db.user.findUniqueOrThrow({ where: { id: f.user.id } })).email, f.user.email);
+  await releaseDeletedAccountEmail(f.db, f.user.id, f.user.name);
+  await releaseDeletedAccountEmail(f.db, f.user.id, f.user.name); // Safe to retry.
+  const archived = await f.db.user.findUniqueOrThrow({ where: { id: f.user.id } });
+  assert.equal(archived.active, false);
+  assert.ok(archived.deletedAt);
+  assert.equal(archived.firebaseUid, f.user.firebaseUid);
+  assert.equal(await f.db.notification.count({ where: { userId: f.user.id } }), 1);
+  assert.equal(await f.db.authSession.count({ where: { userId: f.user.id, revokedAt: null } }), 0);
+  const fresh = await f.db.user.create({ data: { name: 'Fresh member', email: f.user.email, firebaseUid: 'fresh-google', role: 'member', emailVerified: true } });
+  const token = f.add(claims('fresh-google', 'google.com', f.user.email));
+  const session = await f.service.webSession(token);
+  assert.equal(session.user.id, fresh.id);
+  assert.notEqual(session.user.id, f.user.id);
+  assert.equal(await f.db.notification.count({ where: { userId: fresh.id } }), 0);
+  assert.equal((await f.db.authIdentity.findUniqueOrThrow({ where: { kind_value: { kind: 'email', value: f.user.email } } })).userId, fresh.id);
+  await assert.rejects(f.service.webSession('account:password'), { code: 'ACCOUNT_UNAVAILABLE' });
+});
 
 test("phone proof requires fresh primary phone authentication and Myanmar E.164", () => {
   assert.throws(() => requirePhone(claims("a", "google.com")), {
