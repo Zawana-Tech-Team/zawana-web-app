@@ -200,7 +200,7 @@ export type BadmintonPackage = {
   availableUntil?: string | null;
   scheduleNotes?: string | null;
   courtRules?: string | null;
-  category?: { id: string; name: string } | null;
+  category?: { id: string; name: string; code?: string | null } | null;
 };
 
 export type GymPackage = {

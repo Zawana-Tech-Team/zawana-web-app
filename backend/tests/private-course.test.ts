@@ -525,6 +525,7 @@ test("badminton private courses: independent availability, concurrency, acceptan
       const pkg = await db.badmintonPackage.create({
         data: {
           title: "Badminton ten",
+          categoryId: (await db.badmintonPackageCategory.upsert({ where: { code: "SOCIAL" }, update: {}, create: { name: "Social", code: "SOCIAL" } })).id,
           sessions: 10,
           validity: 30,
           price: 100000,
@@ -540,8 +541,16 @@ test("badminton private courses: independent availability, concurrency, acceptan
       const enrollment = activated.value.enrollment;
       const qrStaff = await db.user.create({ data: { name: 'QR desk', email: 'qr-desk@test.local', role: 'badminton_fo' } });
       const qrSession = await sessions.issue(db, qrStaff, 'database_password', []);
-      const issued = await request('/check-in/qr', 'POST', {}, qrSession.accessToken);
+      const issued = await request('/check-in/qr', 'POST', { categoryCode: 'SOCIAL' }, qrSession.accessToken);
       assert.equal(issued.status, 201);
+      const secondActivation = await request(`/member/badminton-packages/${pkg.id}/purchase`, 'POST', {});
+      assert.equal(secondActivation.status, 201);
+      assert.notEqual(secondActivation.value.enrollment.id, enrollment.id);
+      assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).sessionsRemaining, 10);
+      const renewed = await request(`/badminton/enrollments/${enrollment.id}/renew`, 'POST', { packageId: pkg.id, paymentMethod: 'Cash' }, qrSession.accessToken);
+      assert.equal(renewed.status, 200);
+      assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).status, 'active');
+      assert.equal(await db.badmintonEnrollment.count({ where: { userId: user.id, status: 'active', categoryCode: 'SOCIAL' } }), 3);
       const qrToken = issued.value.token;
       assert.equal(
         (
@@ -583,6 +592,39 @@ test("badminton private courses: independent availability, concurrency, acceptan
       );
     },
   );
+  await t.test('verified package payment snapshots category and preserves existing active balances', async () => {
+    const category = await db.badmintonPackageCategory.create({ data: { name: 'Pathway', code: 'PATHWAY' } });
+    const pkg = await db.badmintonPackage.create({ data: { title: 'Paid pathway', categoryId: category.id, price: 100000, sessions: 12, validity: 30, description: '' } });
+    const before = await db.badmintonEnrollment.findMany({ where: { userId: user.id }, orderBy: { id: 'asc' } });
+    const purchase = await db.badmintonPackagePurchase.create({ data: { code: randomUUID(), userId: user.id, packageId: pkg.id, packageName: pkg.title, price: pkg.price, status: 'PENDING' } });
+    const attempt = await db.paymentAttempt.create({ data: { reference: randomUUID(), providerReference: randomUUID(), resourceType: 'badminton_package', resourceId: purchase.id, userId: user.id, amount: pkg.price, status: 'PENDING', expiresAt: new Date(Date.now() + 3600000) } });
+    const body = JSON.stringify({ reference: attempt.reference, providerReference: attempt.providerReference, amount: pkg.price, status: 'PAID' });
+    const notify = () => fetch(`${origin}/api/payments/kpay/webhook`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-kpay-signature': createHmac('sha256', 'private-course-test-secret').update(body).digest('hex') }, body });
+    assert.equal((await notify()).status, 200); assert.equal((await notify()).status, 200);
+    const enrollment = await db.badmintonEnrollment.findUniqueOrThrow({ where: { purchaseId: purchase.id } });
+    assert.equal(enrollment.categoryCode, 'PATHWAY'); assert.equal(enrollment.sessionsRemaining, 12);
+    assert.equal(await db.badmintonEnrollment.count({ where: { purchaseId: purchase.id } }), 1);
+    assert.deepEqual(await db.badmintonEnrollment.findMany({ where: { id: { in: before.map(e => e.id) } }, orderBy: { id: 'asc' } }), before);
+  });
+  await t.test('admin catalogue review classifies only unresolved history with an actor audit and no balance changes', async () => {
+    const admin = await db.user.create({ data: { name: 'Category reviewer', email: 'category-reviewer@test.local', role: 'admin' } });
+    const adminToken = (await sessions.issue(db, admin, 'database_password', [])).accessToken;
+    const category = await db.badmintonPackageCategory.findUniqueOrThrow({ where: { code: 'SOCIAL' } });
+    const pkg = await db.badmintonPackage.create({ data: { title: 'Legacy review', price: 100000, sessions: 10, validity: 30, description: '' } });
+    const enrollment = await db.badmintonEnrollment.create({ data: { studentId: user.id, userId: user.id, studentName: user.name, phone: '', packageId: pkg.id, packageName: pkg.title, sessionsTotal: 10, sessionsRemaining: 4, startDate: '2020-01-01', expiryDate: '2099-01-01' } });
+    const visit = await db.badmintonCheckIn.create({ data: { enrollmentId: enrollment.id, date: '2020-01-02', time: '09:00' } });
+    assert.equal((await request(`/packages/badminton/${pkg.id}/classify-legacy`, 'POST', { reviewed: true })).status, 403);
+    assert.equal((await request(`/packages/badminton/categories/${category.id}`, 'PATCH', { code: 'FOUNDATION' }, adminToken)).status, 400);
+    assert.equal((await request(`/packages/badminton/${pkg.id}`, 'PATCH', { categoryId: category.id }, adminToken)).status, 200);
+    assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).categoryCode, null);
+    const result = await request(`/packages/badminton/${pkg.id}/classify-legacy`, 'POST', { reviewed: true }, adminToken);
+    assert.equal(result.status, 200); assert.equal(result.value.enrollments, 1); assert.equal(result.value.checkIns, 1);
+    const after = await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } });
+    assert.equal(after.categoryCode, 'SOCIAL'); assert.equal(after.sessionsRemaining, 4);
+    assert.equal((await db.badmintonCheckIn.findUniqueOrThrow({ where: { id: visit.id } })).categoryCode, 'SOCIAL');
+    assert.equal(await db.attendanceModification.count({ where: { bookingId: `enrollment:${enrollment.id}`, actorId: admin.id } }), 1);
+    assert.equal((await request(`/packages/badminton/${pkg.id}/classify-legacy`, 'POST', { reviewed: true }, adminToken)).value.enrollments, 0);
+  });
   await t.test(
     "one coach cannot be reserved concurrently on different courts",
     async () => {

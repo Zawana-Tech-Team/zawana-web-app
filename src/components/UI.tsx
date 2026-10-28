@@ -1,3 +1,4 @@
+import './toast.css';
 import { AnimatePresence } from 'framer-motion';
 import { pageEntrance, motionTokens } from '../design/motion';
 import type { ReactNode } from 'react';
@@ -257,21 +258,17 @@ export function Empty({
 export function Toast({
   message,
   type = 'success',
-  onClose
+  onClose,
+  placement = 'floating'
 }: {
   message: string;
   type?: 'success' | 'error' | 'info';
-  onClose?: () => void
+  onClose?: () => void;
+  placement?: 'floating' | 'inline';
 }) {
   const reduceMotion = useReducedMotion();
   const { t } = useLanguage();
   const Icon = type === 'success' ? CheckCircle2 : type === 'error' ? AlertCircle : Info;
-  const tone =
-    type === 'success'
-      ? 'bg-emerald-50 text-emerald-800'
-      : type === 'error'
-        ? 'bg-red-50 text-red-800'
-        : 'bg-blue-50 text-blue-800';
 
   return (
     <motion.div
@@ -281,27 +278,11 @@ export function Toast({
       transition={{ duration: motionTokens.popover, ease: motionTokens.ease }}
       role={type === 'error' ? 'alert' : 'status'}
       aria-live={type === 'error' ? 'assertive' : 'polite'}
-      className="fixed bottom-4 right-4 z-[120] w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-zawana-border bg-white shadow-[0_18px_50px_rgba(23,25,28,.16)] sm:bottom-6 sm:right-6"
+      className={`z-toast z-toast--${type} z-toast--${placement}`}
     >
-      <div className="flex items-center gap-3 p-4">
-        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>
-          <Icon size={19} aria-hidden="true" />
-        </span>
-        <p className="flex-1 text-sm font-medium leading-5 text-zawana-950">{t(message)}</p>
-        {onClose &&
-          <button
-            type="button"
-            aria-label="Dismiss notification"
-            onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-lg text-zawana-500 transition hover:bg-zawana-800"
-          >
-            <X size={17} />
-          </button>}
-      </div>
-      <div
-        aria-hidden="true"
-        className={`h-1 ${type === 'success' ? 'bg-emerald-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`}
-      />
+      <span className="z-toast__icon"><Icon size={17} strokeWidth={1.6} aria-hidden="true" /></span>
+      <p className="z-toast__message">{t(message)}</p>
+      {onClose && <button type="button" aria-label="Dismiss notification" onClick={onClose} className="z-toast__close"><X size={15} strokeWidth={1.5} /></button>}
     </motion.div>
   );
 }

@@ -1,0 +1,12 @@
+.z-toast { display: flex; align-items: flex-start; gap: 11px; padding: 15px 16px; border: 1px solid #dfe7d9; border-radius: 13px; background: #fff; color: #304a36; box-shadow: 0 8px 30px #243b2a0a; font-size: 12px; line-height: 1.65; }
+.z-toast--floating { position: fixed; right: 24px; bottom: max(24px, env(safe-area-inset-bottom)); z-index: 120; width: min(390px, calc(100vw - 32px)); box-shadow: 0 12px 50px #243b2a14; }
+.z-toast--inline { width: 100%; background: #f7faf4; }
+.z-toast__icon { display: grid; place-items: center; flex-shrink: 0; width: 25px; height: 25px; border: 1px solid #e0e9d9; border-radius: 50%; background: #f2f7ec; color: #5a7b49; }
+.z-toast__message { flex: 1; min-width: 0; padding-top: 2px; margin: 0; overflow-wrap: anywhere; color: #304a36; font-size: 12px; font-weight: 400; line-height: 1.65; }
+.z-toast__close { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; margin: -1px -3px 0 0; border-radius: 50%; background: transparent; color: #6b7964; transition: background .18s; }
+.z-toast__close:hover { background: #edf2e7; }
+.z-toast--error { border-color: #eedbd3; background: #fffbf9; }
+.z-toast--error .z-toast__icon { color: #a26350; background: #fbf0eb; border-color: #f0ded4; }
+.z-toast--error .z-toast__message { color: #815443; }
+.z-toast--info .z-toast__icon { color: #66758a; background: #f0f4f8; border-color: #dfe6ee; }
+@media (max-width: 600px) { .z-toast { padding: 12px 13px; gap: 9px; border-radius: 11px; } .z-toast--floating { right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); } }

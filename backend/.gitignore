@@ -4,3 +4,6 @@ prisma/*.db
 prisma/*.db-journal
 dist
 prisma/*.bak
+
+# Attendance migration recovery backups may contain member data.
+prisma/*.db.attendance-recovery-*.bak

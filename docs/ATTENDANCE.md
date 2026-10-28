@@ -29,3 +29,9 @@ Do not use the SQLite schema for PostgreSQL. No production migration was applied
 ## Desktop 3D
 
 The landing page always uses the scroll-driven cinematic court and shuttlecock. It no longer switches to still images for device preferences or viewport size. Low-power quality settings remain separate from camera framing. Renderer failures use a premium photographic hero with booking, discovery and an optional 3D retry. Windows hardware behavior still needs confirmation on a physical device.
+
+## Category-based package attendance
+
+Badminton package rows now show the immutable Foundation/Social/Pathway category, exact package and sessions deducted. Details/history include QR/staff/legacy source; filters and admin CSV include category. Member and FO package screens display entitlements individually. A shared member/category/Myanmar-date guard prevents a second deduction across both QR and manual attendance; different categories may each be used that day. Unclassified historic visits remain visible and require explicit review rather than name-based guesses. Existing private-course and gym scope/consumption rules remain intact.
+
+Read [the category migration and rollout guide](badminton-category-checkin.md) before releasing the category-aware API/UI. New forward migration: `20261028090000_badminton_category_checkin` in both database chains.

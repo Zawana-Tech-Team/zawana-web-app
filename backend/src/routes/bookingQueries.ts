@@ -66,6 +66,7 @@ export function registerBookingQueryRoutes({
         : req.user!.role === "coach"
           ? { coachId: coach?.id || "__no_coach__" }
           : { userId: req.user!.id };
+      if (req.user!.role === 'badminton_fo') filters.AND = [{ kind: { in: ['court', 'private_course'] } }];
       const q = String(req.query.q || "").trim();
       if (q)
         filters.OR = [
