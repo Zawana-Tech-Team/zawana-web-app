@@ -72,7 +72,17 @@ const firebaseMessage = (error: any) => {
     'auth/email-already-in-use':
       'An account with this email already exists. Sign in or reset your password.',
     'auth/operation-not-allowed':
-      'Email and password sign-in is disabled for this Firebase project. Enable the Email/Password provider in Firebase Authentication settings.',
+      'The selected sign-in provider is disabled for this Firebase project. Enable it under Firebase Authentication → Sign-in method.',
+    'auth/user-disabled':
+      'This account has been disabled. Contact an administrator to restore access.',
+    'auth/internal-error':
+      'Firebase encountered an internal sign-in error (auth/internal-error). Try again. If it persists, share the failed Identity Toolkit request’s response error code with an administrator.',
+    'auth/invalid-login-credentials':
+      'The email or password was not accepted. Check your details or use Forgot password.',
+    'auth/invalid-oauth-client-id':
+      'Google sign-in has an invalid OAuth client configuration. Ask an administrator to check the Google provider’s Web SDK configuration in Firebase Authentication.',
+    'auth/invalid-idp-response':
+      'Firebase could not accept the sign-in provider’s response. Retry sign-in; if it persists, ask an administrator to check the provider’s OAuth configuration.',
     'auth/configuration-not-found':
       'Firebase Authentication is not configured for this project yet. Enable Email/Password under Firebase Console → Authentication → Sign-in method.',
     'auth/invalid-api-key':
@@ -98,8 +108,11 @@ const firebaseMessage = (error: any) => {
   if (code === 'auth/invalid-api-key' || code.includes('api-key-not-valid'))
     return 'The Firebase web API key is invalid. Copy the web app configuration from the same Firebase project and restart the frontend.';
   const message = String(error?.message || '');
-  if (message.startsWith('Firebase: Error'))
-    return 'Firebase Authentication could not complete the request. Check that Authentication and the selected sign-in provider are enabled for this project.';
+  if (code.startsWith('auth/') || message.startsWith('Firebase: Error')) {
+    // Keep the diagnostic code without exposing provider responses or account data.
+    const diagnosticCode = /^auth\/[a-z0-9.-]+$/.test(code) ? ` (${code})` : '';
+    return `Firebase could not complete sign-in${diagnosticCode}. Try again. If it persists, share this code and the failed Identity Toolkit request’s response error code with an administrator.`;
+  }
   return message || 'Authentication could not be completed. Please try again.';
 };
 
