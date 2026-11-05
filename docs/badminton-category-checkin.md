@@ -1,5 +1,7 @@
 # Badminton category check-in
 
+> The current [shared category QR contract](category-attendance-qr.md) supersedes historical QR descriptions/results below and the preceding member-specific implementation. Package security and notification receipts remain as documented in the [upgrade report](attendance-qr-security-upgrade.md).
+
 ## Architecture inspection (before implementation)
 
 The running API is `backend/src/server.ts`; `routes/packages.ts` and `routes/memberships.ts` belong to the older app and are not mounted by the running server. Membership routes handle gym separately. Badminton activation has four paths: staff sale, member immediate activation (checkout currently disabled by the application), staff renewal, and verified payment completion. Each creates an enrollment, but renewal currently retires its predecessor, and the member UI selects a single active enrollment. The membership label on User is descriptive and must never select an entitlement.

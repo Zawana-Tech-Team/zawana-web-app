@@ -342,6 +342,21 @@ test("staff private course booking, finance and cash custody", async (t) => {
       );
     },
   );
+  await t.test("mobile booking reads enforce role scope and omit account secrets", async () => {
+    assert.equal((await request(`${base}/bookings`)).status, 403);
+    for (const token of [adminToken, foToken, coachSession.accessToken]) {
+      const list = await request(`${base}/bookings`, "GET", undefined, token);
+      assert.equal(list.status, 200);
+      assert(list.value.some((b: any) => b.id === foBooking.id));
+      const detail = await request(`${base}/bookings/${foBooking.id}`, "GET", undefined, token);
+      assert.equal(detail.status, 200);
+      assert.equal(detail.value.user.name, user.name);
+      assert.equal('passwordHash' in detail.value.user, false);
+      assert.equal('firebaseUid' in detail.value.user, false);
+    }
+    assert.deepEqual((await request(`${base}/bookings`, "GET", undefined, otherCoachToken)).value, []);
+    assert.equal((await request(`${base}/bookings/${foBooking.id}`, "GET", undefined, otherCoachToken)).status, 404);
+  });
   await t.test("coach ownership and own cash payment", async () => {
     assert.equal(
       (

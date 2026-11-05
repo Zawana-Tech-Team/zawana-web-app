@@ -1,3 +1,4 @@
+import { startPayment } from '../services/paymentFlow';
 import { BadmintonCategoryField, BadmintonCategorySettings, categoryLabel } from '../components/BadmintonCategoryField';
 import { courtReschedulePath } from '../types/courtChanges';
 import { CourtChangeDialog } from "../components/CourtChangeDialog";
@@ -2133,29 +2134,34 @@ function PackageDelete({
 }) {
   const o = useOperations();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const actionLabel = kind === 'badminton' ? 'Deactivate' : 'Archive';
   const remove = async () => {
+    if (busy) return;
+    setBusy(true);
     try {
       if (kind === 'badminton') await o.deleteBadmintonPackage(id);
       else await o.deleteGymPackage(id);
-      window.dispatchEvent(new CustomEvent('zawana-toast', { detail: `${name} deleted.` }));
+      window.dispatchEvent(new CustomEvent('zawana-toast', { detail: `${name} ${kind === 'badminton' ? 'deactivated' : 'archived'}.` }));
       setOpen(false)
     } catch (e: any) {
       window.dispatchEvent(
-        new CustomEvent('zawana-toast', { detail: e.message || 'Delete failed.' })
+        new CustomEvent('zawana-toast', { detail: e.message || 'Package update failed.' })
       )
-    }
+    } finally { setBusy(false); }
   };
   return <>
     {
       <button
         className="rounded-xl p-2 text-red-600 hover:bg-red-50"
         onClick={() => setOpen(true)}
-        title="Delete"
+        title={`${actionLabel} ${name}`}
+        aria-label={`${actionLabel} ${name}`}
       >
         <Trash2 size={15} />
       </button>
     }
-    <AnimatePresence>{open && <ConfirmDelete name={name} onCancel={() => setOpen(false)} onConfirm={remove} />}</AnimatePresence>
+    <AnimatePresence>{open && <OpsModal title={`${actionLabel} package`} subtitle={name} onClose={() => { if (!busy) setOpen(false); }}><p className="text-sm text-zawana-500">This package will stop appearing in active sales. Existing purchases and attendance stay available.</p><div className="mt-6 flex justify-end gap-3"><Button variant="secondary" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button><Button disabled={busy} loading={busy} onClick={remove}>{actionLabel} package</Button></div></OpsModal>}</AnimatePresence>
   </>
 }
 
@@ -6133,14 +6139,7 @@ function NotificationCenter({ role }: { role: UserRole }) {
     setBusy(item.id);
     setError('');
     try {
-      const result = await post<any>(`/member/private-courses/${item.entityId}/pay`, {});
-      await patch(`/notifications/${item.id}/read`, {}).catch(() => {});
-      setItems(rows => rows.filter(n => n.id !== item.id));
-      window.dispatchEvent(
-        new CustomEvent('zawana-toast', {
-          detail: result.message || 'Booking confirmed. Payment is due at the venue.'
-        })
-      )
+      await startPayment(`/member/private-courses/${item.entityId}/pay`);
     } catch (e: any) {
       setError(e.message || 'Could not confirm this booking.')
     } finally {
@@ -6223,7 +6222,7 @@ function NotificationCenter({ role }: { role: UserRole }) {
                 {busy === item.id ? 'Saving…' : 'Cancel booking'}
               </Button>
               <Button disabled={!!busy} onClick={() => void confirmBooking(item)}>
-                {busy === item.id ? 'Confirming…' : 'Pay now'}
+                {busy === item.id ? 'Starting payment…' : 'Pay now'}
               </Button>
             </> :
             item.link &&

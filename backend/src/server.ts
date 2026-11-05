@@ -1,3 +1,7 @@
+import { requestContextMiddleware } from "./utils/requestContext.js";
+import { notifyExpiredBadmintonPackages } from "./services/attendanceNotifications.js";
+import { createNotificationRouter } from "./routes/notifications.js";
+import { createPackageSecurity, recordPackageMutation } from "./services/packageSecurity.js";
 import { createPrivateCourseFinanceRouter } from './routes/privateCourseFinance.js';
 import { categoryCodeInput, packageCategory, checkInTransaction, classifyLegacyPackage } from "./services/badmintonCategory.js";
 import "dotenv/config";
@@ -39,7 +43,7 @@ import { range as courseTimeRange } from "./services/courtPolicy.js";
 import { isDateKey } from "./utils/dateKeys.js";
 import { asyncRoute } from "./utils/asyncRoute.js";
 import { isStoredImageUrl } from "./services/mediaStorage.js";
-import { firebaseAdminAuth } from "./services/firebaseAdmin.js";
+import { firebaseAdminAuth, firebaseConfiguration } from "./services/firebaseAdmin.js";
 import { contentInput } from "./services/contentPolicy.js";
 import { apiFailureDiagnostic, isBookingDatabaseConflict } from "./utils/apiDiagnostics.js";
 import { createPublicStoriesRoutes } from "./routes/publicStories.js";
@@ -51,6 +55,11 @@ import { createAttendanceRouter } from "./routes/attendance.js";
 
 const app = express();
 const PORT = env.port;
+if (process.env.TRUSTED_PROXY_CIDRS) {
+  const proxies = process.env.TRUSTED_PROXY_CIDRS.split(',').map(value => value.trim()).filter(Boolean);
+  if (!proxies.length || proxies.some(value => /^(true|false|\d+)$/i.test(value))) throw new Error('TRUSTED_PROXY_CIDRS must contain explicit trusted proxy addresses or CIDRs.');
+  app.set('trust proxy', proxies);
+}
 const sqliteDatabase = env.databaseUrl.startsWith("file:");
 const portableSql = (sql: string) => {
   if (sqliteDatabase) return sql;
@@ -71,7 +80,8 @@ const coachUploadPath = fileURLToPath(new URL("../uploads/coaches/", import.meta
 const courseUploadPath = fileURLToPath(new URL("../uploads/courses/", import.meta.url));
 const profileUploadPath = fileURLToPath(new URL("../uploads/profiles/", import.meta.url));
 
-app.use(cors({ origin: env.clientUrls, credentials: true }));
+app.use(cors({ origin: env.clientUrls, credentials: true, exposedHeaders: ["X-Request-Id", "Retry-After"] }));
+app.use(requestContextMiddleware);
 app.use(
   express.json({
     limit: "8mb",
@@ -80,7 +90,7 @@ app.use(
     }
   })
 );
-app.use("/api/staff/private-courses", createPrivateCourseFinanceRouter(prisma));
+app.use("/api/staff/private-courses", createPrivateCourseFinanceRouter(prisma, expirePrivateCourseReservations));
 app.use("/uploads/coaches", express.static(coachUploadPath));
 app.use("/uploads/courses", express.static(courseUploadPath));
 app.use("/uploads/profiles", express.static(profileUploadPath));
@@ -91,6 +101,9 @@ app.use(
 
 // Store/POS and Cafe menu routes. These must be registered on the actual server entrypoint
 // (src/server.ts); src/app.ts is not used by the dev/start scripts.
+const packageSecurity = createPackageSecurity(prisma);
+app.use("/api/package-security", packageSecurity.router);
+app.use("/api", packageSecurity.protect);
 app.use("/api/store", storeRoutes);
 app.use("/api/menu", menuRoutes);
 app.use("/api/auth", authRoutes);
@@ -2625,23 +2638,23 @@ app.post(
     res
       .status(201)
       .json(
-        await prisma.badmintonPackageCategory.create({ data: { name, code: categoryCode, createdBy: req.user!.id } })
+        await checkInTransaction(prisma, async tx => {
+          const row = await tx.badmintonPackageCategory.create({ data: { name, code: categoryCode, createdBy: req.user!.id } });
+          await recordPackageMutation(tx, req.user!.id, 'badminton', null, row, res.locals.packageAuditId);
+          return row;
+        })
       )
   })
 );
-app.patch(
-  "/api/packages/badminton/categories/:id",
-  auth,
-  roles("admin"),
-  asyncRoute(async (req, res) =>
-    res.json(
-      await prisma.badmintonPackageCategory.update({
-        where: { id: req.params.id },
-        data: z.object({ name: z.string().trim().min(1).optional(), active: z.boolean().optional() }).strict().parse(req.body)
-      })
-    )
-  )
-);
+app.patch('/api/packages/badminton/categories/:id', auth, roles('admin'), asyncRoute(async (req, res) => {
+  const data = z.object({ name: z.string().trim().min(1).optional(), active: z.boolean().optional() }).strict().parse(req.body);
+  res.json(await checkInTransaction(prisma, async tx => {
+    const before = await tx.badmintonPackageCategory.findUniqueOrThrow({ where: { id: String(req.params.id) } });
+    const row = await tx.badmintonPackageCategory.update({ where: { id: before.id }, data });
+    await recordPackageMutation(tx, req.user!.id, 'badminton', before, row, res.locals.packageAuditId);
+    return row;
+  }));
+}));
 const badmintonPackageInput = z.object({
   title: z.string().trim().min(2).max(120),
   price: z.coerce.number().int().nonnegative(),
@@ -2661,24 +2674,43 @@ app.post('/api/packages/badminton', auth, roles('admin', 'badminton_fo'), asyncR
   const data = badmintonPackageInput.parse(req.body);
   const category = await prisma.badmintonPackageCategory.findFirst({ where: { id: data.categoryId, active: true, code: { in: ['FOUNDATION', 'SOCIAL', 'PATHWAY'] } } });
   if (!category) return res.status(400).json({ code: 'CATEGORY_REQUIRED', message: 'Choose Foundation, Social, or Pathway.' });
-  res.status(201).json(await prisma.badmintonPackage.create({ data }));
+  res.status(201).json(await checkInTransaction(prisma, async tx => {
+    const row = await tx.badmintonPackage.create({ data });
+    await recordPackageMutation(tx, req.user!.id, 'badminton', null, row, res.locals.packageAuditId);
+    return row;
+  }));
 }));
 app.patch('/api/packages/badminton/:id', auth, roles('admin', 'badminton_fo'), asyncRoute(async (req, res) => {
   const data = badmintonPackageInput.partial().parse(req.body);
   if (data.categoryId && !await prisma.badmintonPackageCategory.findFirst({ where: { id: data.categoryId, active: true, code: { in: ['FOUNDATION', 'SOCIAL', 'PATHWAY'] } } }))
     return res.status(400).json({ code: 'CATEGORY_REQUIRED', message: 'Choose Foundation, Social, or Pathway.' });
-  res.json(await prisma.badmintonPackage.update({ where: { id: req.params.id }, data }));
+  res.json(await checkInTransaction(prisma, async tx => {
+    await tx.$executeRaw`UPDATE "BadmintonPackage" SET "status"="status" WHERE "id"=${String(req.params.id)}`;
+    const before = await tx.badmintonPackage.findUniqueOrThrow({ where: { id: String(req.params.id) } });
+    const row = await tx.badmintonPackage.update({ where: { id: String(req.params.id) }, data });
+    await recordPackageMutation(tx, req.user!.id, 'badminton', before, row, res.locals.packageAuditId);
+    return row;
+  }));
 }));
 app.post('/api/packages/badminton/:id/classify-legacy', auth, roles('admin'), asyncRoute(async (req, res) => {
   z.object({ reviewed: z.literal(true) }).strict().parse(req.body);
-  res.json(await checkInTransaction(prisma, tx => classifyLegacyPackage(tx, String(req.params.id), (req as AuthRequest).user!.id)));
+  res.json(await checkInTransaction(prisma, async tx => {
+    const before = await tx.badmintonPackage.findUniqueOrThrow({ where: { id: String(req.params.id) } });
+    const result = await classifyLegacyPackage(tx, before.id, req.user!.id);
+    await recordPackageMutation(tx, req.user!.id, 'badminton', before, before, res.locals.packageAuditId);
+    return result;
+  }));
 }));
 app.delete(
   "/api/packages/badminton/:id",
   auth,
   roles("admin", "badminton_fo"),
   asyncRoute(async (req, res) => {
-    await prisma.badmintonPackage.delete({ where: { id: req.params.id } });
+    await checkInTransaction(prisma, async tx => {
+      const before = await tx.badmintonPackage.findUniqueOrThrow({ where: { id: String(req.params.id) } });
+      const row = await tx.badmintonPackage.update({ where: { id: before.id }, data: { status: 'inactive' } });
+      await recordPackageMutation(tx, req.user!.id, 'badminton', before, row, res.locals.packageAuditId);
+    });
     res.status(204).end()
   })
 );
@@ -4253,6 +4285,7 @@ app.post(
   auth,
   roles("coach"),
   asyncRoute(async (req: AuthRequest, res) => {
+    await expirePrivateCourseReservations();
     const body = z.object({ decision: z.enum(["accept", "decline"]) }).parse(req.body);
     const coach = await prisma.coach.findUnique({
       where: { userId: req.user!.id },
@@ -4957,46 +4990,8 @@ app.post(
   })
 );
 
-// Notifications
-app.get(
-  "/api/notifications",
-  auth,
-  asyncRoute(async (req: AuthRequest, res) => {
-    const history = req.query.history === "1";
-    const list = await prisma.notification.findMany({
-      where: {
-        ...(history ? {} : { activeInInbox: true }),
-        OR: [
-          { userId: req.user!.id },
-          { userId: null, audience: "all" },
-          { userId: null, audience: req.user!.role }
-        ]
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100
-    });
-    res.json(list);
-  })
-);
-app.patch(
-  "/api/notifications/:id/read",
-  auth,
-  asyncRoute(async (req: AuthRequest, res) => {
-    const item = await prisma.notification.findUnique({ where: { id: String(req.params.id) } });
-    if (!item) return res.status(404).json({ message: "Notification not found" });
-    if (
-      item.userId !== req.user!.id &&
-      !(item.userId === null && (item.audience === "all" || item.audience === req.user!.role))
-    )
-      return res.status(403).json({ message: "Not allowed" });
-    res.json(
-      await prisma.notification.update({
-        where: { id: item.id },
-        data: { read: true, activeInInbox: false }
-      })
-    );
-  })
-);
+// Notifications use independently authorized recipient receipts.
+app.use("/api/notifications", createNotificationRouter());
 
 // Analytics
 app.get(
@@ -5032,7 +5027,7 @@ app.get(
 
 app.use((_req, res) => res.status(404).json({ message: "Route not found" }));
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  const requestId = crypto.randomUUID();
+  const requestId = res.locals.requestId || crypto.randomUUID();
   res.setHeader("X-Request-Id", requestId);
   const diagnostic = apiFailureDiagnostic(err, {
     requestId, method: req.method,
@@ -5064,6 +5059,7 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     return res
       .status(409)
       .json({ code:"BOOKING_BUSY", message: "Another booking is being confirmed. Check the reservation status and retry with the same request." });
+  if (err?.retryable && err?.statusCode === 503) res.setHeader("Retry-After", "2");
   if (err?.statusCode === 429) res.setHeader("Retry-After", "900");
   if (err?.statusCode)
     return res
@@ -5071,7 +5067,9 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       .json({
         message: err.message || "Request conflict",
         ...(err.conflicts ? { conflicts: err.conflicts } : {}),
-        ...(err.code ? { code: err.code } : {})
+        ...(err.code ? { code: err.code } : {}),
+        requestId,
+        ...(typeof err.retryable === "boolean" ? { retryable: err.retryable } : {})
       });
   res.status(500).json({ message: "Internal server error", requestId });
 });
@@ -5097,6 +5095,7 @@ async function prepareDatabase() {
 const prepareLegacySqlite = prepareDatabase();
 prepareLegacySqlite
   .then(async () => {
+    if (process.env.NODE_ENV === "production" && !env.databaseAuthEnabled) firebaseConfiguration();
     await expirePrivateCourseReservations();
     app.listen(PORT, () => {
       console.log(`Zawana API running on http://localhost:${PORT}`);
@@ -5108,6 +5107,10 @@ prepareLegacySqlite
         60_000
       );
       expirySweep.unref();
+      const notifyExpiry = () => void notifyExpiredBadmintonPackages(prisma).catch(() => console.error('Package expiry notifications failed'));
+      notifyExpiry();
+      const packageExpirySweep = setInterval(notifyExpiry, 60_000);
+      packageExpirySweep.unref();
     });
   })
   .catch((error)=> {

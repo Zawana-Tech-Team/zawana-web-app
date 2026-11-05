@@ -1,3 +1,4 @@
+import { PackageReauthentication } from './components/PackageReauthentication';
 import { PageSkeleton } from './components/UI';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
@@ -119,6 +120,14 @@ function Guard({ role, children }: { role: UserRole; children: ReactNode }) {
   return <RoleLayout role={role as Exclude<UserRole, 'member'>}>{children}</RoleLayout>;
 }
 
+function PaymentRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <RouteLoading />;
+  if (!user) return <Navigate to="/login" replace />;
+  // The API enforces attempt ownership and authorized front-office access.
+  return <Guard role={user.role}><PaymentStatus home={homeByRole[user.role]} /></Guard>;
+}
+
 function AccountSettings() {
   const { user, loading } = useAuth();
   if (loading) return <div className="p-8 text-sm text-zawana-500">Loading account…</div>;
@@ -145,7 +154,7 @@ const operational = (role: UserRole, path: string) =>
 export default function App() {
   return <Suspense fallback={<RouteLoading />}>
     <ScrollToTop />
-    <Routes>
+    <><PackageReauthentication /><Routes>
       <Route path="/admin/course-finance" element={<Guard role="admin"><StaffPrivateCourses /></Guard>} />
       <Route path="/coach/course-finance" element={<Guard role="coach"><StaffPrivateCourses /></Guard>} />
       <Route path="/badminton-fo/course-finance" element={<Guard role="badminton_fo"><StaffPrivateCourses /></Guard>} />
@@ -262,9 +271,7 @@ export default function App() {
       <Route
         path="/payment/:id"
         element={
-          <Guard role="member">
-            <PaymentStatus />
-          </Guard>
+          <PaymentRoute />
         }
       />
       <Route
@@ -571,6 +578,6 @@ export default function App() {
       />
 
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    </Routes></>
   </Suspense>;
 }

@@ -12,7 +12,7 @@ import { createAuthMiddleware } from '../src/middleware/auth.js';
 import { createSessionService } from '../src/services/authSession.js';
 import { today } from '../src/services/courtPolicy.js';
 
-test('attendance calendar scopes roles and persists idempotent course check-ins', async () => {
+test('attendance shares coach and front-office reads while preserving member scope and assigned-course writes', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'zawana-attendance-'));
   const file = join(dir, 'qa.db');
   const sqlite = new DatabaseSync(file);
@@ -50,8 +50,17 @@ test('attendance calendar scopes roles and persists idempotent course check-ins'
     assert.equal((await request(null, month)).status, 401);
     assert.equal((await request(denied, month)).status, 403);
     assert.equal((await request(admin, '?month=2026-13')).status, 400);
-    assert.equal((await (await request(coachUser, month)).json()).records.length, 1);
-    assert.equal((await (await request(otherCoach, month)).json()).records.length, 0);
+    const frontOfficeRecords = (await (await request(fo, month)).json()).records;
+    const coachRecords = (await (await request(coachUser, month)).json()).records;
+    const readData = (rows: any[]) => rows.map(({ canCheckIn: _canCheckIn, ...row }) => row);
+    assert.deepEqual(readData(coachRecords), readData(frontOfficeRecords));
+    assert.equal(coachRecords.length, 3);
+    assert.equal(coachRecords.find((row: any) => row.id === 'assigned').canCheckIn, true);
+    assert.equal(coachRecords.find((row: any) => row.id === 'other-member').canCheckIn, false);
+    assert.deepEqual((await (await request(coachUser, month + '&packageId=' + pkg.id)).json()).records.map((row: any) => row.kind), ['package']);
+    assert.equal((await request(coachUser, '/courses/other-member/check-in', 'POST')).status, 404);
+    assert.equal((await request(coachUser, '/courses/other-member/mark', 'POST', { status: 'present' })).status, 404);
+    assert.equal((await (await request(otherCoach, month)).json()).records.length, 3);
     assert.equal((await (await request(member, month)).json()).records.length, 2);
     assert.equal((await (await request(fo, month)).json()).records.length, 3);
     assert.equal((await request(member, '/courses/assigned/check-in', 'POST')).status, 403);
@@ -65,16 +74,21 @@ test('attendance calendar scopes roles and persists idempotent course check-ins'
     const record = (await (await request(member, month)).json()).records.find((r: any) => r.id === 'assigned');
     assert.equal(record.status, 'present'); assert.equal(record.recordedBy, coachUser.name); assert.ok(record.checkedInAt);
 
-    // New APIs preserve the same assignment boundary for profile, history, and corrections.
-    assert.equal((await request(otherCoach, '/course/assigned/detail')).status, 404);
-    assert.equal((await request(coachUser, `/package/${(await db.badmintonCheckIn.findFirstOrThrow()).id}/detail`)).status, 404);
+    // Coaches share front-office details/history but cannot correct recorded attendance.
+    assert.equal((await request(otherCoach, '/course/assigned/detail')).status, 200);
+    const packageDetailPath = `/package/${(await db.badmintonCheckIn.findFirstOrThrow()).id}/detail`;
+    const coachPackageDetail = await request(coachUser, packageDetailPath);
+    assert.equal(coachPackageDetail.status, 200);
+    assert.deepEqual(await coachPackageDetail.json(), await (await request(fo, packageDetailPath)).json());
+    assert.equal((await request(coachUser, `/packages/${(await db.badmintonCheckIn.findFirstOrThrow()).id}/mark`, 'POST', { status: 'late', reason: 'Forbidden correction' })).status, 403);
     assert.equal((await request(fo, '/courses/assigned/mark', 'POST', { status: 'late', reason: 'Correction by FO' })).status, 403);
     assert.equal((await request(admin, '/courses/assigned/mark', 'POST', { status: 'late' })).status, 400);
     assert.equal((await request(admin, '/courses/assigned/mark', 'POST', { status: 'late', notes: 'Footwork improved', reason: 'Arrival time corrected' })).status, 200);
     assert.equal(await db.bookingAttendance.count({ where: { bookingId: 'assigned' } }), 1);
     assert.equal(await db.attendanceModification.count({ where: { bookingId: 'assigned' } }), 1);
     const assignedDetail = await (await request(coachUser, '/course/assigned/detail')).json();
-    assert.equal(assignedDetail.history.some((r: any) => r.kind === 'package'), false);
+    assert.equal(assignedDetail.history.some((r: any) => r.kind === 'package'), true);
+    assert.deepEqual(assignedDetail.summary, (await (await request(fo, '/course/assigned/detail')).json()).summary);
     assert.deepEqual(assignedDetail.modifications, []);
     assert.equal((await request(fo, month + '&export=csv')).status, 403);
     const exported = await request(admin, month + '&status=late&export=csv');

@@ -1,12 +1,32 @@
-import { writeFileSync } from 'node:fs';
+import bcrypt from 'bcryptjs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { PrismaClient } from '@prisma/client';
-import { createSessionService } from '../src/services/authSession.js';
+import { createSessionService, credentialHash } from '../src/services/authSession.js';
 import { createCourtBooking } from '../src/services/courtBooking.js';
 import { today } from '../src/services/courtPolicy.js';
 if (!process.env.DATABASE_URL?.includes('zawana-attendance-browser-') || !process.env.ATTENDANCE_QA_FIXTURE_PATH) throw new Error('Isolated attendance database required.');
 const db = new PrismaClient();
 try {
+  if (process.argv.includes('--reset-profile-rate')) {
+    const bucket = Math.floor(Date.now() / 900000);
+    await db.authAbuseCounter.deleteMany({ where: { key: { in: ['127.0.0.1', '::ffff:127.0.0.1'].map(ip => credentialHash(`ip:/me:${ip}:${bucket}`)) } } });
+  } else if (process.argv.includes('--notification-qa')) {
+    const fo = await db.user.findUniqueOrThrow({ where: { email: 'qa3@attendance.test' } });
+    const member = await db.user.findUniqueOrThrow({ where: { email: 'qa2@attendance.test' } });
+    await db.notification.updateMany({ data: { activeInInbox: false } });
+    const top = await db.notification.create({ data: { userId: fo.id, title: 'Viewed notification', body: 'This visible update clears after you close the panel.' } });
+    for (let i = 0; i < 24; i++) await db.notification.create({ data: { userId: fo.id, title: `Unread update ${i}`, body: 'An update below the visible part of the notification list stays unread.', createdAt: new Date(Date.now() - (i + 1) * 1000) } });
+    const unseen = await db.notification.create({ data: { userId: fo.id, title: 'Unseen notification', body: 'Keep this unread until it is viewed.', createdAt: new Date(Date.now() - 30000) } });
+    await db.notification.create({ data: { userId: fo.id, title: 'Expired notification', body: 'Never show in the active inbox.', createdAt: new Date(Date.now() - 8 * 86400000) } });
+    const booking = await db.booking.upsert({ where: { code: 'NOTIFICATION-QA' }, update: { status: 'confirmed' }, create: { code: 'NOTIFICATION-QA', userId: member.id, kind: 'court', title: 'Notification task', date: '2099-01-01', time: '10:00 — 11:00', location: 'Court', price: 100, status: 'confirmed' } });
+    const task = await db.notification.create({ data: { userId: fo.id, title: 'Pending notification task', body: 'Remove when the booking is completed.', entityType: 'booking', entityId: booking.id } });
+    const previous = JSON.parse(readFileSync(process.env.ATTENDANCE_QA_FIXTURE_PATH, 'utf8'));
+    writeFileSync(process.env.ATTENDANCE_QA_FIXTURE_PATH, JSON.stringify({ ...previous, notificationQa: { topId: top.id, unseenId: unseen.id, taskId: task.id } }));
+  } else if (process.argv.includes('--notification-done')) {
+    await db.booking.update({ where: { code: 'NOTIFICATION-QA' }, data: { status: 'completed' } });
+  } else {
   const users = await Promise.all(['admin', 'coach', 'member', 'badminton_fo'].map((role, i) => db.user.create({ data: { name: ['Attendance Admin', 'Coach May', 'Aye Student', 'Front Desk'][i], email: `qa${i}@attendance.test`, role: role as any } })));
+  await db.user.update({ where: { id: users[0].id }, data: { passwordHash: await bcrypt.hash('attendance-package-password', 4) } });
   const coach = await db.coach.create({ data: { userId: users[1].id, name: users[1].name, specialty: 'Badminton', phone: '', email: users[1].email } });
   await db.booking.create({ data: { code: 'ATTENDANCE-QA', userId: users[2].id, coachId: coach.id, kind: 'private_course', title: 'Footwork foundations', date: today(), time: '10:00 — 11:00', location: 'Court 1', price: 10000, paymentStatus: 'paid', status: 'CONFIRMED' } });
   const social = await db.badmintonPackageCategory.findUniqueOrThrow({ where: { code: 'SOCIAL' } });
@@ -23,6 +43,10 @@ try {
   const targetDate = day.toISOString().slice(0, 10);
   const booking = (await createCourtBooking(db, users[2], { bookings: [{ courtId: court.id, date: targetDate, time: '8:00 AM — 9:00 AM' }] })).booking;
   await db.booking.update({ where: { id: booking.id }, data: { paymentStatus: 'paid' } });
+  const secondary = await db.user.create({ data: { name: 'Ko Second Member', email: 'second@attendance.test', role: 'member' } });
+  await db.badmintonEnrollment.create({ data: { userId: secondary.id, studentId: secondary.id, studentName: secondary.name, phone: '', packageId: pkg.id, packageName: pkg.title, categoryCode: 'SOCIAL', sessionsTotal: 10, sessionsRemaining: 10, startDate: today(), expiryDate: '2099-01-01' } });
+  const secondaryMember = { id: secondary.id, token: (await createSessionService(db).issue(db, secondary, 'database_password', [])).accessToken };
   const tokens = await Promise.all(users.map(async user => ({ role: user.role, token: (await createSessionService(db).issue(db, user, 'database_password', [])).accessToken })));
-  writeFileSync(process.env.ATTENDANCE_QA_FIXTURE_PATH, JSON.stringify({ tokens, date: today(), targetDate, bookingId: booking.id }));
+  writeFileSync(process.env.ATTENDANCE_QA_FIXTURE_PATH, JSON.stringify({ tokens, secondaryMember, memberId: users[2].id, date: today(), targetDate, bookingId: booking.id }));
+  }
 } finally { await db.$disconnect(); }

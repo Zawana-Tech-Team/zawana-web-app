@@ -1,3 +1,4 @@
+import { createFirebaseSessionExchange } from '../services/firebaseSession';
 import {
   createContext,
   useCallback,
@@ -57,7 +58,10 @@ type Ctx = {
   updateProfile: (changes: { name?: string; phone?: string | null }) => Promise<User>;
   updateAvatar: (image: string) => Promise<string>;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<User | null>;
+  refreshUser: (options?: { cached?: boolean }) => Promise<User | null>;
+  sessionError: string;
+  canRetrySession: boolean;
+  retrySession: () => Promise<SignInResult>;
 };
 
 const C = createContext<Ctx | null>(null);
@@ -123,46 +127,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [verificationEmail, setVerificationEmail] = useState('');
   const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
   const [mfaVerificationId, setMfaVerificationId] = useState('');
-  const syncFlight = useRef<Promise<SignInResult> | null>(null);
+  const [sessionError, setSessionError] = useState('');
+  const [canRetrySession, setCanRetrySession] = useState(false);
+  const accountRef = useRef<User | null>(null);
+  const sessionOwner = useRef<string | null>(null);
+  const exchangeRef = useRef<ReturnType<typeof createFirebaseSessionExchange> | null>(null);
+  if (!exchangeRef.current) exchangeRef.current = createFirebaseSessionExchange((token, signal) => api<AuthResponse>('/auth/session', {
+    method: 'POST', body: '{}', signal, headers: { Authorization: `Bearer ${token}` }
+  }), () => firebaseAuth?.currentUser?.uid);
+  const reportSessionError = useCallback((error: any) => {
+    if (error?.code === 'SESSION_EXCHANGE_SUPERSEDED') return;
+    setSessionError(firebaseMessage(error));
+    setCanRetrySession(!!firebaseAuth?.currentUser && (error?.retryable === true || error?.details?.retryable === true || error?.code === 'AUTH_UNAVAILABLE' || (!error?.code && [502, 503, 504].includes(error?.status)) || error instanceof TypeError || ['AbortError', 'TimeoutError'].includes(error?.name)));
+  }, []);
 
   const syncFirebaseUser = useCallback(async (fb: FirebaseUser): Promise<SignInResult> => {
     if (!fb.emailVerified) {
       setVerificationEmail(fb.email || '');
       return 'verify';
     }
-    if (syncFlight.current) return syncFlight.current;
-    syncFlight.current = (async () => {
-      try {
-        const result = await api<AuthResponse>('/auth/session', {
-          method: 'POST', body: '{}',
-          headers: { Authorization: `Bearer ${await fb.getIdToken()}` }
-        });
-        setToken(result.accessToken || result.token);
-        setUser(result.user);
-        setPendingProfile(null);
-        setVerificationEmail('');
-        return 'ready';
-      } catch (error: any) {
-        if (error?.status === 428) {
-          setUser(null);
-          setPendingProfile(
-            error.details?.profile || {
-              name: fb.displayName || '',
-              email: fb.email || '',
-              avatar: fb.photoURL
-            }
-          );
-          return 'profile';
-        }
-        throw error;
-      }
-    })();
+    if (sessionOwner.current === fb.uid && getToken() && accountRef.current) return 'ready';
     try {
-      return await syncFlight.current;
-    } finally {
-      syncFlight.current = null;
+      const result = await exchangeRef.current!.exchange(fb);
+      sessionOwner.current = fb.uid; accountRef.current = result.user;
+      setToken(result.accessToken || result.token); setUser(result.user);
+      setPendingProfile(null); setVerificationEmail(''); setSessionError(''); setCanRetrySession(false);
+      return 'ready';
+    } catch (error: any) {
+      if (error?.status === 428) {
+        setUser(null); accountRef.current = null;
+        setPendingProfile(error.details?.profile || { name: fb.displayName || '', email: fb.email || '', avatar: fb.photoURL });
+        return 'profile';
+      }
+      reportSessionError(error); throw error;
     }
-  }, []);
+  }, [reportSessionError]);
 
   useEffect(() => {
     if (databaseAuthMode) {
@@ -184,32 +183,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    let alive = true;
-    void firebaseReady.then(() =>
-      onAuthStateChanged(firebaseAuth!, async fb => {
+    let alive = true, version = 0;
+    let unsubscribe: (() => void) | undefined;
+    void firebaseReady.then(() => {
+      if (!alive) return;
+      unsubscribe = onAuthStateChanged(firebaseAuth!, async fb => {
+        const currentVersion = ++version;
         if (!alive) return;
         if (!fb) {
-          setToken(null);
-          setUser(null);
-          setPendingProfile(null);
-          setVerificationEmail('');
-          setLoading(false);
+          exchangeRef.current?.cancel(); sessionOwner.current = null; accountRef.current = null;
+          setToken(null); setUser(null); setPendingProfile(null); setVerificationEmail(''); setSessionError(''); setCanRetrySession(false); setLoading(false);
           return;
         }
         try {
-          if (fb.emailVerified) await syncFirebaseUser(fb);
-          else setVerificationEmail(fb.email || '');
-        } catch {
-          setUser(null);
-        } finally {
-          if (alive) setLoading(false);
-        }
-      })
-    );
-    return () => {
-      alive = false;
-    };
-  }, [syncFirebaseUser]);
+          if (!fb.emailVerified) { setVerificationEmail(fb.email || ''); return; }
+          if (getToken() && sessionOwner.current !== fb.uid) {
+            try {
+              const restored = await api<User & { authenticatedFirebaseUids?: string[] }>('/auth/me', { signal: AbortSignal.timeout(25000) });
+              if (!alive || version !== currentVersion || firebaseAuth?.currentUser?.uid !== fb.uid) return;
+              if (sessionOwner.current === fb.uid && accountRef.current && getToken()) return;
+              if (restored.authenticatedFirebaseUids?.includes(fb.uid)) {
+                sessionOwner.current = fb.uid; accountRef.current = restored; setUser(restored); setSessionError(''); setCanRetrySession(false); return;
+              }
+              setToken(null);
+            } catch (error: any) {
+              if (sessionOwner.current === fb.uid && accountRef.current && getToken()) return;
+              if (error?.status !== 401) throw error;
+              setToken(null);
+            }
+          }
+          await syncFirebaseUser(fb);
+        } catch (error) {
+          if (alive && version === currentVersion && !(sessionOwner.current === fb.uid && accountRef.current && getToken())) { reportSessionError(error); setUser(null); }
+        } finally { if (alive && version === currentVersion) setLoading(false); }
+      });
+    }).catch(error => { if (alive) { reportSessionError(error); setLoading(false); } });
+    return () => { alive = false; ++version; unsubscribe?.(); exchangeRef.current?.cancel(); };
+  }, [syncFirebaseUser, reportSessionError]);
 
   const login = async (email: string, password: string): Promise<SignInResult> => {
     if (databaseAuthMode) {
@@ -217,6 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username: email.trim(),
         password
       });
+      accountRef.current = result.user;
       setToken(result.token);
       setUser(result.user);
       setPendingProfile(null);
@@ -301,6 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         phone,
         password
       });
+      accountRef.current = result.user;
       setToken(result.token);
       setUser(result.user);
       setPendingProfile(null);
@@ -393,35 +405,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result.avatar;
   };
   const logout = async () => {
-    setToken(null);
-    setUser(null);
-    setPendingProfile(null);
-    if (!databaseAuthMode && firebaseAuth) await signOut(firebaseAuth);
+    exchangeRef.current?.cancel(); sessionOwner.current = null; accountRef.current = null;
+    try { await api('/auth/logout', { method: 'POST', body: '{}', signal: AbortSignal.timeout(8000) }); }
+    catch { window.dispatchEvent(new CustomEvent('zawana-toast', { detail: 'Signed out locally. The server session could not be revoked while the connection is unavailable.' })); }
+    finally {
+      setToken(null); setUser(null); setPendingProfile(null); setSessionError(''); setCanRetrySession(false);
+      if (!databaseAuthMode && firebaseAuth) await signOut(firebaseAuth);
+    }
   };
-  const refreshUser = async () => {
-    if (databaseAuthMode) {
-      try {
-        const result = await get<User>('/auth/me');
-        setUser(result);
-        return result
-      } catch {
-        return null
-      }
-    }
-    if (!firebaseAuth?.currentUser) return null;
-    await firebaseAuth.currentUser.reload();
-    const fb = firebaseAuth.currentUser;
+  const refreshUser = async (options?: { cached?: boolean }) => {
+    if (options?.cached && accountRef.current && getToken()) return accountRef.current;
     try {
-      const result = await api<AuthResponse>('/auth/session', {
-        method: 'POST', body: '{}',
-        headers: { Authorization: `Bearer ${await fb.getIdToken(true)}` }
-      });
-      setToken(result.accessToken || result.token);
-      setUser(result.user);
-      return result.user as User;
-    } catch {
-      return null;
-    }
+      const result = await api<User>('/auth/me', { signal: AbortSignal.timeout(25000) });
+      accountRef.current = result; setUser(result); return result;
+    } catch (error) { reportSessionError(error); return null; }
+  };
+  const retrySession = async (): Promise<SignInResult> => {
+    const fb = firebaseAuth?.currentUser;
+    if (!fb) throw new Error('Sign in with Google again to continue.');
+    setSessionError(''); setCanRetrySession(false);
+    sessionOwner.current = null;
+    try { return await syncFirebaseUser(fb); }
+    finally { setLoading(false); }
   };
 
   const mfaHint = mfaResolver?.hints.find(
@@ -449,7 +454,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       updateAvatar,
       logout,
-      refreshUser
+      refreshUser,
+      sessionError,
+      canRetrySession,
+      retrySession
     }}
   >
     {children}

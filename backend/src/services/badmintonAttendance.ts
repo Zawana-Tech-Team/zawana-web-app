@@ -25,6 +25,14 @@ export async function createBadmintonVisit(tx: Prisma.TransactionClient, enrollm
     packageSnapshot: JSON.stringify({ packageId: enrollment.packageId, packageName: enrollment.packageName, categoryCode: enrollment.categoryCode, purchaseId: enrollment.purchaseId,
       purchaseDate: enrollment.purchase?.createdAt.toISOString() || null, startDate: enrollment.startDate, expiryDate: enrollment.expiryDate,
       sessionsTotal: enrollment.sessionsTotal, sessionsRemaining: enrollment.sessionsRemaining - 1, renewalCount: enrollment.renewalCount }) } });
+  if (enrollment.userId) await tx.notification.create({ data: { userId: enrollment.userId, title: 'Check-in confirmed',
+    body: `${enrollment.packageName}: one session used, ${enrollment.sessionsRemaining - 1} remaining.${enrollment.sessionsRemaining === 1 ? ' Package exhausted. Please renew before your next visit.' : enrollment.sessionsRemaining <= 3 ? ' Your session balance is low.' : ''}${enrollment.expiryDate === date ? ' Package expires today.' : ''}`,
+    type: 'attendance', entityType: 'badminton-check-in', entityId: checkIn.id, link: '/attendance' } });
+  if (enrollment.sessionsRemaining <= 3) {
+    const staff = await tx.user.findMany({ where: { active: true, deletedAt: null, role: { in: ['admin', 'badminton_fo'] } }, select: { id: true } });
+    await tx.notification.createMany({ data: staff.map(user => ({ userId: user.id, title: enrollment.sessionsRemaining === 1 ? 'Package exhausted' : 'Low package balance',
+      body: `${enrollment.studentName} · ${enrollment.packageName}: ${enrollment.sessionsRemaining - 1} sessions remaining.`, type: 'attendance', entityType: 'badminton-check-in', entityId: checkIn.id })) });
+  }
   return { success: true, categoryCode: enrollment.categoryCode, sessionsDeducted: 1, checkInId: checkIn.id,
     checkIn, enrollment: await tx.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollmentId } }), warning: enrollment.sessionsRemaining <= 3 };
 }

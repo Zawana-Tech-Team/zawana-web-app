@@ -1,3 +1,4 @@
+import { startPayment } from '../services/paymentFlow';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, CreditCard, Plus, ReceiptText, RefreshCw, RotateCcw, X } from 'lucide-react';
@@ -10,7 +11,6 @@ import GymReceipt from '../components/GymReceipt';
 import { gymKindLabels, gymMoney, gymToday, type GymCatalogPackage, type GymCoach, type GymEnrollment, type GymPage, type GymPerson } from '../types/gym';
 
 type Policy = { today: string; timeZone: string; paymentMethods: string[] };
-type PaymentAttempt = { id: string; checkoutUrl?: string; qrCode?: string; status: string };
 export default function GymEnrollments({ memberView = false, trainingOnly = false }: { memberView?: boolean; trainingOnly?: boolean }) {
   const { user } = useAuth();
   const [result, setResult] = useState<GymPage<GymEnrollment> | null>(null), [page, setPage] = useState(1);
@@ -118,7 +118,7 @@ function EnrollmentWizard({ renewal, onSaved, onClose, trainingOnly }: { trainin
 }
 
 function GymPayment({ enrollment, onClose, onPaid }: { enrollment: GymEnrollment; onClose: () => void; onPaid: (row: GymEnrollment) => void }) {
-  const [policy, setPolicy] = useState<Policy | null>(null), [method, setMethod] = useState('KPay'), [received, setReceived] = useState(false), [attempt, setAttempt] = useState<PaymentAttempt | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [policy, setPolicy] = useState<Policy | null>(null), [method, setMethod] = useState('KPay'), [received, setReceived] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   useEffect(() => { let active = true; get<Policy>('/gym/policy').then(p => { if (active) setPolicy(p); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, []);
   const checkPayment = async () => {
     setBusy(true); setError('');
@@ -127,16 +127,18 @@ function GymPayment({ enrollment, onClose, onPaid }: { enrollment: GymEnrollment
     finally { setBusy(false); }
   };
   const pay = async () => {
+    if (busy) return;
     setBusy(true); setError('');
     try {
-      const result = await post<{ enrollment?: GymEnrollment; attempt?: PaymentAttempt }>(`/gym/enrollments/${enrollment.id}/payment`, { method, ...(method === 'Cash' ? { cashReceived: received } : {}) });
-      if (result.enrollment) onPaid(result.enrollment); else if (result.attempt) setAttempt(result.attempt);
+      if (method === 'KPay') { await startPayment(`/gym/enrollments/${enrollment.id}/payment`, { method }); return; }
+      const result = await post<{ enrollment?: GymEnrollment }>(`/gym/enrollments/${enrollment.id}/payment`, { method, ...(method === 'Cash' ? { cashReceived: received } : {}) });
+      if (result.enrollment) onPaid(result.enrollment);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not start payment.'); }
     finally { setBusy(false); }
   };
   return <DialogSurface title="Enrollment payment" onClose={() => { if (!busy) onClose(); }} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"><div className="max-h-[85vh] overflow-y-auto p-6"><div className="flex justify-between gap-3"><h2 className="text-xl font-bold">Payment & activation</h2><Button variant="ghost" aria-label="Close payment" disabled={busy} onClick={onClose}><X size={18} /></Button></div><p className="mt-4 font-bold">{enrollment.snapshot.title}</p><p className="mt-2 text-3xl font-bold">{gymMoney(enrollment.totalPrice)}</p><p className="mt-2 text-xs text-zawana-500">{enrollment.code}</p>
     {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    {!attempt ? <><label className="mt-5 block text-sm font-bold">Payment method<Select className="mt-2 w-full" value={method} onChange={e => setMethod(e.target.value)}>{(policy?.paymentMethods || ['KPay']).map(m => <option key={m}>{m}</option>)}</Select></label>{method === 'Cash' && <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={received} onChange={e => setReceived(e.target.checked)} />I have received the full cash amount.</label>}<Button className="mt-5 w-full" disabled={busy || !policy || (method === 'Cash' && !received)} onClick={() => void pay()}><CreditCard size={15} />{busy ? 'Processing…' : method === 'Cash' ? 'Record cash & activate' : 'Start KPay checkout'}</Button></> : <div className="mt-5 space-y-4"><p className="text-sm">Complete the provider checkout. Activation follows verified payment.</p>{attempt.checkoutUrl && /^https:\/\//i.test(attempt.checkoutUrl) && <a className="inline-flex rounded-xl bg-zawana-gold px-4 py-3 text-sm font-bold" href={attempt.checkoutUrl} target="_blank" rel="noreferrer">Open KPay checkout</a>}{attempt.qrCode && (/^(https:\/\/|data:image\/(png|jpeg|webp);base64,)/i.test(attempt.qrCode) ? <img src={attempt.qrCode} alt="KPay payment QR code" className="mx-auto max-h-64 rounded-xl border p-2" /> : <p className="break-all rounded-xl bg-zawana-50 p-3 text-xs">Payment QR reference: {attempt.qrCode}</p>)}<Button className="w-full" disabled={busy} onClick={() => void checkPayment()}><Check size={15} />Check payment status</Button></div>}
+    <><label className="mt-5 block text-sm font-bold">Payment method<Select className="mt-2 w-full" value={method} onChange={e => setMethod(e.target.value)}>{(policy?.paymentMethods || ['KPay']).map(m => <option key={m}>{m}</option>)}</Select></label>{method === 'Cash' && <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={received} onChange={e => setReceived(e.target.checked)} />I have received the full cash amount.</label>}<Button className="mt-5 w-full" loading={busy} disabled={busy || !policy || (method === 'Cash' && !received)} onClick={() => void pay()}><CreditCard size={15} />{busy ? 'Processing…' : method === 'Cash' ? 'Record cash & activate' : 'Pay now'}</Button></>
     <Button className="mt-3 w-full" variant="ghost" disabled={busy} onClick={() => void checkPayment()}>Refresh activation status</Button>
   </div></DialogSurface>;
 }

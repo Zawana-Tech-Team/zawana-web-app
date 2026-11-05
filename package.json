@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "api": "npm --prefix backend run dev",
     "api:seed": "npm --prefix backend run prisma:seed",
+    "lint:attendance": "node tooling/gym/node_modules/eslint/bin/eslint.js --config eslint.attendance.config.mjs .",
     "lint:gym": "node tooling/gym/node_modules/eslint/bin/eslint.js --config eslint.gym.config.mjs .",
     "lint:cinematic": "node tooling/gym/node_modules/eslint/bin/eslint.js --config eslint.cinematic.config.mjs .",
     "test:cinematic:browser": "node scripts/test-cinematic-browser.mjs",

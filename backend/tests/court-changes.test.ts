@@ -63,6 +63,17 @@ test('court changes and attendance corrections persist atomically in an isolated
     const result = await createCourtBooking(db, member, { bookings: [slot(8), slot(9, courts[1].id, nextDay)] });
     const [booking, sibling] = result.bookings;
     await db.booking.update({ where: { id: booking.id }, data: { paymentStatus: 'paid' } });
+    await t.test('staff court feed is role-restricted, court-only and omits user secrets', async () => {
+      await db.booking.create({ data: { code: 'NON-COURT-FEED', kind: 'class', title: 'Excluded class', userId: member.id, date: day, time: formatRange(12 * 60, 13 * 60), location: 'ZAWANA', price: 10000 } });
+      for (const denied of [member, other, coach, clinic]) assert.equal((await request(denied, '')).status, 403);
+      for (const actor of [admin, fo]) {
+        const feed = await request(actor, ''); assert.equal(feed.status, 200); assert.equal(feed.value.length, 2);
+        assert(feed.value.every((row: any) => row.kind === 'court'));
+        assert(feed.value.some((row: any) => row.id === booking.id));
+        assert.deepEqual(Object.keys(feed.value[0].user).sort(), ['email', 'id', 'name']);
+      }
+    });
+
     await t.test('ownership, department restriction, quote and confirmed paid reschedule', async () => {
       for (const denied of [other, coach, clinic]) assert.ok([403, 404].includes((await request(denied, `/${booking.id}/changes`)).status));
       const detail = await request(member, `/${booking.id}/changes`); assert.equal(detail.status, 200); assert.equal(detail.value.eligibility.eligible, true);

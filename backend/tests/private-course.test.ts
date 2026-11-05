@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -39,6 +40,7 @@ test("badminton private courses: independent availability, concurrency, acceptan
   sqlite.exec(migration.slice(migration.indexOf("-- These guards")));
   sqlite.close();
   const db = new PrismaClient({ datasources: { db: { url: `file:${file}` } } });
+  await db.badmintonQrDeskSlot.createMany({ data: [{ id: 1 }, { id: 2 }] });
   const user = await db.user.create({
     data: {
       name: "Booking QA",
@@ -92,6 +94,8 @@ test("badminton private courses: independent availability, concurrency, acceptan
         ...process.env,
         DATABASE_URL: `file:${file}`,
         PORT: String(port),
+        AUTH_MODE: 'database',
+        JWT_SECRET: 'private-course-qa-session-key-over-thirty-two-characters',
         NODE_ENV: "test",
         KPAY_WEBHOOK_SECRET: "private-course-test-secret",
         KPAY_CHECKOUT_ADAPTER_URL: "",
@@ -126,16 +130,25 @@ test("badminton private courses: independent availability, concurrency, acceptan
     token = session.accessToken,
     key?: string,
   ) => {
+    let verification: Record<string, string> = {};
+    if (['POST', 'PATCH', 'DELETE'].includes(method) && path.startsWith('/packages/')) {
+      const r = await fetch(`${origin}/api/package-security/challenge`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method, path, body }) });
+      if (r.ok) {
+        await db.user.updateMany({ where: { role: { in: ['admin', 'badminton_fo'] } }, data: { passwordHash: await bcrypt.hash('test-package-password', 4) } });
+        verification = { 'X-Package-Verification': JSON.stringify({ challengeId: (await r.json()).id, password: 'test-package-password' }) };
+      }
+    }
     const response = await fetch(`${origin}/api${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        ...verification,
         ...(key ? { "Idempotency-Key": key } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    const value = await response.json();
+    const value = await response.json().catch(() => null);
     return { status: response.status, value };
   };
   const slot = (hour: number, courtId = court.id) => ({
@@ -630,6 +643,11 @@ test("badminton private courses: independent availability, concurrency, acceptan
     assert.equal((await db.badmintonCheckIn.findUniqueOrThrow({ where: { id: visit.id } })).categoryCode, 'SOCIAL');
     assert.equal(await db.attendanceModification.count({ where: { bookingId: `enrollment:${enrollment.id}`, actorId: admin.id } }), 1);
     assert.equal((await request(`/packages/badminton/${pkg.id}/classify-legacy`, 'POST', { reviewed: true }, adminToken)).value.enrollments, 0);
+    assert.equal((await request(`/packages/badminton/${pkg.id}`, 'DELETE', undefined, adminToken)).status, 204);
+    assert.equal((await db.badmintonPackage.findUniqueOrThrow({ where: { id: pkg.id } })).status, 'inactive');
+    assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).sessionsRemaining, 4);
+    assert.ok(await db.badmintonCheckIn.findUnique({ where: { id: visit.id } }));
+    assert.ok(await db.packageSecurityAudit.findFirst({ where: { packageId: pkg.id, success: true }, orderBy: { createdAt: 'desc' } }));
   });
   await t.test(
     "one coach cannot be reserved concurrently on different courts",

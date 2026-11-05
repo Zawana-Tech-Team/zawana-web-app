@@ -128,6 +128,12 @@ enum TransactionBusiness {
 }
 
 model User {
+  categoryQrRedemptions BadmintonQrRedemption[]
+  notificationReads NotificationRead[]
+  redeemedEntryQrs BadmintonEntryQr[] @relation("EntryQrRedeemer")
+  memberEntryQrs BadmintonEntryQr[] @relation("EntryQrMember")
+  packageSecurityChallenges PackageSecurityChallenge[]
+  packageSecurityAudits PackageSecurityAudit[]
   authIdentities AuthIdentity[]
   authSessions AuthSession[]
   id                   String                @id @default(cuid())
@@ -543,6 +549,8 @@ model Student {
 }
 
 model Notification {
+  dedupeKey String? @unique
+  recipientReads NotificationRead[]
   id        String   @id @default(cuid())
   userId    String?
   title     String
@@ -639,6 +647,7 @@ model BadmintonPackageCategory {
 }
 
 model BadmintonEnrollment {
+  categoryQrRedemptions BadmintonQrRedemption[]
   categoryCode String?
   @@index([userId, categoryCode, status, expiryDate])
   id                String             @id @default(cuid())
@@ -667,6 +676,8 @@ model BadmintonEnrollment {
 }
 
 model BadmintonCheckIn {
+  categoryQrRedemption BadmintonQrRedemption?
+  redeemedEntryQr BadmintonEntryQr? @relation("EntryQrRedemption")
   memberId String?
   categoryCode String?
   attendanceKey String? @unique
@@ -917,6 +928,22 @@ model BookingAttendance {
 }
 
 model BadmintonEntryQr {
+  kind String @default("MEMBER")
+  deskSlot BadmintonQrDeskSlot?
+  redemptions BadmintonQrRedemption[]
+  memberId String?
+  member User? @relation("EntryQrMember", fields: [memberId], references: [id], onDelete: Restrict)
+  authorizedCategories String @default("[]")
+  encryptedToken String?
+  scopeKey String?
+  status String @default("ACTIVE")
+  usedAt DateTime?
+  redeemedBy String?
+  redeemer User? @relation("EntryQrRedeemer", fields: [redeemedBy], references: [id], onDelete: Restrict)
+  attendanceId String? @unique
+  redemptionAttendance BadmintonCheckIn? @relation("EntryQrRedemption", fields: [attendanceId], references: [id], onDelete: Restrict)
+  @@index([memberId, status, expiresAt])
+  @@index([scopeKey, status])
   categoryCode String?
   createdAt DateTime? @default(now())
   visits BadmintonQrVisit[]
@@ -1039,4 +1066,61 @@ model PrivateCourseAdjustment {
   evidence String
   reference String
   createdAt DateTime @default(now())
+}
+
+model PackageSecurityChallenge {
+  id String @id @default(cuid())
+  actorId String
+  actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  mutationHash String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  consumedAt DateTime?
+  @@index([actorId, expiresAt])
+}
+model PackageSecurityAudit {
+  id String @id @default(cuid())
+  actorId String
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  packageId String?
+  action String
+  changes String
+  success Boolean
+  requestIp String?
+  createdAt DateTime @default(now())
+  @@index([actorId, createdAt])
+  @@index([packageId, createdAt])
+}
+
+model NotificationRead {
+  notificationId String
+  userId String
+  readAt DateTime @default(now())
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([notificationId, userId])
+  @@index([userId])
+}
+
+// Shared badminton desk, restored identically by Coach and FO.
+model BadmintonQrDeskSlot {
+  id Int @id
+  qrId String? @unique
+  qr BadmintonEntryQr? @relation(fields: [qrId], references: [id], onDelete: Restrict)
+  updatedAt DateTime @default(now()) @updatedAt
+}
+// Separate from the legacy category/day ledger: no historical pair is discarded.
+model BadmintonQrRedemption {
+  id String @id @default(cuid())
+  qrId String
+  qr BadmintonEntryQr @relation(fields: [qrId], references: [id], onDelete: Restrict)
+  memberId String
+  member User @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  enrollmentId String
+  enrollment BadmintonEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  attendanceId String @unique
+  attendance BadmintonCheckIn @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
+  redeemedAt DateTime @default(now())
+  @@unique([qrId, memberId])
+  @@index([memberId, redeemedAt])
 }

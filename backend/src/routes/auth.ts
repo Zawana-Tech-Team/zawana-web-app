@@ -282,7 +282,9 @@ export function createAuthRouter(
       const user = await prisma.user.findUniqueOrThrow({
         where: { id: req.user!.id },
       });
-      res.json(toSafeAppUser(user));
+      let authenticatedFirebaseUids: string[] = [];
+      try { authenticatedFirebaseUids = z.array(z.object({ uid: z.string() }).passthrough()).parse(JSON.parse(req.authSession?.proofs || '[]')).map(proof => proof.uid); } catch { /* Never infer an identity from an invalid legacy proof. */ }
+      res.json({ ...toSafeAppUser(user), authenticatedFirebaseUids });
     }),
   );
   router.get(

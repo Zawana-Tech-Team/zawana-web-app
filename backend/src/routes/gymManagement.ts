@@ -18,7 +18,7 @@ export function createGymManagementRoutes(db: PrismaClient, startPayment: StartP
     res.json(await db.gymPackage.findMany({ where: req.user!.role === "gym_fo" || req.query.active === "true" ? { status: "active" } : {}, orderBy: [{ kind: "asc" }, { price: "asc" }] }));
   }));
   router.post(packagePaths, auth, admin, asyncRoute(async (req: AuthRequest, res) => {
-    res.status(201).json(await saveGymPackage(db, req.user!.id, req.body));
+    res.status(201).json(await saveGymPackage(db, req.user!.id, req.body, undefined, undefined, res.locals.packageAuditId));
   }));
   router.patch(["/packages/gym/:id", "/gym/packages/:id"], auth, admin, asyncRoute(async (req: AuthRequest, res) => {
     const id = String(req.params.id), old = await db.gymPackage.findUnique({ where: { id } });
@@ -27,12 +27,12 @@ export function createGymManagementRoutes(db: PrismaClient, startPayment: StartP
     // Parse the merged record: defaults on a partial Zod schema can replace
     // omitted fields (including participant limits) during status-only edits.
     const data = packageInput.parse({ ...old, ...req.body, pricingMode: req.body.pricingMode || "total" });
-    res.json(await saveGymPackage(db, req.user!.id, data, id, version));
+    res.json(await saveGymPackage(db, req.user!.id, data, id, version, res.locals.packageAuditId));
   }));
   router.delete(["/packages/gym/:id", "/gym/packages/:id"], auth, admin, asyncRoute(async (req: AuthRequest, res) => {
     const old = await db.gymPackage.findUnique({ where: { id: String(req.params.id) } });
     if (!old) throw gymError("Package not found.", 404);
-    await saveGymPackage(db, req.user!.id, packageInput.parse({ ...old, benefits: old.benefits as string[], status: "archived" }), old.id, z.number().int().parse(req.body.version));
+    await saveGymPackage(db, req.user!.id, packageInput.parse({ ...old, benefits: old.benefits as string[], status: "archived" }), old.id, z.number().int().parse(req.body.version), res.locals.packageAuditId);
     res.status(204).end();
   }));
   router.get("/gym/packages/:id/history", auth, roles("admin", "owner"), asyncRoute(async (req, res) => {

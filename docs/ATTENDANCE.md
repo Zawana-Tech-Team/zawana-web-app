@@ -2,7 +2,7 @@
 
 The Attendance navigation item is available to members (`/attendance`), coaches (`/coach/attendance`), administrators (`/admin/attendance`) and badminton front office (`/badminton-fo/attendance`).
 
-Members see their own badminton package check-ins and paid, confirmed/completed private-course bookings. Coaches see only private-course students assigned through their linked coach account. Admin and badminton front office see all badminton attendance. Legacy walk-in package records remain visible to staff even without a member account. Gym attendance remains in its existing workflows.
+Members see their own badminton package check-ins and paid, confirmed/completed private-course bookings. Coaches, Admin and badminton front office see the same badminton attendance records, including package visits and all eligible private-course bookings. Coaches share the front-office category, coach and package filters, participant details, history and summary calculations. Coaches can mark/check in only their assigned private-course students; viewing other records does not grant editing rights. Corrections and CSV exports remain Admin-only. Legacy walk-in package records remain visible to staff even without a member account. Gym attendance remains in its existing workflows.
 
 Existing package check-in actions automatically populate the calendar; they still consume package sessions under the existing rules. Coaches and staff can check a student into today's paid, confirmed private course from its calendar record. Course check-in does not take a package session or change payment/booking status. Repeated check-ins keep the original arrival timestamp and recorder. Historical records remain visible after cancellation. No absence is inferred from an empty date.
 
@@ -23,7 +23,7 @@ Do not use the SQLite schema for PostgreSQL. No production migration was applied
 
 ## Verification
 
-- `cd backend && node_modules/.bin/tsx --test tests/attendance.test.ts`: real HTTP authorization, member/coach ownership, invalid month, ineligible sessions, existing package history, persistent check-ins and retry preservation against an isolated SQLite database; executes the new SQLite migration.
+- `cd backend && node_modules/.bin/tsx --test tests/attendance.test.ts`: real HTTP authorization, member isolation, coach/front-office data parity, assigned-course marking, invalid month, ineligible sessions, existing package history, persistent check-ins and retry preservation against an isolated SQLite database; executes the new SQLite migration.
 - `node scripts/test-attendance-browser.mjs`: isolated database/API/UI journey, four roles, check-in persistence after reload, calendar navigation/search and screenshots at desktop/tablet/mobile widths.
 
 ## Desktop 3D
@@ -35,3 +35,7 @@ The landing page always uses the scroll-driven cinematic court and shuttlecock. 
 Badminton package rows now show the immutable Foundation/Social/Pathway category, exact package and sessions deducted. Details/history include QR/staff/legacy source; filters and admin CSV include category. Member and FO package screens display entitlements individually. A shared member/category/Myanmar-date guard prevents a second deduction across both QR and manual attendance; different categories may each be used that day. Unclassified historic visits remain visible and require explicit review rather than name-based guesses. Existing private-course and gym scope/consumption rules remain intact.
 
 Read [the category migration and rollout guide](badminton-category-checkin.md) before releasing the category-aware API/UI. New forward migration: `20261028090000_badminton_category_checkin` in both database chains.
+
+## Category QR and package security
+
+The Attendance page shows the calendar, attendance list and participant history without a QR desk. Category QR generation remains available in the existing operations workflow. Its two persistent category cards show independent timers, statuses, check-in counts and shared staff history. No member selection is required. Multiple members may scan the same QR; each member may redeem it once, and only the QR's package category is debited. See [the current workflow and migration](category-attendance-qr.md). The preceding package reauthentication and notification receipt safeguards remain in place.

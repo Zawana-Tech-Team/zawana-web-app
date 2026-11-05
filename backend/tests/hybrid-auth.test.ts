@@ -1,3 +1,5 @@
+import { firebaseRead } from '../src/services/firebaseReliability.js';
+import { createSessionService } from '../src/services/authSession.js';
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -148,7 +150,7 @@ async function fixture(t: TestContext) {
     await db.$disconnect();
     rmSync(dir, { recursive: true, force: true });
   });
-  return { db, identities, proofs, add, service, user, requests };
+  return { db, identities, proofs, add, service, user, requests, file };
 }
 
 test('email release preserves deleted identity ownership and permits a separate fresh account', async t => {
@@ -283,13 +285,13 @@ test("successful phone authentication consumes proof and prevents replay", async
   });
 });
 
-test("provider spoofing, inactive users, and staff mobile access are denied", async (t) => {
+test("provider spoofing, inactive users, and unsupported mobile roles are denied", async (t) => {
   const f = await fixture(t);
   const token = f.add(claims("account", "google.com"));
   await assert.rejects(f.service.providerLogin(token, "apple.com"), {
     code: "INVALID_PROVIDER",
   });
-  await f.db.user.update({ where: { id: f.user.id }, data: { role: "admin" } });
+  await f.db.user.update({ where: { id: f.user.id }, data: { role: "owner" } });
   await assert.rejects(
     f.service.emailLogin({
       email: f.user.email,
@@ -299,7 +301,7 @@ test("provider spoofing, inactive users, and staff mobile access are denied", as
     { code: "MOBILE_ROLE_UNSUPPORTED" },
   );
   const web = await f.service.webSession("account:password");
-  assert.equal(web.user.role, "admin");
+  assert.equal(web.user.role, "owner");
   await f.db.user.update({ where: { id: f.user.id }, data: { active: false } });
   await assert.rejects(f.service.webSession("account:password"), {
     code: "ACCOUNT_UNAVAILABLE",
@@ -927,4 +929,62 @@ test("concurrent OTP session exchanges consume one proof and issue one session",
   const results = await Promise.allSettled([f.service.phoneLogin(input), f.service.phoneLogin(input)]);
   assert.equal(results.filter(r => r.status === "fulfilled").length, 1);
   assert.equal(await f.db.authSession.count(), 1);
+});
+
+test("supported staff password sessions bind their role and retain refresh and MFA checks", async t => {
+  for (const role of ['coach', 'admin', 'badminton_fo'] as const) await t.test(role, async t => {
+    const f = await fixture(t);
+    await f.db.user.update({ where: { id: f.user.id }, data: { role } });
+    const login = await f.service.emailLogin({ email: f.user.email, password: 'Password1!', remember: true });
+    assert('accessToken' in login);
+    assert.equal(login.user.role, role);
+    const authenticated = await f.service.session.authenticate(login.accessToken);
+    assert.equal(authenticated.method, `mobile_staff:${role}:email_password`);
+    const refreshed = await f.service.session.refresh(login.refreshToken);
+    assert.equal(refreshed.user.role, role);
+    f.identities.get('account')!.multiFactor!.enrolledFactors.push({ uid: 'factor' } as any);
+    await assert.rejects(f.service.session.authenticate(refreshed.accessToken), { code: 'MFA_REQUIRED' });
+    await assert.rejects(f.service.session.refresh(refreshed.refreshToken), { code: 'MFA_REQUIRED' });
+    await assert.rejects(f.service.emailLogin({ email: f.user.email, password: 'Password1!', remember: true }), { code: 'MFA_REQUIRED' });
+  });
+});
+
+test("staff sessions cannot survive role promotion, demotion or reassignment", async t => {
+  for (const role of ['member', 'admin', 'badminton_fo', 'owner'] as const) await t.test(role, async t => {
+    const f = await fixture(t);
+    await f.db.user.update({ where: { id: f.user.id }, data: { role: 'coach' } });
+    const login = await f.service.emailLogin({ email: f.user.email, password: 'Password1!', remember: true });
+    assert('accessToken' in login);
+    await f.db.user.update({ where: { id: f.user.id }, data: { role } });
+    await assert.rejects(f.service.session.authenticate(login.accessToken), { code: 'SESSION_REVOKED' });
+    await assert.rejects(f.service.session.refresh(login.refreshToken), { code: 'SESSION_REVOKED' });
+  });
+});
+
+test('Google web sessions recover from infrastructure failure and remain atomic across independent service instances', async t => {
+  const f = await fixture(t);
+  const proof = f.add(claims('account', 'google.com', f.user.email));
+  await f.db.user.update({ where: { id: f.user.id }, data: { role: 'admin' } });
+  let online = false;
+  const identity = async (uid: string) => f.identities.get(uid)!;
+  const service = createHybridAuth({ db: f.db, getIdentity: identity, verify: token => firebaseRead('verify_id_token', async () => {
+    if (!online) throw Object.assign(new Error('Private upstream detail'), { code: 'EAI_AGAIN' });
+    return f.proofs.get(token)!;
+  }, { sleep: async () => {}, log: () => {} }) });
+  await assert.rejects(service.webSession(proof), (error: any) => error.code === 'AUTH_UNAVAILABLE');
+  assert.equal(await f.db.authSession.count(), 0, 'A failed verification never creates a partial session');
+  online = true;
+  const first = await service.webSession(proof); assert.equal(first.user.role, 'admin');
+  const parallel = await Promise.all([service.webSession(proof), service.webSession(proof), service.webSession(proof)]);
+  assert.equal(new Set(parallel.map(result => result.accessToken)).size, 3);
+  assert.equal(await f.db.user.count(), 1, 'Repeated Google sign-in never duplicates or merges accounts');
+  const secondDb = new PrismaClient({ datasources: { db: { url: 'file:' + f.file } } });
+  try {
+    const secondInstance = createSessionService(secondDb, identity);
+    assert.equal((await secondInstance.authenticate(first.accessToken)).user.id, f.user.id);
+    const rotated = await secondInstance.refresh(first.refreshToken);
+    assert.equal((await service.session.authenticate(rotated.accessToken)).user.role, 'admin');
+    await f.db.authSession.updateMany({ where: { accessHash: credentialHash(rotated.accessToken) }, data: { revokedAt: new Date() } });
+    await assert.rejects(secondInstance.authenticate(rotated.accessToken));
+  } finally { await secondDb.$disconnect(); }
 });

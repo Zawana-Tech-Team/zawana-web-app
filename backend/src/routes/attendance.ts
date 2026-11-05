@@ -1,3 +1,4 @@
+import { canManageCategoryQr } from '../services/categoryQrPolicy.js';
 import { correctBadmintonVisit } from "../services/badmintonAttendance.js";
 import { Router } from 'express';
 import type { Prisma, PrismaClient, Role } from '@prisma/client';
@@ -20,7 +21,7 @@ function safeSnapshot(value: string | null) {
 const fail = (message: string, statusCode = 409) => Object.assign(new Error(message), { statusCode });
 const profileSelect = { id: true, name: true, avatar: true, email: true, phone: true, membership: true } as const;
 const courseScope = (actor: Actor): Prisma.BookingWhereInput => ({ kind: 'private_course',
-  ...(actor.role === 'member' ? { userId: actor.id } : actor.role === 'coach' ? { coach: { is: { userId: actor.id } } } : {}),
+  ...(actor.role === 'member' ? { userId: actor.id } : {}),
   OR: [{ paymentStatus: 'paid', status: { in: ['confirmed', 'CONFIRMED', 'completed', 'COMPLETED'] } }, { attendance: { isNot: null } }],
 });
 function completed(b: { date: string; time: string; status: string }) {
@@ -30,8 +31,8 @@ function completed(b: { date: string; time: string; status: string }) {
 async function records(db: PrismaClient, actor: Actor, extra: Prisma.BookingWhereInput, packageWhere: Prisma.BadmintonCheckInWhereInput) {
   const [bookings, packages] = await Promise.all([
     db.booking.findMany({ where: { AND: [courseScope(actor), extra] },
-      include: { attendance: true, user: { select: profileSelect }, coach: { select: { id: true, name: true } } }, orderBy: [{ date: 'asc' }, { time: 'asc' }] }),
-    actor.role === 'coach' ? Promise.resolve([]) : db.badmintonCheckIn.findMany({
+      include: { attendance: true, user: { select: profileSelect }, coach: { select: { id: true, name: true, userId: true } } }, orderBy: [{ date: 'asc' }, { time: 'asc' }] }),
+    db.badmintonCheckIn.findMany({
       where: { AND: [packageWhere, actor.role === 'member' ? { enrollment: { userId: actor.id } } : {}] },
       include: { enrollment: { include: { user: { select: profileSelect }, purchase: { select: { createdAt: true, paidAt: true } } } } }, orderBy: [{ date: 'asc' }, { time: 'asc' }] }),
   ]);
@@ -44,7 +45,7 @@ async function records(db: PrismaClient, actor: Actor, extra: Prisma.BookingWher
       date: b.date, time: b.time, checkedInAt: b.attendance && ['present', 'late'].includes(b.attendance.status) ? b.attendance.checkedInAt.toISOString() : null,
       recordedBy: b.attendance ? names.get(b.attendance.recordedById) || 'Staff' : null, notes: b.attendance?.notes || null,
       status: b.attendance?.status || 'pending', scheduledCompleted: completed(b), bookingStatus: b.status,
-      canCheckIn: actor.role !== 'member' && !b.attendance && b.date === today() && b.paymentStatus === 'paid' && ['confirmed', 'CONFIRMED'].includes(b.status),
+      canCheckIn: actor.role !== 'member' && (actor.role !== 'coach' || b.coach?.userId === actor.id) && !b.attendance && b.date === today() && b.paymentStatus === 'paid' && ['confirmed', 'CONFIRMED'].includes(b.status),
       canCorrect: actor.role === 'admin' && !!b.attendance,
     })),
     ...packages.map(p => {
@@ -90,7 +91,7 @@ export function createAttendanceRouter(db: PrismaClient = prisma, authenticate =
       ].join('\r\n'));
       return;
     }
-    res.json({ records: result });
+    res.json({ records: result, permissions: { categoryQr: await canManageCategoryQr(db, req.user!.id) } });
   }));
   router.get('/:kind/:id/detail', asyncRoute(async (req: AuthRequest, res) => {
     const actor = req.user!, id = String(req.params.id);
@@ -98,7 +99,7 @@ export function createAttendanceRouter(db: PrismaClient = prisma, authenticate =
     if (req.params.kind === 'course') {
       const b = await db.booking.findFirst({ where: { AND: [courseScope(actor), { id }] } });
       personId = b?.userId || null;
-    } else if (req.params.kind === 'package' && actor.role !== 'coach') {
+    } else if (req.params.kind === 'package') {
       const p = await db.badmintonCheckIn.findFirst({ where: { id, ...(actor.role === 'member' ? { enrollment: { userId: actor.id } } : {}) }, include: { enrollment: true } });
       personId = p?.enrollment.userId || p?.enrollment.studentId || null;
     }
@@ -108,7 +109,9 @@ export function createAttendanceRouter(db: PrismaClient = prisma, authenticate =
     const count = (status: string) => scheduled.filter(r => r.status === status).length;
     const bookingIds = history.map(r => r.kind === 'course' ? r.id : `package:${r.id}`);
     const modifications = actor.role === 'admin' ? await db.attendanceModification.findMany({ where: { bookingId: { in: bookingIds } }, orderBy: { createdAt: 'desc' } }) : [];
-    res.json({ history, modifications, summary: { attended: count('present') + count('late'), missed: count('absent'), late: count('late'), excused: count('excused'),
+    const activePackages = await db.badmintonEnrollment.findMany({ where: { OR: [{ userId: personId }, { userId: null, studentId: personId }], status: 'active', startDate: { lte: today() }, expiryDate: { gte: today() } },
+      select: { id: true, packageName: true, categoryCode: true, sessionsTotal: true, sessionsRemaining: true, expiryDate: true }, orderBy: { expiryDate: 'asc' } });
+    res.json({ history, modifications, activePackages, summary: { attended: count('present') + count('late'), missed: count('absent'), late: count('late'), excused: count('excused'),
       completedScheduled: scheduled.length, percentage: scheduled.length ? Math.round((count('present') + count('late')) / scheduled.length * 100) : null } });
   }));
   router.post('/packages/:id/mark', roles('admin'), asyncRoute(async (req: AuthRequest, res) => {
@@ -132,7 +135,9 @@ export function createAttendanceRouter(db: PrismaClient = prisma, authenticate =
       if (booking.paymentStatus !== 'paid' || !['confirmed', 'CONFIRMED', 'completed', 'COMPLETED'].includes(booking.status) || booking.date > today() || (actor.role !== 'admin' && booking.date !== today()))
         throw fail('Only eligible paid sessions can be marked; staff marking is limited to today.');
       if (['absent', 'excused'].includes(b.status) && scheduleInstant(booking.date, booking.time) > new Date()) throw fail('A future session cannot be marked absent or excused.');
-      return tx.bookingAttendance.create({ data: { bookingId: id, status: b.status, notes: b.notes, recordedById: actor.id } });
+      const attendance = await tx.bookingAttendance.create({ data: { bookingId: id, status: b.status, notes: b.notes, recordedById: actor.id } });
+      if (['present', 'late'].includes(b.status)) await tx.notification.upsert({ where: { dedupeKey: `course-attendance:${attendance.id}` }, update: {}, create: { dedupeKey: `course-attendance:${attendance.id}`, userId: booking.userId, title: 'Attendance confirmed', body: `${booking.title}: attendance recorded.`, type: 'attendance', link: '/attendance' } });
+      return attendance;
     });
     res.json(result);
   }));
@@ -143,7 +148,9 @@ export function createAttendanceRouter(db: PrismaClient = prisma, authenticate =
       const booking = await tx.booking.findFirst({ where: { id, kind: 'private_course', ...(actor.role === 'coach' ? { coach: { is: { userId: actor.id } } } : {}) } });
       if (!booking) throw fail('Session not found.', 404);
       if (booking.date !== today() || booking.paymentStatus !== 'paid' || !['confirmed', 'CONFIRMED'].includes(booking.status)) throw fail('Only today’s paid, confirmed sessions can be checked in.');
-      return tx.bookingAttendance.upsert({ where: { bookingId: id }, update: {}, create: { bookingId: id, recordedById: actor.id } });
+      const attendance = await tx.bookingAttendance.upsert({ where: { bookingId: id }, update: {}, create: { bookingId: id, recordedById: actor.id } });
+      await tx.notification.upsert({ where: { dedupeKey: `course-attendance:${attendance.id}` }, update: {}, create: { dedupeKey: `course-attendance:${attendance.id}`, userId: booking.userId, title: 'Check-in confirmed', body: `${booking.title}: attendance recorded.`, type: 'attendance', link: '/attendance' } });
+      return attendance;
     });
     res.json({ id: attendance.id, checkedInAt: attendance.checkedInAt });
   }));

@@ -12,7 +12,7 @@ import { createQrCheckInRouter } from '../src/routes/qrCheckIn.js';
 import { createAttendanceRouter } from '../src/routes/attendance.js';
 import { createAuthMiddleware, roles } from '../src/middleware/auth.js';
 import { createSessionService } from '../src/services/authSession.js';
-import { createBadmintonVisit, correctBadmintonVisit } from '../src/services/badmintonAttendance.js';
+import { createBadmintonVisit } from '../src/services/badmintonAttendance.js';
 import { checkInTransaction, classifyLegacyPackage, type CategoryCode } from '../src/services/badmintonCategory.js';
 import { today } from '../src/services/courtPolicy.js';
 import { asyncRoute } from '../src/utils/asyncRoute.js';
@@ -49,7 +49,7 @@ for (const provider of ['sqlite', 'postgresql'] as const) test(`category check-i
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${(server.address() as any).port}`;
   const tokens = new Map<string, string>();
-  const member = async (role: 'member' | 'admin' | 'badminton_fo' = 'member') => {
+  const member = async (role: 'member' | 'admin' | 'badminton_fo' | 'coach' | 'gym_fo' | 'clinic_fo' = 'member') => {
     const u = await db.user.create({ data: { name: 'Category QA', email: `${randomUUID()}@category.test`, role } });
     tokens.set(u.id, (await sessions.issue(db, u, 'database_password', [])).accessToken); return u;
   };
@@ -63,110 +63,160 @@ for (const provider of ['sqlite', 'postgresql'] as const) test(`category check-i
     const pkg = await db.badmintonPackage.create({ data: { title: `${categoryCode} QA`, price: 100000, sessions: 10, validity: 30, description: '', categoryId: categories.get(categoryCode) } });
     return db.badmintonEnrollment.create({ data: { userId: u.id, studentId: u.id, studentName: u.name, phone: '', packageId: pkg.id, packageName: pkg.title, categoryCode, startDate: today(), expiryDate: '2098-01-01', sessionsTotal: 10, sessionsRemaining: 10, ...extra } });
   };
-  const issue = async (categoryCode: CategoryCode = 'SOCIAL') => { const r = await request(fo, '/check-in/qr', { categoryCode }); assert.equal(r.status, 201, JSON.stringify(r.data)); return r.data; };
+  process.env.QR_TOKEN_ENCRYPTION_KEY = 'category-test-encryption-key-thirty-two-plus';
+  const issue = async (categoryCode: CategoryCode = 'SOCIAL', slot = 1, regenerate = false, actor = fo) => {
+    const r = await request(actor, '/check-in/qr', { categoryCode, slot, regenerate });
+    assert.equal(r.status, 201, JSON.stringify(r.data)); return r.data;
+  };
   const balance = async (id: string) => (await db.badmintonEnrollment.findUniqueOrThrow({ where: { id } })).sessionsRemaining;
+  const run = (name: string, fn: () => Promise<void>) => t.test(name, async () => {
+    await db.badmintonQrDeskSlot.updateMany({ data: { qrId: null } });
+    await db.badmintonEntryQr.updateMany({ where: { kind: 'CATEGORY', status: 'ACTIVE' }, data: { status: 'REVOKED', revokedAt: new Date() } });
+    await fn();
+  });
   try {
-    await t.test('category-required issuance, roles, secure token, display rename and one-hour expiry', async () => {
-      assert.equal((await request(fo, '/check-in/qr', {})).status, 400);
-      assert.equal((await request(fo, '/check-in/qr', { categoryCode: 'OTHER' })).status, 400);
-      assert.equal((await request(await member(), '/check-in/qr', { categoryCode: 'SOCIAL' })).status, 403);
-      const qr = await issue(); assert.match(qr.token, /^[\w-]{43}$/);
-      const stored = await db.badmintonEntryQr.findUniqueOrThrow({ where: { id: qr.id } });
-      assert.notEqual(stored.tokenHash, qr.token); assert.equal(stored.categoryCode, 'SOCIAL'); assert.ok(stored.createdAt);
-      assert.ok(new Date(qr.expiresAt).getTime() - Date.now() > 3590000);
-      await db.badmintonPackageCategory.update({ where: { code: 'SOCIAL' }, data: { name: `Social club ${randomUUID()}` } });
-      assert.equal((await issue()).categoryCode, 'SOCIAL');
+    await run('category-only generation, two independent slots, exact two hours and persistent restoration', async () => {
+      const u = await member();
+      assert.equal((await request(u, '/check-in/qr', { categoryCode: 'SOCIAL' })).status, 403);
+      assert.equal((await request(fo, '/check-in/qr', { memberId: u.id, authorizedCategories: ['SOCIAL'] })).status, 400);
+      assert.equal((await request(fo, '/check-in/qr', { categoryCode: 'SOCIAL', slot: 3 })).status, 400);
+      const social = await issue(), stored = await db.badmintonEntryQr.findUniqueOrThrow({ where: { id: social.id } });
+      assert.equal(stored.memberId, null); assert.equal(stored.kind, 'CATEGORY'); assert.equal(stored.categoryCode, 'SOCIAL');
+      assert.match(social.token, /^[\w-]{43}$/); assert.notEqual(stored.tokenHash, social.token); assert.ok(stored.encryptedToken && !stored.encryptedToken.includes(social.token));
+      const pathway = await issue('PATHWAY', 2);
+      assert.notEqual(pathway.token, social.token);
+      assert.deepEqual(await db.badmintonEntryQr.findUniqueOrThrow({ where: { id: social.id } }), stored);
+      for (const qr of [social, pathway]) assert.equal(new Date(qr.expiresAt).getTime() - new Date(qr.createdAt).getTime(), 120 * 60000);
+      assert.equal((await issue()).token, social.token);
+      await db.$disconnect();
+      const restored = await request(fo, '/check-in/qr');
+      assert.deepEqual(restored.data.slots.map((row: any) => row.qr.token), [social.token, pathway.token]);
+      assert.equal((await request(u, '/check-in/qr')).status, 403);
     });
-    await t.test('Social ignores earlier-expiring Foundation; preview does not deduct; same-day categories allowed', async () => {
-      const u = await member(), f = await enroll(u, 'FOUNDATION', { expiryDate: '2097-01-01' }), s = await enroll(u, 'SOCIAL');
-      const qr = await issue(); const preview = await request(u, '/check-in/preview', { token: qr.token });
-      assert.equal(preview.status, 200); assert.equal(preview.data.categoryCode, 'SOCIAL'); assert.equal(preview.data.enrollment.id, s.id); assert.equal(preview.data.expectedRemaining, 9); assert.equal(await balance(s.id), 10);
-      const done = await request(u, '/check-in/scan', { token: qr.token }); assert.equal(done.status, 201, JSON.stringify(done.data));
-      assert.equal(done.data.sessionsDeducted, 1); assert.equal(done.data.enrollment.id, s.id); assert.equal(await balance(s.id), 9); assert.equal(await balance(f.id), 10);
-      const visit = await db.badmintonQrVisit.findUniqueOrThrow({ where: { checkInId: done.data.checkInId }, include: { qr: true, checkIn: true } });
-      assert.equal(visit.qrId, qr.id); assert.equal(visit.checkIn.source, 'QR'); assert.equal(visit.checkIn.actorId, u.id); assert.equal(visit.checkIn.categoryCode, 'SOCIAL'); assert.equal(visit.checkIn.date, today());
-      assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.code, 'ALREADY_CHECKED_IN');
-      const foundation = await issue('FOUNDATION'); assert.equal((await request(u, '/check-in/scan', { token: foundation.token })).status, 201); assert.equal(await balance(f.id), 9);
-      const history = await request(u, `/attendance?month=${today().slice(0, 7)}`); assert.equal(history.data.records.filter((r: any) => r.kind === 'package').length, 2);
-      assert.equal((await request(u, `/attendance?month=${today().slice(0, 7)}&categoryCode=SOCIAL`)).data.records.length, 1);
-    });
-    await t.test('no matching category never falls back, missing Pathway and expired/exhausted errors preserve balances', async () => {
-      const u = await member(), f = await enroll(u, 'FOUNDATION'); const social = await issue();
-      assert.equal((await request(u, '/check-in/scan', { token: social.token })).data.code, 'NO_CATEGORY_PACKAGE'); assert.equal(await balance(f.id), 10);
-      const pathway = await issue('PATHWAY'); assert.equal((await request(u, '/check-in/scan', { token: pathway.token })).data.code, 'NO_CATEGORY_PACKAGE');
-      const expired = await enroll(u, 'PATHWAY', { expiryDate: '2020-01-01' }); assert.equal((await request(u, '/check-in/scan', { token: pathway.token })).data.code, 'PACKAGE_EXPIRED'); assert.equal(await balance(expired.id), 10);
-      await db.badmintonEnrollment.update({ where: { id: expired.id }, data: { expiryDate: '2099-01-01', sessionsRemaining: 0 } });
-      assert.equal((await request(u, '/check-in/scan', { token: pathway.token })).data.code, 'NO_SESSIONS');
-    });
-    await t.test('earliest eligible expiry, deterministic tie break and exhausted fallback', async () => {
-      const u = await member(); const later = await enroll(u, 'SOCIAL', { expiryDate: '2099-01-01' });
-      await enroll(u, 'SOCIAL', { sessionsRemaining: 0, expiryDate: '2096-01-01' });
-      await enroll(u, 'SOCIAL', { startDate: '2095-01-01', expiryDate: '2097-01-01' });
-      const first = await enroll(u, 'SOCIAL', { sessionsRemaining: 1, expiryDate: '2097-01-01', createdAt: new Date('2020-01-01') });
-      const tied = await enroll(u, 'SOCIAL', { expiryDate: '2097-01-01', createdAt: new Date('2021-01-01') });
-      const qr = await issue(); const result = await request(u, '/check-in/scan', { token: qr.token }); assert.equal(result.data.enrollment.id, first.id); assert.equal(await balance(first.id), 0); assert.equal(await balance(tied.id), 10); assert.equal(await balance(later.id), 10);
-      // Represent tomorrow's request without changing the service's Myanmar clock: retain attendance as historical.
-      await db.badmintonCheckIn.update({ where: { id: result.data.checkInId }, data: { date: '2020-01-01', attendanceKey: `${u.id}:SOCIAL:2020-01-01`, dailyKey: `${first.id}:2020-01-01` } });
-      await db.badmintonQrVisit.updateMany({ where: { checkInId: result.data.checkInId }, data: { date: '2020-01-01' } });
-      assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.enrollment.id, tied.id);
-    });
-    await t.test('staff ID is a selection hint; cross-source duplicates and QR/manual race cannot double-charge', async () => {
-      const u = await member(), first = await enroll(u, 'SOCIAL', { expiryDate: '2097-01-01' }), later = await enroll(u, 'SOCIAL'); const qr = await issue();
-      const results = await Promise.all([request(fo, '/manual', { enrollmentId: later.id }), request(u, '/check-in/scan', { token: qr.token }), request(u, '/check-in/scan', { token: qr.token })]);
-      assert.equal(results.filter(r => r.status === 201).length, 1, JSON.stringify(results)); assert.equal(await balance(first.id), 9); assert.equal(await balance(later.id), 10);
-      assert.equal(await db.badmintonCheckIn.count({ where: { memberId: u.id, categoryCode: 'SOCIAL', date: today() } }), 1);
-      assert.equal((await request(fo, '/manual', { enrollmentId: later.id })).data.code, 'ALREADY_CHECKED_IN');
-    });
-    await t.test('concurrent final-session scans commit exactly one ledger and visit', async () => {
-      const u = await member(), e = await enroll(u, 'SOCIAL', { sessionsRemaining: 1 }), qr = await issue();
-      const results = await Promise.all(Array.from({ length: 6 }, () => request(u, '/check-in/scan', { token: qr.token })));
-      assert.equal(results.filter(r => r.status === 201).length, 1, JSON.stringify(results)); assert.equal(await balance(e.id), 0);
-      assert.equal(await db.badmintonQrVisit.count({ where: { userId: u.id } }), 1);
-    });
-    await t.test('preview is revalidated; changed balance chooses another matching package at commit', async () => {
-      const u = await member(), first = await enroll(u, 'SOCIAL', { expiryDate: '2097-01-01' }), later = await enroll(u, 'SOCIAL'), qr = await issue();
-      assert.equal((await request(u, '/check-in/preview', { token: qr.token })).data.enrollment.id, first.id);
-      await db.badmintonEnrollment.update({ where: { id: first.id }, data: { sessionsRemaining: 0 } });
-      assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.enrollment.id, later.id);
-    });
-    await t.test('expired, rotated, revoked, category-neutral and unauthorized-issuer codes fail without writes', async () => {
-      const u = await member(), e = await enroll(u, 'SOCIAL'); let qr = await issue();
-      await db.badmintonEntryQr.update({ where: { id: qr.id }, data: { expiresAt: new Date(0) } }); assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.code, 'QR_EXPIRED');
-      qr = await issue(); await issue('FOUNDATION'); assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.code, 'QR_REVOKED');
-      qr = await issue(); assert.equal((await request(u, `/check-in/qr/${qr.id}`, undefined, 'DELETE')).status, 403);
-      const otherFo = await member('badminton_fo'); assert.equal((await request(otherFo, `/check-in/qr/${qr.id}`, undefined, 'DELETE')).status, 404);
-      await request(fo, `/check-in/qr/${qr.id}`, undefined, 'DELETE'); assert.equal((await request(u, '/check-in/preview', { token: qr.token })).data.code, 'QR_REVOKED');
-      const { newCredential, credentialHash } = await import('../src/services/authSession.js');
-      const neutralToken = newCredential();
-      await db.badmintonEntryQr.create({ data: { tokenHash: credentialHash(neutralToken), createdById: fo.id, expiresAt: new Date(Date.now() + 60000) } });
-      assert.equal((await request(u, '/check-in/scan', { token: neutralToken })).data.code, 'QR_CATEGORY_REQUIRED');
-      qr = await issue(); await db.user.update({ where: { id: fo.id }, data: { active: false } }); assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.code, 'QR_ISSUER_INACTIVE'); await db.user.update({ where: { id: fo.id }, data: { active: true } });
-      assert.equal(await balance(e.id), 10); assert.equal(await db.badmintonCheckIn.count({ where: { enrollmentId: e.id } }), 0);
-    });
-    await t.test('token-only input rejects category/enrollment tampering and cross-member access', async () => {
-      const owner = await member(), stranger = await member(), e = await enroll(owner, 'SOCIAL'), qr = await issue();
-      for (const path of ['/check-in/preview', '/check-in/scan']) {
-        for (const extra of [{ categoryCode: 'FOUNDATION' }, { enrollmentId: e.id }, { userId: owner.id }]) assert.equal((await request(stranger, path, { token: qr.token, ...extra })).status, 400);
-        assert.equal((await request(stranger, path, { token: qr.token })).data.code, 'NO_CATEGORY_PACKAGE');
+    await run('multiple members share a category QR; one redemption each and category-isolated deduction', async () => {
+      const qr = await issue();
+      for (let i = 0; i < 3; i++) {
+        const u = await member(), f = await enroll(u, 'FOUNDATION', { sessionsRemaining: 8 }), social = await enroll(u, 'SOCIAL', { sessionsRemaining: 5 });
+        const preview = await request(u, '/check-in/preview', { token: qr.token });
+        assert.equal(preview.data.categoryCode, 'SOCIAL'); assert.equal(preview.data.enrollment.id, social.id); assert.equal(await balance(social.id), 5);
+        assert.equal((await request(u, '/check-in/scan', { token: qr.token, categoryCode: 'FOUNDATION' })).status, 400);
+        const done = await request(u, '/check-in/scan', { token: qr.token });
+        assert.equal(done.status, 201, JSON.stringify(done.data)); assert.equal(await balance(social.id), 4); assert.equal(await balance(f.id), 8);
+        for (const path of ['/check-in/scan', '/check-in/preview']) {
+          const duplicate = await request(u, path, { token: qr.token });
+          assert.equal(duplicate.data.code, 'QR_ALREADY_REDEEMED'); assert.equal(duplicate.data.message, 'You have already checked in using this QR code.');
+        }
+        assert.equal(await db.badmintonQrRedemption.count({ where: { qrId: qr.id, memberId: u.id } }), 1);
+        assert.equal(await db.notification.count({ where: { userId: u.id, entityId: done.data.checkInId } }), 1);
       }
-      assert.equal((await request(stranger, '/manual', { enrollmentId: e.id })).status, 403); assert.equal(await balance(e.id), 10);
-      const done = await request(owner, '/check-in/scan', { token: qr.token }); assert.equal((await request(stranger, `/attendance/package/${done.data.checkInId}/detail`)).status, 404);
+      const status = await request(fo, `/check-in/qr/${qr.id}`);
+      assert.equal(status.data.status, 'ACTIVE'); assert.equal(status.data.checkInCount, 3); assert.equal(status.data.recentCheckIns.length, 3);
+      const stored = await db.badmintonEntryQr.findUniqueOrThrow({ where: { id: qr.id } });
+      assert.equal(stored.usedAt, null); assert.equal(stored.redeemedBy, null); assert.equal(stored.attendanceId, null);
     });
-    await t.test('catalogue changes do not reclassify an enrollment; admin resolution preserves balances/history', async () => {
+    await run('simultaneous scans debit once per member and allow concurrent different members', async () => {
+      const qr = await issue(), u = await member(), e = await enroll(u, 'SOCIAL');
+      const results = await Promise.all(Array.from({ length: 4 }, () => request(u, '/check-in/scan', { token: qr.token })));
+      assert.equal(results.filter(r => r.status === 201).length, 1); assert.equal(await balance(e.id), 9);
+      assert.ok(results.filter(r => r.status !== 201).every(r => r.data.code === 'QR_ALREADY_REDEEMED'));
+      const users = await Promise.all([member(), member()]);
+      for (const user of users) await enroll(user, 'SOCIAL');
+      const different = await Promise.all(users.map(user => request(user, '/check-in/scan', { token: qr.token })));
+      assert.ok(different.every(r => r.status === 201));
+      assert.equal(await db.badmintonQrRedemption.count({ where: { qrId: qr.id } }), 3);
+      // The database enforces the pair even if a future writer forgets the precheck.
+      const otherAttendance = await db.badmintonCheckIn.create({ data: { enrollmentId: e.id, date: '2020-01-01', time: '09:00', sessionsUsed: 0 } });
+      await assert.rejects(db.badmintonQrRedemption.create({ data: { qrId: qr.id, memberId: u.id, enrollmentId: e.id, attendanceId: otherAttendance.id } }), (error: any) => error.code === 'P2002');
+      await db.badmintonCheckIn.delete({ where: { id: otherAttendance.id } });
+    });
+    await run('coach and FO share slots and attendance history; gym/unlinked coaches denied', async () => {
+      const coach = await member('coach'), gymCoach = await member('coach'), unlinked = await member('coach');
+      const profile = await db.coach.create({ data: { userId: coach.id, name: 'Badminton coach', specialty: '', phone: '', email: coach.email, department: 'Badminton' } });
+      await db.coach.create({ data: { userId: gymCoach.id, name: 'Gym coach', specialty: '', phone: '', email: gymCoach.email, department: 'Gym' } });
+      for (const actor of [gymCoach, unlinked, await member('gym_fo'), await member('clinic_fo')]) assert.equal((await request(actor, '/check-in/qr')).status, 403);
+      assert.equal((await request(coach, `/attendance?month=${today().slice(0, 7)}`)).data.permissions.categoryQr, true);
+      assert.equal((await request(gymCoach, `/attendance?month=${today().slice(0, 7)}`)).data.permissions.categoryQr, false);
+      const qr = await issue('SOCIAL', 1, false, coach), second = await issue('PATHWAY', 2);
+      assert.deepEqual((await request(coach, '/check-in/qr')).data.slots.map((row: any) => row.qr.id), [qr.id, second.id]);
+      const assigned = await member(), stranger = await member();
+      await db.booking.create({ data: { code: randomUUID(), userId: assigned.id, coachId: profile.id, kind: 'private_course', title: 'Assigned', date: today(), time: '10:00 — 11:00', location: 'Court', price: 10, paymentStatus: 'paid', status: 'CONFIRMED' } });
+      for (const user of [assigned, stranger]) { await enroll(user, 'SOCIAL'); assert.equal((await request(user, '/check-in/scan', { token: qr.token })).status, 201); }
+      const coachView = (await request(coach, `/check-in/qr/${qr.id}`)).data;
+      assert.equal(coachView.checkInCount, 2); assert.equal(coachView.recentCheckIns.length, 2);
+      const assignedVisit = await db.badmintonQrRedemption.findUniqueOrThrow({ where: { qrId_memberId: { qrId: qr.id, memberId: assigned.id } } });
+      assert.ok(coachView.recentCheckIns.some((row: any) => row.id === assignedVisit.attendanceId));
+      assert.deepEqual(coachView.recentCheckIns, (await request(fo, `/check-in/qr/${qr.id}`)).data.recentCheckIns);
+      assert.equal((await request(fo, `/check-in/qr/${qr.id}`)).data.recentCheckIns.length, 2);
+    });
+    await run('slot replacement/revocation and concurrent generation never modify the other category', async () => {
+      const results = await Promise.all(Array.from({ length: 3 }, () => issue()));
+      assert.equal(new Set(results.map(r => r.id)).size, 1);
+      const social = results[0], pathway = await issue('PATHWAY', 2);
+      assert.equal((await request(fo, '/check-in/qr', { categoryCode: 'SOCIAL', slot: 2, regenerate: true })).data.code, 'QR_CATEGORY_DISPLAYED');
+      assert.equal((await request(fo, '/check-in/qr', { categoryCode: 'FOUNDATION', slot: 1 })).data.code, 'QR_SLOT_OCCUPIED');
+      const foundation = await issue('FOUNDATION', 1, true);
+      assert.equal((await db.badmintonEntryQr.findUniqueOrThrow({ where: { id: social.id } })).status, 'REVOKED');
+      assert.equal((await request(fo, `/check-in/qr/${pathway.id}`)).data.token, pathway.token);
+      assert.equal((await request(fo, `/check-in/qr/${foundation.id}`, undefined, 'DELETE')).status, 200);
+      assert.equal((await request(fo, `/check-in/qr/${pathway.id}`)).data.status, 'ACTIVE');
+    });
+    await run('expired, revoked, disabled issuer, no package, exhausted and wrong-category states do not debit', async () => {
+      const u = await member(), f = await enroll(u, 'FOUNDATION'), qr = await issue();
+      assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.code, 'NO_CATEGORY_PACKAGE'); assert.equal(await balance(f.id), 10);
+      const social = await enroll(u, 'SOCIAL', { sessionsRemaining: 0 });
+      assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.code, 'NO_SESSIONS');
+      await db.badmintonEnrollment.update({ where: { id: social.id }, data: { sessionsRemaining: 5, expiryDate: '2020-01-01' } });
+      assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.code, 'PACKAGE_EXPIRED');
+      await db.badmintonEntryQr.update({ where: { id: qr.id }, data: { expiresAt: new Date(Date.now() - 1) } });
+      const expired = await request(u, '/check-in/scan', { token: qr.token }); assert.equal(expired.data.message, 'QR code expired. Please request a new QR code.');
+      const next = await issue(); await request(fo, `/check-in/qr/${next.id}`, undefined, 'DELETE');
+      assert.equal((await request(u, '/check-in/scan', { token: next.token })).data.code, 'QR_REVOKED');
+      const active = await issue(); await db.user.update({ where: { id: fo.id }, data: { active: false } });
+      assert.equal((await request(u, '/check-in/scan', { token: active.token })).data.code, 'QR_ISSUER_INACTIVE');
+      await db.user.update({ where: { id: fo.id }, data: { active: true } });
+      assert.equal(await db.badmintonQrRedemption.count({ where: { memberId: u.id } }), 0); assert.equal(await balance(social.id), 5);
+    });
+    await run('one slot expires independently while the other remains redeemable', async () => {
+      const social = await issue(), pathway = await issue('PATHWAY', 2), u = await member();
+      const socialPackage = await enroll(u, 'SOCIAL'), pathwayPackage = await enroll(u, 'PATHWAY');
+      await db.badmintonEntryQr.update({ where: { id: social.id }, data: { expiresAt: new Date(Date.now() - 1) } });
+      const restored = (await request(fo, '/check-in/qr')).data.slots;
+      assert.equal(restored[0].qr.status, 'EXPIRED'); assert.equal(restored[1].qr.status, 'ACTIVE');
+      assert.equal(restored[1].qr.token, pathway.token); assert.equal(restored[1].qr.expiresAt, pathway.expiresAt);
+      assert.equal((await request(u, '/check-in/scan', { token: social.token })).data.code, 'QR_EXPIRED');
+      assert.equal((await request(u, '/check-in/scan', { token: pathway.token })).status, 201);
+      assert.equal(await balance(socialPackage.id), 10); assert.equal(await balance(pathwayPackage.id), 9);
+    });
+    await run('failure after debit rolls back visit, redemption and notifications', async () => {
+      const u = await member(), e = await enroll(u, 'SOCIAL'), qr = await issue();
+      if (provider === 'sqlite') {
+        await db.$executeRawUnsafe(`CREATE TRIGGER qa_reject_redemption BEFORE INSERT ON BadmintonQrRedemption BEGIN SELECT RAISE(ABORT, 'qa rollback'); END`);
+        assert.equal((await request(u, '/check-in/scan', { token: qr.token })).status, 500);
+        await db.$executeRawUnsafe('DROP TRIGGER qa_reject_redemption');
+        assert.equal(await balance(e.id), 10); assert.equal(await db.badmintonCheckIn.count({ where: { qrId: qr.id } }), 0);
+        assert.equal(await db.notification.count({ where: { userId: u.id } }), 0);
+      }
+      assert.equal((await request(u, '/check-in/scan', { token: qr.token })).status, 201);
+    });
+    await run('separate category eligibility, renewal ordering, and QR/manual daily guard remain unchanged', async () => {
+      const u = await member(), early = await enroll(u, 'SOCIAL', { expiryDate: '2097-01-01' }), later = await enroll(u, 'SOCIAL'), foundation = await enroll(u, 'FOUNDATION');
+      const social = await issue(), f = await issue('FOUNDATION', 2);
+      assert.equal((await request(u, '/check-in/preview', { token: social.token })).data.enrollment.id, early.id);
+      const results = await Promise.all([request(u, '/check-in/scan', { token: social.token }), request(fo, '/manual', { enrollmentId: later.id })]);
+      assert.equal(results.filter(r => r.status === 201).length, 1); assert.equal(await balance(early.id), 9); assert.equal(await balance(later.id), 10);
+      assert.equal((await request(u, '/check-in/scan', { token: f.token })).status, 201); assert.equal(await balance(foundation.id), 9);
+      const replacement = await issue('SOCIAL', 1, true);
+      assert.equal((await request(u, '/check-in/scan', { token: replacement.token })).data.code, 'ALREADY_CHECKED_IN');
+    });
+    await run('legacy classification and immutable category snapshots retain balances', async () => {
       const u = await member(), e = await enroll(u, 'SOCIAL');
       await db.badmintonPackage.update({ where: { id: e.packageId }, data: { categoryId: categories.get('FOUNDATION') } });
       const qr = await issue(); assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.categoryCode, 'SOCIAL');
-      const legacy = await db.badmintonEnrollment.create({ data: { studentId: u.id, userId: u.id, studentName: u.name, phone: '', packageId: e.packageId, packageName: 'Unclassified historic', startDate: '2020-01-01', expiryDate: '2099-01-01', sessionsTotal: 20, sessionsRemaining: 6 } });
-      const visit = await db.badmintonCheckIn.create({ data: { enrollmentId: legacy.id, date: '2020-01-02', time: '09:00', sessionsUsed: 1 } });
-      assert.equal((await request(u, '/check-in/scan', { token: qr.token })).data.code, 'CATEGORY_REVIEW_REQUIRED');
-      const classified = await checkInTransaction(db, tx => classifyLegacyPackage(tx, e.packageId)); assert.equal(classified.enrollments, 1); assert.equal(await balance(legacy.id), 6);
-      assert.equal((await db.badmintonCheckIn.findUniqueOrThrow({ where: { id: visit.id } })).categoryCode, 'FOUNDATION');
-      const done = await request(fo, '/manual', { enrollmentId: legacy.id }); assert.equal(done.status, 201);
-      await checkInTransaction(db, tx => correctBadmintonVisit(tx, done.data.checkInId, admin.id, 'excused', 'Wrong arrival recorded'));
-      assert.equal(await balance(legacy.id), 6);
-      assert.equal((await request(fo, '/manual', { enrollmentId: legacy.id })).data.code, 'ALREADY_CHECKED_IN');
+      const legacy = await db.badmintonEnrollment.create({ data: { studentId: u.id, userId: u.id, studentName: u.name, phone: '', packageId: e.packageId, packageName: 'Legacy', startDate: '2020-01-01', expiryDate: '2099-01-01', sessionsTotal: 20, sessionsRemaining: 6 } });
+      assert.equal((await checkInTransaction(db, tx => classifyLegacyPackage(tx, e.packageId, admin.id))).enrollments, 1);
+      assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: legacy.id } })).sessionsRemaining, 6);
     });
-  } finally { await new Promise<void>(resolve => server.close(() => resolve())); await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { await new Promise<void>(r => server.close(() => r())); await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('forward SQLite migration preserves all classified, duplicate and ambiguous history and balances', { skip: !!process.env.BADMINTON_ONLY_POSTGRES }, async () => {
@@ -188,6 +238,24 @@ test('forward SQLite migration preserves all classified, duplicate and ambiguous
     assert.equal(sqlite.prepare("SELECT categoryCode FROM BadmintonEntryQr WHERE id='old-qr'").get()!.categoryCode, null);
     assert.throws(() => sqlite.exec("UPDATE BadmintonEnrollment SET categoryCode='FOUNDATION' WHERE id='e'"), /immutable/);
     assert.throws(() => sqlite.exec("INSERT INTO BadmintonPackageCategory(id,name,code) VALUES('bad','bad','BAD')"), /Invalid badminton category/);
+    sqlite.exec(readFileSync(new URL('20261104090000_single_use_member_qr_package_security/migration.sql', migrationRoot), 'utf8'));
+    assert.deepEqual(sqlite.prepare('SELECT id,sessionsTotal,sessionsRemaining FROM BadmintonEnrollment ORDER BY id').all(), before);
+    assert.equal(sqlite.prepare('SELECT count(*) n FROM BadmintonCheckIn').get()!.n, 3);
+    assert.equal(sqlite.prepare("SELECT status FROM BadmintonEntryQr WHERE id='old-qr'").get()!.status, 'REVOKED');
+    sqlite.exec(`INSERT INTO "User"(id,name,email,role) VALUES('qr-member','QR member','qr-member@migration.test','member');
+      INSERT INTO "BadmintonEntryQr"(id,"memberId","createdById","tokenHash","expiresAt",status) VALUES('member-active','qr-member','qr-staff','active-hash',9999999999999,'ACTIVE'),('member-used','qr-member','qr-staff','used-hash',9999999999999,'USED');
+      UPDATE "BadmintonQrVisit" SET "qrId"='old-qr' WHERE id='v';
+      INSERT INTO "BadmintonQrVisit"(id,"userId",date,"checkInId","qrId","categoryCode") VALUES('second-old-visit','walkin','2020-01-02','c2','old-qr','SOCIAL');`);
+    const historical = sqlite.prepare('SELECT * FROM BadmintonCheckIn ORDER BY id').all();
+    sqlite.exec(readFileSync(new URL('20261104110000_shared_category_qr/migration.sql', migrationRoot), 'utf8'));
+    assert.deepEqual(sqlite.prepare('SELECT * FROM BadmintonCheckIn ORDER BY id').all(), historical);
+    assert.deepEqual(sqlite.prepare('SELECT id,sessionsTotal,sessionsRemaining FROM BadmintonEnrollment ORDER BY id').all(), before);
+    assert.equal(sqlite.prepare("SELECT status FROM BadmintonEntryQr WHERE id='member-active'").get()!.status, 'REVOKED');
+    assert.equal(sqlite.prepare("SELECT status FROM BadmintonEntryQr WHERE id='member-used'").get()!.status, 'USED');
+    assert.equal(sqlite.prepare('SELECT count(*) n FROM BadmintonQrVisit').get()!.n, 2);
+    assert.equal(sqlite.prepare('SELECT count(*) n FROM BadmintonQrRedemption').get()!.n, 0);
+    assert.deepEqual(sqlite.prepare('SELECT id FROM BadmintonQrDeskSlot ORDER BY id').all().map(row => row.id), [1, 2]);
+    assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
     sqlite.close();
     const db = new PrismaClient({ datasources: { db: { url: `file:${file}` } } });
     try { const report = await categoryPreflight(db); assert.equal(report.unresolvedActiveEnrollments.length, 1); assert.equal(report.historicalDuplicateGroups.length, 1); assert.equal(report.counts.checkIns, 3); } finally { await db.$disconnect(); }
@@ -210,7 +278,7 @@ test('forward PostgreSQL chain preserves legacy balances, duplicate visits and u
     const root = new URL('../prisma/postgresql/migrations/', import.meta.url);
     const names = readdirSync(root).filter(n => /^\d/.test(n)).sort();
     const latest = '20261028090000_badminton_category_checkin';
-    const beforeSql = names.filter(n => n !== latest).map(n => readFileSync(new URL(`${n}/migration.sql`, root), 'utf8')).join('\n');
+    const beforeSql = names.filter(n => n < latest).map(n => readFileSync(new URL(`${n}/migration.sql`, root), 'utf8')).join('\n');
     const script = join(dir, 'migration.sql');
     const execute = (sql: string) => {
       writeFileSync(script, sql);
@@ -226,7 +294,7 @@ test('forward PostgreSQL chain preserves legacy balances, duplicate visits and u
     `);
     db = new PrismaClient({ datasources: { db: { url: target.toString() } } });
     const before = await categoryPreflight(db);
-    execute(readFileSync(new URL(`${latest}/migration.sql`, root), 'utf8'));
+    for (const name of names.filter(n => n >= latest)) execute(readFileSync(new URL(`${name}/migration.sql`, root), 'utf8'));
     await db.$disconnect();
     db = new PrismaClient({ datasources: { db: { url: target.toString() } } });
     const after = await categoryPreflight(db);
