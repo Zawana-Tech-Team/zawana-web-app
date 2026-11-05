@@ -17,6 +17,7 @@ function parse(value: string) {
 }
 export default function QrCheckIn() {
   const { user, loading } = useAuth();
+  const userId = user?.id, userRole = user?.role;
   const [token, setToken] = useState(() => location.hash.slice(1) || sessionStorage.getItem(key) || '');
   const [camera, setCamera] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null), [previewBusy, setPreviewBusy] = useState(false), [previewVersion, setPreviewVersion] = useState(0);
@@ -36,12 +37,12 @@ export default function QrCheckIn() {
   }, [camera, accept]);
   useEffect(() => {
     setPreview(null);
-    if (!token || !user || user.role !== 'member') return;
+    if (!token || !userId || userRole !== 'member') return;
     let active = true;
     setPreviewBusy(true); setError('');
     post<Preview>('/check-in/preview', { token }).then(data => { if (active) setPreview(data); }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setPreviewBusy(false); });
     return () => { active = false; };
-  }, [token, user?.id, user?.role, previewVersion]);
+  }, [token, userId, userRole, previewVersion]);
   const confirm = async () => {
     setBusy(true); setError('');
     try { const data = await post<{ categoryCode: string; enrollment: { packageName: string; sessionsRemaining: number } }>('/check-in/scan', { token: parse(token) }); setResult(data); sessionStorage.removeItem(key); setToken(''); }

@@ -20,6 +20,7 @@
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "attendance:migrate:recover": "node --env-file=.env scripts/recover-attendance-migration.mjs",
+    "auth:diagnostics": "tsx scripts/auth-diagnostics.ts",
     "auth:audit": "tsx scripts/audit-auth-identities.ts",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "auth:migrate-local": "tsx scripts/apply-hybrid-auth-local.ts",

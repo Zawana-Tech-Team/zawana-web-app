@@ -1,8 +1,9 @@
+import { recordPackageMutation } from "./packageSecurity.js";
 import type { PrismaClient } from "@prisma/client";
 import { audit, gymError, gymTransaction, json, normalizeGymPackage, packageInput } from "./gymPolicy.js";
 import type { z } from "zod";
 
-export async function saveGymPackage(db: PrismaClient, actorId: string, input: z.input<typeof packageInput>, id?: string, expectedVersion?: number) {
+export async function saveGymPackage(db: PrismaClient, actorId: string, input: z.input<typeof packageInput>, id?: string, expectedVersion?: number, securityAuditId?: string) {
   const data = normalizeGymPackage(input);
   return gymTransaction(db, async tx => {
     if (id) await tx.$executeRaw`UPDATE "GymPackage" SET "version"="version" WHERE "id"=${id}`;
@@ -19,6 +20,7 @@ export async function saveGymPackage(db: PrismaClient, actorId: string, input: z
       : await tx.gymPackage.create({ data });
     await tx.gymPackageRevision.create({ data: { packageId: row.id, version: row.version, snapshot: json(row), actorId } });
     await audit(tx, actorId, previous ? "PACKAGE_UPDATED" : "PACKAGE_CREATED", "package", row.id, previous || undefined, row);
+    await recordPackageMutation(tx, actorId, "gym", previous, row, securityAuditId);
     return row;
   });
 }

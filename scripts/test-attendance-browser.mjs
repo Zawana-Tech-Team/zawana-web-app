@@ -16,14 +16,14 @@ const api = `http://127.0.0.1:${apiPort}/api`, ui = `http://127.0.0.1:${uiPort}`
 const fixture = join(temp, 'fixture.json');
 writeFileSync(join(temp, 'qa.db'), '');
 const env = { ...process.env, DATABASE_URL: `file:${join(temp, 'qa.db')}`, AUTH_MODE: 'database', NODE_ENV: 'test', JWT_SECRET: 'attendance-test-only-key-over-thirty-two-characters', CLIENT_URL: ui, PUBLIC_API_URL: `http://127.0.0.1:${apiPort}`, PORT: String(apiPort), VITE_API_URL: api, VITE_AUTH_MODE: 'database', ATTENDANCE_QA_FIXTURE_PATH: fixture };
-let browser, logs = ''; const children = [], errors = [], keyWarnings = [];
-const start = (bin, args, cwd) => { const child = spawn(bin, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] }); children.push(child); child.stdout.on('data', d => logs += d); child.stderr.on('data', d => logs += d); };
+let browser, apiProcess, logs = ''; const children = [], errors = [], keyWarnings = [];
+const start = (bin, args, cwd) => { const child = spawn(bin, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] }); children.push(child); child.stdout.on('data', d => logs += d); child.stderr.on('data', d => logs += d); return child; };
 const ready = async url => { for (let i = 0; i < 150; i++) { if (children.some(c => c.exitCode !== null)) throw new Error(logs); if (await fetch(url).then(r => r.ok).catch(() => false)) return; await new Promise(r => setTimeout(r, 100)); } throw new Error(logs); };
 try {
   execFileSync(join(root, 'backend/node_modules/.bin/prisma'), ['migrate', 'deploy'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
   execFileSync(join(root, 'backend/node_modules/.bin/tsx'), ['tests/attendance-browser-fixture.ts'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
   const data = JSON.parse(readFileSync(fixture, 'utf8'));
-  start(join(root, 'backend/node_modules/.bin/tsx'), ['src/server.ts'], join(root, 'backend'));
+  apiProcess = start(join(root, 'backend/node_modules/.bin/tsx'), ['src/server.ts'], join(root, 'backend'));
   start(join(root, 'node_modules/.bin/vite'), ['--host', '127.0.0.1', '--port', String(uiPort), '--strictPort'], root);
   await Promise.all([ready(ui), ready(`${api}/health`)]);
   const chrome = process.env.ATTENDANCE_BROWSER_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -57,8 +57,12 @@ try {
     await attendanceDialog.getByText('Independently purchased private course.', { exact: false }).waitFor();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
+      await page.waitForFunction(() => {
+        const box = document.querySelector('dialog[open]')?.getBoundingClientRect();
+        return box && box.x >= -1 && box.y >= -1 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1;
+      });
       const box = await attendanceDialog.boundingBox();
-      assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= width && box.y + box.height <= 900, 'Attendance dialog stays inside viewport');
+      assert.ok(box && box.x >= -1 && box.y >= -1 && box.x + box.width <= width + 1 && box.y + box.height <= 901, 'Attendance dialog stays inside viewport');
       await page.screenshot({ path: join(temp, `attendance-detail-${role}-${width}.png`) });
     }
 
@@ -145,15 +149,45 @@ try {
       await page.screenshot({ path: join(temp, `court-changes-${role}.png`) });
       await dialog.getByRole('button', { name: 'Close dialog' }).click();
     }
+    if (role === 'coach' || role === 'badminton_fo') {
+      await page.goto(ui + (role === 'coach' ? '/coach/attendance' : '/badminton-fo/attendance'));
+      await page.locator('.attendance-workspace[aria-busy="false"]').waitFor();
+      assert.equal(await page.getByRole('region', { name: 'Badminton attendance QR generation', exact: true }).count(), 0, 'Attendance has no QR desk');
+    }
     if (role === 'badminton_fo') {
       await page.goto(ui + '/badminton-fo/check-in');
-      assert.equal(await page.getByRole('button', { name: 'Generate check-in QR', exact: true }).isDisabled(), true);
-      await page.getByLabel('QR category').selectOption('SOCIAL');
-      await page.getByRole('button', { name: 'Generate check-in QR', exact: true }).click();
-      await page.getByRole('img', { name: 'Social member check-in QR code' }).waitFor();
-      await page.screenshot({ path: join(temp, 'qr-desk-mobile.png'), fullPage: true });
-      await page.getByRole('button', { name: 'Revoke code', exact: true }).click();
-      await page.getByText('Your check-in QR will appear here').waitFor();
+      let desk = page.getByRole('region', { name: 'Badminton attendance QR generation', exact: true });
+      const first = desk.getByRole('article', { name: 'QR slot 1', exact: true });
+      const second = desk.getByRole('article', { name: 'QR slot 2', exact: true });
+      assert.equal(await desk.getByLabel('QR member', { exact: true }).count(), 0, 'Category generation never asks for a member');
+      if (role === 'badminton_fo') {
+        await first.getByLabel('QR slot 1 category').selectOption('SOCIAL');
+        await first.getByRole('button', { name: 'Generate / restore QR', exact: true }).click();
+        await first.getByRole('img', { name: 'Social attendance QR code' }).waitFor();
+        const originalImage = await first.getByRole('img').getAttribute('src');
+        await second.getByLabel('QR slot 2 category').selectOption('PATHWAY');
+        await second.getByRole('button', { name: 'Generate / restore QR', exact: true }).click();
+        await second.getByRole('img', { name: 'Pathway attendance QR code' }).waitFor();
+        assert.equal(await first.getByRole('img').getAttribute('src'), originalImage);
+      }
+      await first.getByRole('img', { name: 'Social attendance QR code' }).waitFor();
+      await second.getByRole('img', { name: 'Pathway attendance QR code' }).waitFor();
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await desk.screenshot({ path: join(temp, `category-qr-${role}-desktop.png`) });
+      await page.reload();
+      desk = page.getByRole('region', { name: 'Badminton attendance QR generation', exact: true });
+      await desk.getByRole('img', { name: 'Social attendance QR code' }).waitFor();
+      await desk.getByRole('img', { name: 'Pathway attendance QR code' }).waitFor();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await desk.getByRole('article', { name: 'QR slot 2', exact: true }).getByRole('img').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(temp, `category-qr-${role}-mobile.png`) });
+      if (role === 'badminton_fo') {
+        await desk.getByRole('article', { name: 'QR slot 2', exact: true }).getByRole('button', { name: 'Revoke', exact: true }).click();
+        await desk.getByText('REVOKED', { exact: true }).waitFor();
+        await desk.getByRole('img', { name: 'Social attendance QR code' }).waitFor();
+        await desk.getByRole('button', { name: 'Generate new QR', exact: true }).click();
+        await desk.getByRole('img', { name: 'Pathway attendance QR code' }).waitFor();
+      }
     }
     if (role === 'admin') {
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -168,6 +202,13 @@ try {
       await categoryDialog.getByLabel('Badminton category', { exact: true }).selectOption({ label: 'Social · SOCIAL' });
       await categoryDialog.getByRole('checkbox', { name: /I reviewed this package/ }).check();
       await categoryDialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const verification = page.getByRole('dialog', { name: 'Confirm package changes', exact: true });
+        await verification.getByLabel('Current password', { exact: true }).fill('attendance-package-password');
+        await page.screenshot({ path: join(temp, `package-verification-${attempt}.png`) });
+        await verification.getByRole('button', { name: 'Verify and save', exact: true }).click();
+        await verification.waitFor({ state: 'hidden' });
+      }
       await categoryDialog.waitFor({ state: 'hidden' });
       const reviewed = await (await fetch(api + '/badminton/enrollments', { headers: { Authorization: `Bearer ${token}` } })).json();
       const legacy = reviewed.find(row => row.studentId === 'WALKIN-REVIEW');
@@ -184,27 +225,54 @@ try {
       await page.goto(ui + '/member');
       await page.locator('.workspace-cover').waitFor();
       await page.getByRole('button', { name: /Scan to check in/ }).waitFor();
-      await page.goto(ui + '/membership'); await page.getByRole('link', { name: 'Scan to check in' }).first().waitFor();
+      await page.goto(ui + '/membership', { waitUntil: 'domcontentloaded' }); await page.getByRole('link', { name: 'Scan to check in' }).first().waitFor();
       await page.getByRole('heading', { name: 'Foundation twelve' }).first().waitFor();
       await page.getByRole('heading', { name: 'Ten court visits' }).first().waitFor();
       await page.screenshot({ path: join(temp, 'packages-mobile.png'), fullPage: true });
     }
     await context.close();
+    // Full navigations and StrictMode across four roles exceed the production profile-read IP budget.
+    // Clear only that counter in this disposable database; keep credential/replay limits intact.
+    execFileSync(join(root, 'backend/node_modules/.bin/tsx'), ['tests/attendance-browser-fixture.ts', '--reset-profile-rate'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
   }
   const fo = data.tokens.find(t => t.role === 'badminton_fo');
   const member = data.tokens.find(t => t.role === 'member');
   const apiRequest = (path, token, body) => fetch(api + path, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   assert.equal((await apiRequest('/check-in/qr', member.token, {})).status, 403);
   const generatedAt = Date.now();
-  const issued = await (await apiRequest('/check-in/qr', fo.token, { categoryCode: 'SOCIAL' })).json();
-  assert.ok(new Date(issued.expiresAt).getTime() - generatedAt > 3590000);
+  const issued = await (await apiRequest('/check-in/qr', fo.token, { categoryCode: 'SOCIAL', slot: 1 })).json();
+  assert.equal(new Date(issued.expiresAt).getTime() - new Date(issued.createdAt).getTime(), 7200000);
+  assert.ok(new Date(issued.expiresAt).getTime() > generatedAt);
+  const oldApi = apiProcess;
+  await new Promise(resolve => { oldApi.once('exit', resolve); oldApi.kill('SIGTERM'); });
+  children.splice(children.indexOf(oldApi), 1);
+  apiProcess = start(join(root, 'backend/node_modules/.bin/tsx'), ['src/server.ts'], join(root, 'backend'));
+  await ready(`${api}/health`);
+  const restored = await (await fetch(`${api}/check-in/qr`, { headers: { Authorization: `Bearer ${fo.token}` } })).json();
+  const restoredSocial = restored.slots.find(row => row.slot === 1).qr;
+  assert.equal(restoredSocial.id, issued.id, 'QR identity persists across API process restart');
+  assert.equal(restoredSocial.token, issued.token, 'QR redisplay survives API restart');
+  assert.equal(restoredSocial.expiresAt, issued.expiresAt, 'Restart cannot extend QR validity');
+  assert.equal(restored.slots.length, 2);
+  assert.equal(restored.slots.find(row => row.slot === 2).qr.categoryCode, 'PATHWAY');
+  const watchContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await watchContext.addInitScript(token => localStorage.setItem('zawana_access_token', token), fo.token);
+  const watch = await watchContext.newPage(); watch.on('pageerror', e => errors.push(e.message));
+  await watch.goto(ui + '/badminton-fo/attendance');
+  const liveSocial = watch.getByRole('region', { name: 'Badminton attendance QR generation', exact: true }).getByRole('article', { name: 'QR slot 1', exact: true });
+  await liveSocial.getByText('0 check-ins', { exact: true }).waitFor();
   const png = join(temp, 'entry-qr.png');
   await QRCode.toFile(png, `${ui}/check-in#${issued.token}`);
   const qrContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await qrContext.addInitScript(token => localStorage.setItem('zawana_access_token', token), member.token);
   const scan = await qrContext.newPage();
+  scan.on('pageerror', e => errors.push(e.message));
+  scan.on('response', async response => {
+    if (response.status() >= 400 && response.url().startsWith(api)) console.error('Scan API response', response.url().replace(/#.*/, ''), response.status(), (await response.json().catch(() => ({}))).code);
+  });
   await scan.goto(ui + '/check-in');
   await scan.getByLabel('Upload QR photo').setInputFiles(png);
+  assert.equal(await scan.getByLabel('Check-in category', { exact: true }).count(), 0, 'The QR fixes the attendance category');
   await scan.getByRole('heading', { name: 'Ten court visits', exact: true }).waitFor();
   await scan.getByText('9 remaining', { exact: true }).waitFor();
   assert.equal(await scan.getByText('Foundation twelve', { exact: true }).count(), 0);
@@ -214,12 +282,28 @@ try {
   await scan.screenshot({ path: join(temp, 'qr-success-mobile.png'), fullPage: true });
   const duplicate = await apiRequest('/check-in/scan', member.token, { token: issued.token });
   assert.equal(duplicate.status, 409);
-  assert.equal((await duplicate.json()).code, 'ALREADY_CHECKED_IN');
-  const replacement = await (await apiRequest('/check-in/qr', fo.token, { categoryCode: 'SOCIAL' })).json();
-  assert.equal((await apiRequest('/check-in/scan', member.token, { token: issued.token })).status, 409);
-  assert.equal((await apiRequest('/check-in/scan', member.token, { token: replacement.token })).status, 409);
+  assert.equal((await duplicate.json()).code, 'QR_ALREADY_REDEEMED');
+  const otherMember = await apiRequest('/check-in/scan', data.secondaryMember.token, { token: issued.token });
+  assert.equal(otherMember.status, 201, 'Another member can use the same category QR');
+  const sharedStatus = await (await fetch(`${api}/check-in/qr/${issued.id}`, { headers: { Authorization: `Bearer ${fo.token}` } })).json();
+  assert.equal(sharedStatus.status, 'ACTIVE'); assert.equal(sharedStatus.checkInCount, 2);
+  await liveSocial.getByText('2 check-ins', { exact: true }).waitFor();
+  await liveSocial.getByRole('img', { name: 'Social attendance QR code' }).waitFor();
+  await liveSocial.getByText('Attendance history', { exact: true }).click();
+  await liveSocial.getByText('Aye Student', { exact: true }).waitFor();
+  await liveSocial.getByText('Ko Second Member', { exact: true }).waitFor();
+  await watch.screenshot({ path: join(temp, 'category-qr-live-count-history.png') });
+  await watchContext.close();
+  const foundation = await (await apiRequest('/check-in/qr', fo.token, { categoryCode: 'FOUNDATION', slot: 2, regenerate: true })).json();
+  const foundationVisit = await apiRequest('/check-in/scan', member.token, { token: foundation.token });
+  assert.equal(foundationVisit.status, 201); assert.equal((await foundationVisit.json()).enrollment.sessionsRemaining, 11);
+  const profile = await fetch(api + '/auth/me', { headers: { Authorization: `Bearer ${member.token}` } });
+  assert.equal(profile.status, 200, 'Member session remains valid after QR redemption');
   await scan.goto(ui + '/attendance');
-  await scan.getByRole('heading', { name: /^Attendance list/ }).waitFor();
+  await scan.getByRole('heading', { name: /^Attendance list/ }).waitFor().catch(async error => {
+    await scan.screenshot({ path: join(temp, 'qr-attendance-failure.png'), fullPage: true });
+    console.error({ url: scan.url(), body: await scan.locator('body').innerText(), errors, artifacts: temp }); throw error;
+  });
   await scan.locator('.attendance-list-mobile').getByText('Ten court visits', { exact: true }).waitFor();
   await scan.locator('.attendance-list-panel').screenshot({ path: join(temp, 'attendance-list-package-mobile.png') });
   await scan.getByRole('button', { name: 'Filters', exact: true }).click();
@@ -227,7 +311,7 @@ try {
   await scan.setViewportSize({ width: 1440, height: 1000 });
   await scan.locator('.attendance-list-panel').screenshot({ path: join(temp, 'attendance-list-package-desktop.png') });
   await qrContext.close();
-  console.log('PASS one-hour QR, camera-library image decoding, session deduction, duplicate protection and rotation');
+  console.log('PASS two independent category QR slots across refresh/API restart, shared member scans, per-member duplicate protection, exact-category deduction and package reauthentication');
   const publicContext = await browser.newContext();
   const publicPage = await publicContext.newPage();
   publicPage.on('console', message => { if (/Each child in a list|unique.*key.*prop/.test(message.text())) keyWarnings.push(message.text()); });

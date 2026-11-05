@@ -1,15 +1,33 @@
-# Badminton category QR check-in
+# Category attendance QR check-in
 
-Front office chooses **Foundation, Social, or Pathway** before generating a QR in Package Check-In & Sales. The label above the QR identifies its immutable category. The code is valid for one hour and shows a countdown. Generating any new code revokes all earlier codes issued by that staff account, including other categories. Revoke ends it immediately. Disabled or unauthorized issuers cannot authorize a scan.
+Coach, Badminton FO and Admin use the same category QR desk. The category QR desk appears directly on Attendance and automatically restores both cards on page load. FO can also use the inline desk in Package Check-In & Sales. Select a category directly: **Foundation**, **Social** or **Pathway**. There is no member or package selection when generating a QR.
 
-Members scan using the in-app camera, upload a QR photo, or follow the phone camera's link. Sign-in is required; the token survives sign-in in session storage and is removed after success. Preview validates the stored QR/category and displays the eligible package, current balance, one-session charge and expected balance. Confirm independently revalidates and deducts inside a transaction. Success uses the committed API response.
+Two persistent cards represent **QR slot 1** and **QR slot 2**. Each can display a different category with its own image, status, two-hour countdown, check-in count, copy link, revocation/replacement controls and recent attendance. Both slots are shared across authorized badminton staff; opening a different staff view retrieves the same desk. On narrow screens the cards stack.
 
-Only matching-category, active, started, unexpired enrollments with a positive balance are candidates. Earliest expiry wins, then creation timestamp and ID. An exhausted package can be skipped for another eligible package **in the same category**. There is no cross-category fallback. Members can use Foundation and Social on the same Myanmar date, but cannot consume Social twice that date through QR or staff assistance. The shared check-in ledger provides this protection across both entry paths.
+Generating slot 2 never replaces, hides or revokes slot 1. Generate / restore reuses a valid code with the same category in that slot and never extends its expiry. To change an occupied slot's category, select the new category and explicitly choose **Replace QR**. Replacement revokes only that slot's prior token. The same active category cannot occupy both slots. Expired/revoked cards remain visible until a new code is requested.
 
-Package activation and renewal create separate entitlements; existing balances and dates stay intact. Member packages and staff sales/check-in show each package separately. Category editing affects future activations. Enrollment/check-in category snapshots remain fixed. Unknown legacy packages/history stay visible and require explicit administrator review before category-based deduction; old category-neutral QR codes must be regenerated.
+## Member scanning and deduction
 
-QR tokens are random, stored hashed, and placed in the URL fragment without member data. Scans accept only the token; client category, enrollment or member IDs are rejected. The old direct member check-in endpoint remains QR_REQUIRED. Gym and private-course attendance keep their existing rules.
+A category QR is shared. Member A, B and C can each redeem the same active Social QR. A successful scan does **not** change the QR to USED. Each member may redeem that QR only once, enforced by a database unique constraint on `(qrId, memberId)`.
 
-See [architecture, API contracts, legacy review, migration and rollout instructions](badminton-category-checkin.md) before deployment. Both providers require the new forward category migration and the matching Prisma client/API/UI. No production migration or deployment was performed.
+1. The member signs in and scans the code or uploads its photo.
+2. The backend validates the secure token, active issuer, category and expiry.
+3. The preview shows the QR's category, exact eligible package, one-session deduction and remaining balance. Members cannot change the category encoded by the stored QR record.
+4. Confirmation revalidates inside a transaction, creates attendance, deducts one matching-category session and records the QR/member redemption.
+5. The committed result shows the category, package and remaining sessions. The QR remains ACTIVE for other members.
 
-Verification: `npm --prefix backend test`, the real PostgreSQL category suite documented above, and `node scripts/test-attendance-browser.mjs` exercise category isolation, preview, balances, duplicate rejection, QR/manual concurrency, rotation/revocation, ownership and legacy history. Real camera access still requires HTTPS (or localhost) and physical-device permission testing.
+A Social QR never debits Foundation or Pathway. Active, started, unexpired packages with remaining sessions are eligible; earliest expiry wins, then creation timestamp and ID. There is no cross-category fallback. The existing member/category/Myanmar-date attendance guard also remains: replacing a Social QR does not authorize a second Social visit that day. A separate Foundation QR can be used independently under the existing rules.
+
+Duplicate feedback: **“You have already checked in using this QR code.”** Expiry feedback: **“QR code expired. Please request a new QR code.”** Rejected attempts create no attendance/redemption and deduct no sessions.
+
+## Persistence, permissions and privacy
+
+Each QR has a cryptographically random token, token hash, encrypted redisplay value, category, timestamps and independent ACTIVE → EXPIRED/REVOKED lifecycle. It is valid for exactly 120 minutes from its stored creation timestamp. API checks enforce expiry; the countdown is visual. Browser refresh and API restart restore both tokens with unchanged expiry.
+
+Keep the stable private `QR_TOKEN_ENCRYPTION_KEY` configured on every API replica (or the existing stable `JWT_SECRET` of at least 32 characters). Rotating the key requires replacing affected codes. QR links contain an opaque token in the URL fragment and no member information.
+
+Admin and Badminton FO can manage the desk and see recent QR arrivals. Coaches require an active linked Badminton coach profile. They share the same cards and aggregate counts, while named history is limited to their authorized assigned private-course students. Gym, unlinked/inactive coaches, other departments and members cannot manage or retrieve staff tokens. Scanners identify members from authentication, never from a staff-selected member ID.
+
+The desk polls every five seconds and on focus. Check-in notifications and session/low-balance/exhaustion feedback reuse the existing notification service. Attendance history and package corrections retain their existing authorization and audit rules.
+
+See [migration, API contracts and verification](category-attendance-qr.md). This contract supersedes the earlier member-specific, globally single-use QR implementation. Physical camera permissions still require HTTPS or localhost and device verification.

@@ -81,6 +81,14 @@ export function requireMember(user: {
     );
 }
 
+/** Password/social mobile entry points only; phone OTP retains requireMember. */
+export function requireMobileRole(user: { active: boolean; deletedAt?: Date | null; role: string }) {
+  if (!user.active || user.deletedAt)
+    reject("ACCOUNT_UNAVAILABLE", 403, "This account is unavailable.");
+  if (!["member", "coach", "admin", "badminton_fo"].includes(user.role))
+    reject("MOBILE_ROLE_UNSUPPORTED", 403, "Use the ZAWANA website for this account.");
+}
+
 export function requireRecentSession(session?: { authenticatedAt: Date }) {
   if (!session || Date.now() - session.authenticatedAt.getTime() > 300_000)
     reject(

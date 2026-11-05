@@ -12,7 +12,7 @@ export type AttendanceRow = {
   status: 'present' | 'absent' | 'late' | 'excused' | 'pending'; notes: string | null; canCheckIn: boolean; canCorrect: boolean; packageId: string | null;
   package: { id: string; name: string; type: string; purchaseDate: string | null; activationDate: string; expiryDate: string; total: number; used: number; remaining: number; status: string } | null;
 };
-type Detail = { history: AttendanceRow[]; modifications: { id: string; bookingId: string; actorId: string; reason: string; createdAt: string; previous: string; current: string }[];
+type Detail = { activePackages: { id: string; packageName: string; categoryCode: string | null; sessionsTotal: number; sessionsRemaining: number; expiryDate: string }[]; history: AttendanceRow[]; modifications: { id: string; bookingId: string; actorId: string; reason: string; createdAt: string; previous: string; current: string }[];
   summary: { attended: number; missed: number; late: number; excused: number; completedScheduled: number; percentage: number | null } };
 export function AttendanceDetail({ record, onClose, onChanged }: { record: AttendanceRow; onClose: () => void; onChanged: () => void }) {
   const { user } = useAuth();
@@ -67,6 +67,7 @@ export function AttendanceDetail({ record, onClose, onChanged }: { record: Atten
             ['Attendance', detail.summary.percentage === null ? '—' : `${detail.summary.percentage}%`],
           ].map(([label, value]) => <div key={label} className="z-attendance-stat"><span>{label}</span><strong>{value}</strong></div>)}
         </section>
+        {detail.activePackages?.length > 0 && <section className="mt-6"><h3 className="z-section-title">Active packages</h3><div className="mt-3 grid gap-3 sm:grid-cols-2">{detail.activePackages.map(pkg => <article key={pkg.id} className="rounded-xl border p-4"><h4 className="text-sm font-semibold">{pkg.packageName}</h4><p className="mt-1 text-xs">{categoryLabel(pkg.categoryCode)} · {pkg.sessionsRemaining} of {pkg.sessionsTotal} sessions remaining</p><p className="mt-1 text-xs">Expires {pkg.expiryDate}</p></article>)}</div></section>}
         <div className="z-detail-columns mt-6">
           <section><h3 className="z-section-title">Training information</h3><dl className="z-detail-list">
             <div className="z-fact"><dt>Class / program</dt><dd>{record.title}</dd></div>

@@ -1,5 +1,7 @@
 # Attendance and court changes: architecture audit and implementation plan
 
+The current QR workflow is [two shared category cards with one redemption per member](category-attendance-qr.md). It supersedes both the old desk-code QA notes below and the earlier globally single-use member QR implementation. Notification receipts and package reauthentication remain documented in [the preceding upgrade report](attendance-qr-security-upgrade.md).
+
 ## Repository audit
 
 - Frontend: React 19 / TypeScript / Vite, React Router (`src/App.tsx`), authentication in `src/context/AuthContext.tsx`, operations state in `src/context/OperationsContext.tsx`, API client in `src/api.ts`. Shared controls: `src/components/UI.tsx`; role workspaces: `src/components/RoleLayout.tsx`, `src/pages/Operations.tsx`. Attendance already has member/admin/coach/badminton FO routes and `src/pages/Attendance.tsx`. Customer reservations: `src/pages/Bookings.tsx`; FO/admin court queue: `BookingQueue` in Operations.
@@ -18,7 +20,7 @@
 |---|---|---|
 | Course attendance | Present check-in only | Present/absent/late/excused, notes, admin reasoned corrections and history |
 | Package attendance | Actual visits with transactional debit | Package/profile detail and history; preserve current visit consumption semantics |
-| Attendance visibility | Own member / assigned coach / badminton staff | Preserve scopes for detail, filters and export; never expose clinic data |
+| Attendance visibility | Own member / shared coach and badminton staff view | Preserve scopes for detail, filters and export; never expose clinic data |
 | Course/package association | Independent purchases | Display actual association only; standalone course is explicitly identified |
 | Court change | Generic staff edit only | Dedicated quote/commit API; confirmed customers allowed at >=24 hours; availability and price rechecked transactionally |
 | Multi-slot reservation | Independent rows grouped by submission | Explicitly change one identified segment; leave other dates/courts alone |
@@ -61,7 +63,7 @@
 Attendance now extends the original role routes rather than introducing another attendance application:
 
 - `GET /api/attendance?month=YYYY-MM`: includes profile/member ID, contact, actual class/coach association, enrollment/package utilization and validity. Optional `q`, `title`, `coachId`, `packageId`, `from`, `to`, `status`; custom ranges may span months. Admin `export=csv` exports exactly those filters.
-- `GET /api/attendance/:kind/:id/detail`: `kind=course|package`; independently authorizes the record, then scopes the participant history. Coaches see only their assigned course history. Returns completed-schedule summaries and admin-only modification history.
+- `GET /api/attendance/:kind/:id/detail`: `kind=course|package`; independently authorizes the record, then scopes the participant history. Coaches see the same course/package history as badminton front office; marking remains limited to their assigned courses. Returns completed-schedule summaries and admin-only modification history.
 - `POST /api/attendance/courses/:id/mark`: records present/absent/late/excused and notes. Existing records require admin and a reason. Standalone course attendance never debits a package.
 - `POST /api/attendance/packages/:id/mark`: admin correction with reason; adjusts the original enrollment balance by the change in consumed sessions, in the same transaction as the status and audit entry. Repeated status edits do not debit or restore again. Legacy records lacking a verifiable snapshot cannot change balances automatically.
 - Existing course check-in, FO package check-in and member QR routes remain. FO and QR package writers now share `services/badmintonAttendance.ts`, enrollment locks and a unique daily guard for new writes. The established renewal implementation creates a new enrollment, retaining the original package reference; new check-ins additionally snapshot entitlement details.
@@ -125,7 +127,7 @@ A different-price payment collection/credit workflow and automated refund policy
 
 - `npm --prefix backend test`: **120 tests: 119 passed, 0 failed, 1 skipped**. The skip is the existing PostgreSQL integration test without `COURT_POSTGRES_TEST_URL`. Regressions include verified payments/private courses, memberships/gym, booking creation and authentication.
 - `backend/tests/court-changes.test.ts`: exact 25h/24h/23h59m policy boundaries; confirmed/terminal status aliases; real authenticated ownership/department restrictions; migrated SQLite schema; paid confirmed move; multi-court/multi-day sibling preservation; stale revision; unavailable/maintenance/holiday/block rollback; different-price protection; active payment checkout protection; concurrent move/create competition; configured admin exceptions; cancellation request/rejection/approval/repeated review; unchanged financial records; package final-session concurrency, idempotent restoration, expiry and original-package safeguards.
-- `backend/tests/attendance.test.ts`: actual course/package association, assigned coach isolation for detail and marking, duplicate course check-in, notes and reasoned admin correction, filtered admin export, cross-month date ranges and percentage denominator excluding future/cancelled sessions.
+- `backend/tests/attendance.test.ts`: actual course/package association, coach/front-office read parity and assigned-coach marking isolation, duplicate course check-in, notes and reasoned admin correction, filtered admin export, cross-month date ranges and percentage denominator excluding future/cancelled sessions.
 - `node scripts/test-attendance-browser.mjs`: four attendance roles at 1440/768/390px, persisted correction with audit reason, customer quote/confirm/history, paid cancellation request and FO review, one-hour QR issue/rotation/upload decoding and duplicate protection; no captured browser exceptions or React key warnings. Native-dialog body contrast is asserted. Screenshots were visually reviewed; a surface-token text contrast issue was corrected.
 - Frontend production build, backend build, PostgreSQL-client backend build and both Prisma schema validations pass. PostgreSQL syntax validation used placeholder local connection values without connecting. The development SQLite client was regenerated after the provider build.
 - `git diff --check` passes. The initial implementation did not apply migrations to the working database or production. The subsequent P3018 recovery completes the user-attempted local SQLite migration after backup; automated recovery tests use disposable databases.
@@ -139,3 +141,17 @@ The local SQLite database was backed up and recovered using the command above. P
 ## Full-page rescheduling verification
 
 The browser journey exercises the same rental date/time and floor/court controls with no rescheduling dialog. It verifies one replacement session at a time, different-price quote blocking with original booking preservation, editing a selection from review, same-price confirmation, persisted change history and the subsequent cancellation/review flow. Member, badminton FO and admin routes are exercised. The existing multi-date/multi-court rental browser regression still passes. The focused court-change API suite passes all nine tests.
+
+## Automatic notification inbox cleanup
+
+Notifications now leave the active inbox automatically:
+
+- **Viewed:** a row must be at least half visible for one second. Closing the dropdown or leaving/reloading the Notifications page saves recipient-specific read receipts and clears those rows. Items below the visible area remain unread. Clicking a notification clears it immediately; failed saves leave it available to retry.
+- **Expired:** general updates have a seven-day lifetime from the database creation timestamp. Reservation/payment-window and QR notices expire earlier at their actual resource deadline. The backend enforces expiry; polling removes elapsed notices from open views.
+- **Done:** handled coach requests, completed payment-confirmation steps, terminal/past bookings, served/completed/cancelled orders, completed gym sessions and inactive referenced QRs leave the inbox based on actual resource state. Completing an action elsewhere refreshes the inbox; other sessions discover changes through the ten-second background poll or on focus.
+
+This archives notifications rather than deleting history. Viewing a broadcast only clears it for that recipient; expiry/completion applies to the obsolete notification for everyone. The backend checks every ID in the atomic `POST /api/notifications/read` batch against the recipient's authorized audience before writing any receipts. The existing single-notification read endpoint remains supported. No additional migration is required beyond the previously introduced notification receipts.
+
+Implementation: `backend/src/services/notificationLifecycle.ts`, `backend/src/routes/notifications.ts`, `src/hooks/useViewedNotifications.ts`, `src/services/notificationInbox.ts`, the shared notification dropdown/page, AppContext inbox synchronization and API mutation refresh events. Regression coverage is in `backend/tests/notifications.test.ts`; `node scripts/test-notifications-browser.mjs` checks visible-only cleanup, persistence, expiration and tasks completed elsewhere against a disposable real database/API/UI.
+
+Verification for inbox cleanup: full backend suite **172 tests: 169 passed, 0 failed, 3 PostgreSQL-only skips**. The focused notifications browser journey passes for view-only cleanup, keeping off-screen rows unread, reload/page-leave persistence, expired items and automatic removal after completion elsewhere. Backend typecheck/build, frontend production build, attendance lint and `git diff --check` pass. The existing frontend bundle-size warning remains non-blocking. No database migrations or deployment were performed for this change.

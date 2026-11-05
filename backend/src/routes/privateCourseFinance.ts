@@ -12,9 +12,31 @@ import {
 } from "../services/privateCourseFinance.js";
 import { bookingFailure as fail } from "../services/courtBooking.js";
 
-export function createPrivateCourseFinanceRouter(db: PrismaClient) {
+export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () => Promise<void> = async () => {}) {
   const r = Router();
   r.use(auth, roles("admin", "badminton_fo", "coach"));
+  r.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+  const bookingIncludes = {
+    user: { select: { id: true, name: true, email: true, phone: true } },
+    court: true,
+    coach: { select: { id: true, name: true } },
+    privateCoursePayment: true,
+  } as const;
+  const bookingScope = (actor: { id: string; role: string }): Prisma.BookingWhereInput => ({
+    kind: "private_course",
+    ...(actor.role === "coach" ? { coach: { is: { userId: actor.id } } } : {}),
+  });
+  r.get("/bookings", asyncRoute(async (req: AuthRequest, res) => {
+    await expire();
+    res.json(await db.booking.findMany({ where: bookingScope(req.user!), include: bookingIncludes,
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 300 }));
+  }));
+  r.get("/bookings/:id", asyncRoute(async (req: AuthRequest, res) => {
+    await expire();
+    const booking = await db.booking.findFirst({ where: { AND: [bookingScope(req.user!), { id: String(req.params.id) }] }, include: { ...bookingIncludes, changes: { select: { id: true, action: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" } } } });
+    if (!booking) throw fail(404, "Private course booking not found.");
+    res.json(booking);
+  }));
   r.get(
     "/members",
     asyncRoute(async (req: AuthRequest, res) => {

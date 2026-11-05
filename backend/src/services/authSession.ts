@@ -1,9 +1,21 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { PrismaClient, Prisma, User } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { firebaseAdminAuth } from "./firebaseAdmin.js";
+import { getFirebaseIdentity } from "./firebaseAdmin.js";
 import { toSafeAppUser } from "./userSerializer.js";
-import { reject } from "../modules/auth/hybrid.policy.js";
+import { reject, requireMobileRole } from "../modules/auth/hybrid.policy.js";
+
+/** Persist the role at staff sign-in without changing the session schema. Legacy member sessions remain member-only. */
+function checkMobileSession(method: string, role: string) {
+  if (method.startsWith("web_") || method === "database_password") return;
+  if (method.startsWith("mobile_staff:")) {
+    const [, issuedRole, credential] = method.split(":");
+    if (!["coach", "admin", "badminton_fo"].includes(issuedRole) || !["email_password", "google", "apple"].includes(credential) || issuedRole !== role)
+      reject("SESSION_REVOKED", 401, "Your account role changed. Sign in again.");
+    return;
+  }
+  if (role !== "member") reject("MOBILE_ROLE_UNSUPPORTED", 403, "Sign in again using a supported staff sign-in method.");
+}
 
 export const credentialHash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -19,15 +31,16 @@ export type IdentityProof = {
 type Db = PrismaClient;
 export function createSessionService(
   db: Db = prisma,
-  getIdentity = (uid: string) => firebaseAdminAuth().getUser(uid),
+  getIdentity = getFirebaseIdentity,
 ) {
   async function checkProofs(proofs: IdentityProof[]) {
     let mfaEnrolled = false;
     for (const proof of proofs) {
       const identity = await getIdentity(proof.uid).catch(
-        (error: { code?: string }) => {
-          if (error?.code === "auth/user-not-found")
+        (error: { code?: string; statusCode?: number }) => {
+          if (["auth/user-not-found", "INVALID_PROOF"].includes(error?.code || ""))
             return reject("SESSION_REVOKED", 401, "Sign in again.");
+          if (error?.statusCode) throw error;
           return reject(
             "AUTH_UNAVAILABLE",
             503,
@@ -80,23 +93,21 @@ export function createSessionService(
     const current = await tx.user.findUnique({ where: { id: user.id } });
     if (!current?.active || current.deletedAt)
       reject("ACCOUNT_UNAVAILABLE", 403, "This account is unavailable.");
-    if (
-      !method.startsWith("web_") &&
-      method !== "database_password" &&
-      current.role !== "member"
-    )
-      reject(
-        "MOBILE_ROLE_UNSUPPORTED",
-        403,
-        "Use the website for this account.",
-      );
+    let sessionMethod = method;
+    if (!method.startsWith("web_") && method !== "database_password" && current.role !== "member") {
+      requireMobileRole(current);
+      if (!["email_password", "google", "apple"].includes(method) || !proofs.some(p => !p.phoneOnly && !p.accountOnly))
+        reject("MOBILE_ROLE_UNSUPPORTED", 403, "Use password or a linked social identity for staff sign-in.");
+      await checkProofs(proofs);
+      sessionMethod = `mobile_staff:${current.role}:${method}`;
+    }
     const accessToken = newCredential(),
       refreshToken = newCredential();
     const now = Date.now();
     const session = await tx.authSession.create({
       data: {
         userId: user.id,
-        method,
+        method: sessionMethod,
         proofs: JSON.stringify(proofs),
         authenticatedAt: new Date(
           proofs.length
@@ -136,16 +147,7 @@ export function createSessionService(
       session.user.deletedAt
     )
       reject("SESSION_REVOKED", 401, "Your session expired. Sign in again.");
-    if (
-      !session.method.startsWith("web_") &&
-      session.method !== "database_password" &&
-      session.user.role !== "member"
-    )
-      reject(
-        "MOBILE_ROLE_UNSUPPORTED",
-        403,
-        "Use the website for this account.",
-      );
+    checkMobileSession(session.method, session.user.role);
     await checkProofs(JSON.parse(session.proofs));
     return session;
   }
@@ -173,16 +175,7 @@ export function createSessionService(
       old.session.user.deletedAt
     )
       reject("SESSION_REVOKED", 401, "Sign in again.");
-    if (
-      !old.session.method.startsWith("web_") &&
-      old.session.method !== "database_password" &&
-      old.session.user.role !== "member"
-    )
-      reject(
-        "MOBILE_ROLE_UNSUPPORTED",
-        403,
-        "Use the website for this account.",
-      );
+    checkMobileSession(old.session.method, old.session.user.role);
     const mfaEnrolled = await checkProofs(JSON.parse(old.session.proofs));
     const accessToken = newCredential(),
       refreshToken = newCredential();

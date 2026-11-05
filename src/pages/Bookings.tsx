@@ -1,10 +1,11 @@
+import { startPayment } from '../services/paymentFlow';
 import { courtReschedulePath } from '../types/courtChanges';
 import { CourtChangeDialog } from "../components/CourtChangeDialog";
 import { normalizeBookingTime } from "../utils/bookingTime";
 import { SegmentedControl } from '../components/Interactions';
 import { Select } from '../components/Select';
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button, Card, Badge, Page, Empty, Pagination } from "../components/UI";
 import { get, patch, post } from "../api";
 import { formatBookingDate, localDateKey, type BookingDatePreset } from "../utils/bookingDates";
@@ -33,7 +34,6 @@ const ACTIVE_STATUSES = [
 ];
 
 export function Bookings() {
-  const navigate = useNavigate();
   const { locale } = useLanguage();
   const [bookings, setBookings] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
@@ -131,13 +131,12 @@ export function Bookings() {
   };
 
   const confirmCourse = async (booking: any) => {
+    if (paying) return;
     setPaying(booking.id);
     setError("");
     setMessage("");
     try {
-      const result = await post<any>(`/member/private-courses/${booking.id}/pay`, {});
-      if (!result.payment?.id) throw new Error("Could not start secure checkout.");
-      navigate(`/payment/${encodeURIComponent(result.payment.id)}`);
+      await startPayment(`/member/private-courses/${booking.id}/pay`);
     } catch (e: any) {
       setError(e.message || "Could not confirm this private course.");
     } finally {
@@ -330,8 +329,8 @@ export function Bookings() {
                 {booking.kind === "court" && <Button variant="secondary" onClick={() => setChangeBooking(booking.id)}>Details & history</Button>}
                 {booking.kind === "court" && booking.status.toLowerCase() === "confirmed" && <Link to={courtReschedulePath(booking.id)}><Button variant="secondary">Change Date / Time</Button></Link>}
                 {booking.kind === "private_course" && booking.status === "AWAITING_PAYMENT" &&
-                  <Button disabled={paying === booking.id} onClick={() => confirmCourse(booking)}>
-                    {paying === booking.id ? "Starting checkout…" : "Pay & confirm"}
+                  <Button loading={paying === booking.id} disabled={!!paying} onClick={() => confirmCourse(booking)}>
+                    {paying === booking.id ? "Starting payment…" : "Pay & confirm"}
                   </Button>}
                 {ACTIVE_STATUSES.includes(booking.status) &&
                   <Button

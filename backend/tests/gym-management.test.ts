@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -45,9 +46,11 @@ test('real gym HTTP lifecycle, payment verification, shared deduction and author
   writeFileSync(file, '');
   execFileSync(prismaBin, ['migrate', 'deploy'], { cwd: root, env: { ...process.env, DATABASE_URL: `file:${file}` }, stdio: 'pipe' });
   const db = new PrismaClient({ datasources: { db: { url: `file:${file}` } } });
+  const adapterReferences: string[] = [];
   const adapter = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
     const input = JSON.parse(raw);
+    adapterReferences.push(input.reference);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ providerReference: `provider-${input.reference}`, checkoutUrl: `https://checkout.example.test/${input.reference}` }));
   });
@@ -81,7 +84,15 @@ test('real gym HTTP lifecycle, payment verification, shared deduction and author
     await new Promise(r => setTimeout(r, 100)); if (i === 99) throw new Error(logs);
   }
   const request = async (path: string, method = 'GET', body?: unknown, userId = desk.id) => {
-    const response = await fetch(`${origin}/api${path}`, { method, headers: { Authorization: `Bearer ${tokens[userId] || ''}`, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    let verification: Record<string, string> = {};
+    if (['POST', 'PATCH', 'DELETE'].includes(method) && /^\/(?:packages\/|gym\/packages)/.test(path)) {
+      const r = await fetch(`${origin}/api/package-security/challenge`, { method: 'POST', headers: { Authorization: `Bearer ${tokens[userId] || ''}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method, path, body }) });
+      if (r.ok) {
+        await db.user.updateMany({ where: { id: userId }, data: { passwordHash: await bcrypt.hash('test-package-password', 4) } });
+        verification = { 'X-Package-Verification': JSON.stringify({ challengeId: (await r.json()).id, password: 'test-package-password' }) };
+      }
+    }
+    const response = await fetch(`${origin}/api${path}`, { method, headers: { Authorization: `Bearer ${tokens[userId] || ''}`, 'Content-Type': 'application/json', ...verification }, ...(body ? { body: JSON.stringify(body) } : {}) });
     return { status: response.status, value: await response.json().catch(() => null) };
   };
   const nextDate = addDateKeyDays(today(), 1);
@@ -138,7 +149,11 @@ test('real gym HTTP lifecycle, payment verification, shared deduction and author
     assert.equal((await request('/gym/enrollments?forScheduling=true')).value.data.length, 0);
     assert.equal((await request(`/gym/enrollments/${enrollment.id}/payment`, 'POST', { method: 'Cash' })).status, 400);
     assert.equal((await request('/gym/private-training', 'POST', { enrollmentId: enrollment.id, coachId: coach.id, date: nextDate, startTime: '10:00', requestKey: randomUUID() })).status, 409);
-    const checkout = await request(`/gym/enrollments/${enrollment.id}/payment`, 'POST', { method: 'KPay' }); assert.equal(checkout.status, 200, JSON.stringify(checkout)); attempt = checkout.value.attempt;
+    const checkouts = await Promise.all(Array.from({ length: 3 }, () => request(`/gym/enrollments/${enrollment.id}/payment`, 'POST', { method: 'KPay' })));
+    for (const checkout of checkouts) assert.equal(checkout.status, 200, JSON.stringify(checkout));
+    attempt = checkouts[0].value.attempt;
+    assert.ok(checkouts.every(checkout => checkout.value.attempt.id === attempt.id));
+    assert.equal(adapterReferences.filter(reference => reference === attempt.reference).length, 1, 'Concurrent requests must initialize the provider only once');
     assert.equal((await request(`/gym/enrollments/${enrollment.id}/payment`, 'POST', { method: 'KPay' })).value.attempt.id, attempt.id);
     assert.equal((await cash(enrollment.id)).status, 409);
     const body = { reference: attempt.reference, providerReference: attempt.providerReference, amount: attempt.amount, status: 'PAID' };

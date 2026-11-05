@@ -1,3 +1,6 @@
+import { startPayment } from '../services/paymentFlow';
+import { useViewedNotifications } from '../hooks/useViewedNotifications';
+import { removeViewedNotifications } from '../services/notificationInbox';
 import { SegmentedControl } from '../components/Interactions';
 import {
   Activity,
@@ -10,12 +13,12 @@ import {
   ShieldAlert,
   UserRound,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Badge, Card, Empty, Page } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { patch, post } from '../api';
+import { post } from '../api';
 import type { Notification, UserRole } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -117,6 +120,8 @@ export function Notifications() {
   const { locale } = useLanguage();
   const { user } = useAuth();
   const { notifications } = useApp();
+  const surface = useRef<HTMLDivElement>(null);
+  useViewedNotifications(surface, true, user?.id);
   const role: UserRole = user?.role ?? 'member';
   const config = roleConfig[role];
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -147,10 +152,12 @@ export function Notifications() {
         result = await post(`/coach/private-courses/${notification.entityId}/decision`, {
           decision: action
         });
-      else if (action === 'pay')
-        result = await post(`/member/private-courses/${notification.entityId}/pay`, {});
+      else if (action === 'pay') {
+        await startPayment(`/member/private-courses/${notification.entityId}/pay`);
+        return;
+      }
       else result = await post(`/member/private-courses/${notification.entityId}/cancel`, {});
-      await patch(`/notifications/${notification.id}/read`, {}).catch(() => {});
+      await removeViewedNotifications([notification.id]).catch(() => {});
       setActed(items => [...items, notification.id]);
       window.dispatchEvent(
         new CustomEvent('zawana-toast', {
@@ -160,9 +167,7 @@ export function Notifications() {
               ? 'Request accepted. The member can now confirm the booking.'
               : action === 'decline'
                 ? 'Request declined; the reservation was released.'
-                : action === 'pay'
-                  ? 'Booking confirmed. Payment is due at the venue.'
-                  : 'Booking cancelled and the reservation released.')
+                : 'Booking cancelled and the reservation released.')
         })
       );
     } catch (e: any) {
@@ -173,7 +178,7 @@ export function Notifications() {
   };
 
   return (
-    <Page
+    <div ref={surface}><Page
       title={config.title}
       eyebrow={role === 'clinic_fo' ? 'Revive Clinic · Front Office' : 'Front Office'}
     >
@@ -212,6 +217,7 @@ export function Notifications() {
               return (
                 <div
                   key={notification.id}
+                  data-notification-id={notification.id}
                   className={`p-5 transition ${!notification.read ? 'bg-zawana-accent/[0.035]' : ''}`}
                 >
                   <div className="flex items-start gap-4">
@@ -267,7 +273,7 @@ export function Notifications() {
                             onClick={() => void actOnCourse(notification, 'pay')}
                             className="min-h-11 rounded-xl bg-zawana-950 px-4 text-sm font-black text-white disabled:opacity-50"
                           >
-                            {busy === notification.id ? 'Confirming…' : 'Pay now'}
+                            {busy === notification.id ? 'Starting payment…' : 'Pay now'}
                           </button>
                         </>}</div>}
                     </div>
@@ -284,6 +290,6 @@ export function Notifications() {
           </div>
         )}
       </Card>
-    </Page>
+    </Page></div>
   );
 }

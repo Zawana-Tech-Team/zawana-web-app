@@ -3,6 +3,8 @@ import type { DecodedIdToken, UserRecord } from "firebase-admin/auth";
 import { prisma } from "../../lib/prisma.js";
 import {
   firebaseAdminAuth,
+  getFirebaseIdentity,
+  withFirebaseIdentitySnapshot,
   verifyFirebaseIdToken,
 } from "../../services/firebaseAdmin.js";
 import {
@@ -21,6 +23,7 @@ import {
   requireProvider,
   requireWebProof,
   requireMember,
+  requireMobileRole,
   reject,
 } from "./hybrid.policy.js";
 
@@ -39,7 +42,7 @@ export function createHybridAuth(
   const verify = options.verify || verifyFirebaseIdToken;
   const password = options.password || verifyFirebasePassword;
   const getIdentity =
-    options.getIdentity || ((uid: string) => firebaseAdminAuth().getUser(uid));
+    options.getIdentity || getFirebaseIdentity;
   const request = options.request || firebaseAuthRequest;
   const session = createSessionService(db, getIdentity);
   const proof = (claims: DecodedIdToken): IdentityProof => ({
@@ -203,7 +206,7 @@ export function createHybridAuth(
   ) {
     await assertMethodAllowed(user, claims);
     await assertStrongIdentity(claims.uid);
-    if (mobile) requireMember(user);
+    if (mobile) requireMobileRole(user);
     else if (!user.active || user.deletedAt)
       reject("ACCOUNT_UNAVAILABLE", 403, "This account is unavailable.");
     const identity = await getIdentity(claims.uid);
@@ -754,6 +757,7 @@ export function createHybridAuth(
     return { linked: true };
   }
   async function webSession(token: string) {
+    return withFirebaseIdentitySnapshot(async () => {
     const claims = await verify(token);
     requireWebProof(claims);
     const user = await resolve(claims.uid);
@@ -765,6 +769,7 @@ export function createHybridAuth(
       true,
       false,
     );
+    });
   }
   async function recovery(email: string) {
     await limited("recovery", email, 3);

@@ -9,6 +9,13 @@ const target = z.object({ date: z.string(), time: z.string(), courtId: z.string(
 export function createCourtChangeRouter(db: PrismaClient, authenticate = auth) {
   const router = Router();
   router.use(authenticate, roles('member', 'admin', 'badminton_fo'));
+  router.get('/', roles('admin', 'badminton_fo'), asyncRoute(async (_req, res) => {
+    res.json(await db.booking.findMany({
+      where: { kind: 'court' },
+      include: { court: true, user: { select: { id: true, name: true, email: true } } },
+      orderBy: { createdAt: 'desc' }, take: 300,
+    }));
+  }));
   router.get('/:id/changes', asyncRoute(async (req: AuthRequest, res) => res.json(await courtChangeDetail(db, String(req.params.id), req.user!))));
   router.post('/:id/reschedule/quote', asyncRoute(async (req: AuthRequest, res) => {
     const b = target.parse(req.body);

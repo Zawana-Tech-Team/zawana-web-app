@@ -1,10 +1,12 @@
+import { startPayment } from '../services/paymentFlow';
+import { useViewedNotifications } from '../hooks/useViewedNotifications';
+import { INBOX_CHANGED, INBOX_REFRESH, removeViewedNotifications } from '../services/notificationInbox';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { popoverMotion } from '../design/motion';
-import { Skeleton } from './UI';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, Volume2, VolumeX, X } from 'lucide-react';
-import { get, patch, post } from '../api';
+import { get, post } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { LocalizedTree, useLanguage } from '../context/LanguageContext';
 
@@ -20,10 +22,12 @@ export function NotificationBell() {
     [busy, setBusy] = useState(''),
     [error, setError] = useState('');
   const { user } = useAuth();
+  const userId = user?.id, userRole = user?.role;
+  useViewedNotifications(panel, open, userId);
   const seen = useRef<Set<string> | null>(null),
     allowed = useRef(false),
     navigate = useNavigate();
-  const play = () => {
+  const play = useCallback(() => {
     if (!allowed.current || !sound || document.hidden) return;
     try {
       const Ctx = window.AudioContext || (window as any).webkitAudioContext;
@@ -38,7 +42,7 @@ export function NotificationBell() {
       oscillator.stop(ctx.currentTime +.12);
       oscillator.onended = () => void ctx.close()
     } catch {}
-  }
+  }, [sound]);
   useEffect(() => {
     const unlock = () => {
       allowed.current = true
@@ -47,12 +51,16 @@ export function NotificationBell() {
     return () => window.removeEventListener('pointerdown', unlock)
   }, []);
   useEffect(() => {
-    let alive = true;
+    setItems([]); seen.current = null;
+    if (!userId) { setLoading(false); return; }
+    let alive = true, revision = 0;
+    const cleared = new Set<string>();
     const refresh = async () => {
+      const requestId = ++revision;
       try {
         const result = await get<any[]>('/notifications');
-        if (!alive) return;
-        const active = result.filter(n => n.activeInInbox !== false);
+        if (!alive || revision !== requestId) return;
+        const active = result.filter(n => !cleared.has(n.id) && n.activeInInbox !== false && (!n.expiresAt || new Date(n.expiresAt).getTime() > Date.now()));
         if (seen.current) {
           const fresh = active.filter(n => !seen.current!.has(n.id) && !n.read);
           if (fresh.length) play()
@@ -64,15 +72,19 @@ export function NotificationBell() {
         if (alive) setLoading(false)
       }
     };
+    const remove = (event: Event) => { const ids = (event as CustomEvent<{ ids: string[] }>).detail.ids; ++revision; ids.forEach(id => cleared.add(id)); setItems(rows => rows.filter(row => !ids.includes(row.id))); };
+    const refreshEvent = () => { void refresh(); };
+    window.addEventListener(INBOX_CHANGED, remove); window.addEventListener(INBOX_REFRESH, refreshEvent); window.addEventListener('focus', refreshEvent);
     void refresh();
     const timer = window.setInterval(() => {
       if (!document.hidden) void refresh()
-    }, 20000);
+    }, 10000);
     return () => {
       alive = false;
-      window.clearInterval(timer)
+      window.clearInterval(timer);
+      window.removeEventListener(INBOX_CHANGED, remove); window.removeEventListener(INBOX_REFRESH, refreshEvent); window.removeEventListener('focus', refreshEvent);
     }
-  }, [sound]);
+  }, [play, userId, userRole]);
   useEffect(() => {
     if (!open) return;
     panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
@@ -90,12 +102,10 @@ export function NotificationBell() {
   };
   const openItem = async (item: any) => {
     try {
-      await patch(`/notifications/${item.id}/read`, {})
-    } finally {
-      setItems(xs => xs.filter(x => x.id !== item.id));
+      await removeViewedNotifications([item.id]);
       setOpen(false);
-      if (item.link) navigate(item.link)
-    }
+      if (item.link) navigate(item.link);
+    } catch { setError('Could not clear this notification. Please try again.'); }
   };
   const finishAction = async (item: any, action: () => Promise<any>) => {
     if (!item.entityId || busy) return;
@@ -104,7 +114,7 @@ export function NotificationBell() {
     try {
       const result = await action();
       setItems(xs => xs.filter(x => x.id !== item.id));
-      void patch(`/notifications/${item.id}/read`, {}).catch(() => {});
+      void removeViewedNotifications([item.id]).catch(() => {});
       if (result?.message)
         window.dispatchEvent(new CustomEvent('zawana-toast', { detail: result.message }))
     } catch (e: any) {
@@ -117,8 +127,13 @@ export function NotificationBell() {
     finishAction(item, () =>
       post(`/coach/private-courses/${item.entityId}/decision`, { decision })
     );
-  const confirmBooking = (item: any) =>
-    finishAction(item, () => post(`/member/private-courses/${item.entityId}/pay`, {}));
+  const confirmBooking = async (item: any) => {
+    if (!item.entityId || busy) return;
+    setBusy(item.id); setError('');
+    try { await startPayment(`/member/private-courses/${item.entityId}/pay`); }
+    catch (e: any) { setError(e.message || 'Could not start payment.'); }
+    finally { setBusy(''); }
+  };
   const cancelBooking = (item: any) =>
     finishAction(item, () => post(`/member/private-courses/${item.entityId}/cancel`, {}));
   const unread = items.filter(n => !n.read).length;
@@ -196,6 +211,7 @@ export function NotificationBell() {
                     item.title === 'Coach confirmed your private course';
                   return <div
                     key={item.id}
+                    data-notification-id={item.id}
                     className={`border-b p-4 ${item.read ? 'opacity-70' : 'bg-zawana-accent/[.06]'}`}
                   >
                     <button
@@ -256,7 +272,7 @@ export function NotificationBell() {
                           onClick={() => void confirmBooking(item)}
                           className="min-h-10 flex-1 rounded-xl bg-zawana-950 px-3 text-xs font-black text-white disabled:opacity-50"
                         >
-                          {busy === item.id ? 'Confirming…' : 'Pay now'}
+                          {busy === item.id ? 'Starting payment…' : 'Pay now'}
                         </button>
                       </div>}
                   </div>

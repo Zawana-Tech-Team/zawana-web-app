@@ -1,0 +1,26 @@
+.category-qr-desk { color: #243c2f; margin: 0 0 28px; }
+.category-qr-desk > header { max-width: 660px; margin-bottom: 24px; }
+.category-qr-desk h2 { font-size: 26px; font-weight: 500; letter-spacing: -.035em; margin: 8px 0; }
+.category-qr-desk > header > p:not(.premium-kicker) { font-size: 14px; line-height: 1.8; color: #52664a; }
+.category-qr-desk small { color: #52664a; font-size: 11px; line-height: 1.7; }
+.category-qr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.category-qr-card { min-width: 0; padding: 24px; border: 1px solid #dde5d8; border-radius: 20px; background: #fff; }
+.category-qr-card h3 { font-size: 23px; font-weight: 500; letter-spacing: -.025em; margin: 8px 0 20px; }
+.category-qr-select { display: block; font-size: 13px; }
+.category-qr-select select { display: block; margin-top: 8px; width: 100%; }
+.category-qr-card .qr-display { margin-top: 20px; padding: 18px; min-height: 260px; background: #fff; color: #36533f; }
+.category-qr-card .qr-display img { width: min(100%, 320px); aspect-ratio: 1; height: auto; }
+.category-qr-card .qr-display strong { font-size: 14px; font-weight: 500; }
+.category-qr-card .qr-desk-actions { margin: 16px 0 0; gap: 8px; }
+.category-qr-card .premium-primary, .category-qr-card .premium-secondary { font-size: 12px; padding: 11px 13px; }
+.category-qr-feedback { font-size: 12px; margin-top: 12px; color: #52664a; }
+.category-qr-history { margin-top: 18px; border-top: 1px solid #e5e9e1; padding-top: 14px; font-size: 12px; }
+.category-qr-history summary { cursor: pointer; font-weight: 500; }
+.category-qr-history ol { margin-top: 12px; max-height: 210px; overflow-y: auto; }
+.category-qr-history li { padding: 10px 0; border-top: 1px solid #edf1e9; }
+.category-qr-history li > * { display: block; }
+.category-qr-history p, .category-qr-history span, .category-qr-history time { color: #52664a; margin-top: 4px; }
+@media (max-width: 640px) {
+  .category-qr-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .category-qr-card { padding: 18px; }
+}

@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { INBOX_CHANGED, INBOX_REFRESH } from '../services/notificationInbox';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Booking, CartItem, Notification, ReviveBooking, ReviveBookingStatus } from "../types";
-import { api, get, post, patch } from "../api";
+import { get, patch } from "../api";
 import { useAuth } from "./AuthContext";
 
 type NewReviveBooking = Omit<ReviveBooking, "id" | "createdAt" | "status"> & {
@@ -24,17 +25,18 @@ const C = createContext<Ctx | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const userId = user?.id, userRole = user?.role;
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [reviveBookings, setReviveBookings] = useState<ReviveBooking[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const refresh = async () => {
-    if (!user) return;
+  const refresh = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
     try {
-      const [b, n] = await Promise.all([get<any[]>("/bookings"), get<any[]>("/notifications")]);
+      const b = await get<any[]>("/bookings");
       setBookings(
         b.map(x => ({
           id: x.code || x.id,
@@ -48,28 +50,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
           meta: x.meta
         }))
       );
-      setNotifications(
-        n.map(x => ({
-          id: x.id,
-          title: x.title,
-          body: x.body,
-          time: x.createdAt,
-          read: x.read,
-          link: x.link,
-          audience: x.audience,
-          type: x.type,
-          entityType: x.entityType,
-          entityId: x.entityId,
-          actionLabel: x.actionLabel
-        }))
-      );
+
     } finally {
       setLoading(false)
     }
-  };
+  }, [userId]);
   useEffect(() => {
     refresh().catch(console.error)
-  }, [user?.id]);
+  }, [refresh]);
+
+  useEffect(() => {
+    setNotifications([]);
+    if (!userId) return;
+    let alive = true, revision = 0;
+    const cleared = new Set<string>();
+    const refreshInbox = async () => {
+      const requestId = ++revision;
+      try {
+        const rows = await get<any[]>('/notifications');
+        if (alive && revision === requestId) setNotifications(rows.filter(row => !cleared.has(row.id)).map(row => ({ ...row, time: row.createdAt })));
+      } catch { /* Preserve the current inbox on a transient request failure. */ }
+    };
+    const changed = (event: Event) => {
+      const ids = (event as CustomEvent<{ ids: string[] }>).detail.ids;
+      ++revision; ids.forEach(id => cleared.add(id));
+      setNotifications(rows => rows.filter(row => !ids.includes(row.id)));
+    };
+    const refreshEvent = () => { void refreshInbox(); };
+    window.addEventListener(INBOX_CHANGED, changed); window.addEventListener(INBOX_REFRESH, refreshEvent); window.addEventListener('focus', refreshEvent);
+    void refreshInbox();
+    const timer = setInterval(() => { if (!document.hidden) void refreshInbox(); }, 10000);
+    return () => { alive = false; clearInterval(timer); window.removeEventListener(INBOX_CHANGED, changed); window.removeEventListener(INBOX_REFRESH, refreshEvent); window.removeEventListener('focus', refreshEvent); };
+  }, [userId, userRole]);
 
   const addBooking = (booking: Booking) => setBookings(v => [booking, ...v]);
   const cancelBooking = async (id: string) => {

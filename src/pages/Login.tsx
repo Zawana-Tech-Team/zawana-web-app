@@ -35,6 +35,9 @@ export function Login() {
     authMode,
     user,
     refreshUser,
+    sessionError,
+    canRetrySession,
+    retrySession,
     mfaRequired,
     mfaPhone,
     sendMfaCode,
@@ -53,7 +56,7 @@ export function Login() {
     setError('');
     if (result === 'profile') navigate('/complete-profile', { replace: true });
     else if (result === 'ready') {
-      const account = await refreshUser();
+      const account = await refreshUser({ cached: true });
       navigate((account?.role || user?.role) === 'member' && sessionStorage.getItem('zawana_pending_checkin') ? '/check-in' : home(account?.role || user?.role || 'member'), { replace: true });
     } else if (result === 'mfa')
       setNotice('Enter the verification code sent to your enrolled phone.');
@@ -117,14 +120,14 @@ export function Login() {
       <div className="space-y-5 p-5 sm:p-7">
         {!firebaseConfigured &&
           <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Authentication is not configured. Check the frontend authentication settings, then restart the frontend.</p>}
-        {error &&
+        {(error || sessionError) &&
           <div
             role="alert"
             aria-live="assertive"
             className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm leading-5 text-red-800"
           >
             <AlertCircle size={17} className="mt-0.5 shrink-0" />
-            <p>{error}</p>
+            <div><p>{error || sessionError}</p>{canRetrySession && <button type="button" disabled={busy} className="mt-3 min-h-10 rounded-lg border border-red-300 px-3 text-sm font-semibold disabled:opacity-50" onClick={async () => { setBusy(true); setError(''); try { await finish(await retrySession()); } catch (reason: any) { setError(reason.message || 'Verification is still unavailable. Please retry shortly.'); } finally { setBusy(false); } }}>Retry verification</button>}</div>
           </div>}
         {notice &&
           <p
