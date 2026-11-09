@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
@@ -22,13 +23,14 @@ import {
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 const schema = execFileSync(
-  new URL("../node_modules/.bin/prisma", import.meta.url).pathname,
+  process.execPath,
   [
+    fileURLToPath(new URL("../node_modules/prisma/build/index.js", import.meta.url)),
     "migrate",
     "diff",
     "--from-empty",
     "--to-schema-datamodel",
-    new URL("../prisma/schema.prisma", import.meta.url).pathname,
+    fileURLToPath(new URL("../prisma/schema.prisma", import.meta.url)),
     "--script",
   ],
   { encoding: "utf8" },

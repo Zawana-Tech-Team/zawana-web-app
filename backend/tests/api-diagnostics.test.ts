@@ -10,6 +10,21 @@ const context = {
   route: "/api/court-blocks",
   operation: "insert_court_block",
 };
+test('authentication diagnostics retain upstream evidence and reject arbitrary provider metadata', () => {
+  const diagnostic = apiFailureDiagnostic({ statusCode: 503, code: 'AUTH_CONFIGURATION', authDiagnostic: {
+    operation: 'verify_id_token', category: 'configuration', firebaseCode: 'auth/argument-error',
+    configurationReason: 'invalid_private_key', attempt: 1, endpoint: 'certificates',
+    transportCode: 'ENOTFOUND', upstreamStatus: 403, message: 'private-secret', stack: 'private-secret',
+  } }, context);
+  assert.equal(diagnostic.authentication?.transportCode, 'ENOTFOUND');
+  assert.equal(diagnostic.authentication?.endpoint, 'certificates');
+  assert.equal(diagnostic.authentication?.upstreamStatus, 403);
+  assert.equal(diagnostic.authentication?.configurationReason, 'invalid_private_key');
+  const unsafe = apiFailureDiagnostic({ authDiagnostic: Object.fromEntries(
+    ['operation', 'category', 'firebaseCode', 'configurationReason', 'attempt', 'endpoint', 'transportCode', 'upstreamStatus'].map(key => [key, 'private-secret'])
+  ) }, context);
+  assert.equal(JSON.stringify([diagnostic, unsafe]).includes('private-secret'), false);
+});
 test("raw-query failures retain SQLSTATE without SQL, bind values or credentials", () => {
   const error = {
     name: "PrismaClientKnownRequestError",

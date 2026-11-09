@@ -9,7 +9,9 @@ const transientCodes = new Set(['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ECONNRE
 const transientStatuses = new Set([408, 429, 500, 502, 503, 504]);
 const invalidCodes = new Set(['auth/id-token-expired', 'auth/id-token-revoked', 'auth/user-disabled', 'auth/user-not-found', 'auth/invalid-id-token']);
 const configCodes = new Set(['auth/invalid-credential', 'app/invalid-credential', 'auth/insufficient-permission', 'auth/project-not-found', 'app/invalid-app-options', 'AUTH_CONFIGURATION']);
-const knownCodes = new Set([...invalidCodes, ...configCodes, 'auth/argument-error', 'auth/invalid-argument', 'auth/internal-error', 'auth/certificate-fetch-failed', 'app/network-error', 'app/network-timeout', ...transientCodes, 'ENOTFOUND', 'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT']);
+const configurationTransportCodes = new Set(['ENOTFOUND', 'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'ERR_TLS_CERT_ALTNAME_INVALID', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'CERT_NOT_YET_VALID']);
+const configurationReasons = new Set(['missing_project', 'partial_service_account', 'invalid_service_email', 'invalid_private_key', 'production_emulator', 'project_mismatch', 'initialization_failed']);
+const knownCodes = new Set([...invalidCodes, ...configCodes, ...configurationTransportCodes, 'auth/argument-error', 'auth/invalid-argument', 'auth/internal-error', 'auth/certificate-fetch-failed', 'app/network-error', 'app/network-timeout', ...transientCodes]);
 const record = (value: unknown): Record<string, any> => typeof value === 'object' && value !== null ? value as Record<string, any> : {};
 export function classifyFirebaseError(error: unknown, signals: Signal[] = []) {
   const e = record(error), code = knownCodes.has(e.code) ? String(e.code) : 'unknown';
@@ -19,10 +21,26 @@ export function classifyFirebaseError(error: unknown, signals: Signal[] = []) {
   const invalid = invalidCodes.has(code);
   const signal = signals.find(s => transientCodes.has(s.transportCode || '') || transientStatuses.has(s.upstreamStatus || 0));
   const transient = !invalid && (!!signal || causes.some(c => transientCodes.has(c)) || ['app/network-timeout'].includes(code));
-  const configuration = !transient && (configCodes.has(code) || signals.some(s => [400, 401, 403, 404].includes(s.upstreamStatus || 0)) || causes.some(c => ['ENOTFOUND', 'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT'].includes(c)));
-  const configurationReason = ['missing_project', 'partial_service_account', 'invalid_service_email', 'invalid_private_key', 'production_emulator', 'project_mismatch', 'initialization_failed'].includes(e.configurationReason) ? String(e.configurationReason) : null;
+  const configuration = !transient && (configCodes.has(code) || signals.some(s => [400, 401, 403, 404].includes(s.upstreamStatus || 0) || configurationTransportCodes.has(s.transportCode || '')) || causes.some(c => configurationTransportCodes.has(c)));
+  const transport = signal || signals.find(s => transientCodes.has(s.transportCode || '') || configurationTransportCodes.has(s.transportCode || ''));
+  const configurationReason = configurationReasons.has(e.configurationReason) ? String(e.configurationReason) : null;
   return { firebaseCode: code, configurationReason, category: invalid ? 'invalid_proof' : transient ? 'transient_infrastructure' : configuration ? 'configuration' : ['auth/argument-error', 'auth/invalid-argument'].includes(code) ? 'invalid_proof' : 'unclassified_failure',
-    transient, endpoint: signal?.endpoint || signals[0]?.endpoint || null, transportCode: signal?.transportCode || causes.find(c => transientCodes.has(c)) || null, upstreamStatus: signal?.upstreamStatus || signals[0]?.upstreamStatus || null };
+    transient, endpoint: transport?.endpoint || signals[0]?.endpoint || null, transportCode: transport?.transportCode || causes.find(c => transientCodes.has(c) || configurationTransportCodes.has(c)) || null, upstreamStatus: signal?.upstreamStatus || signals[0]?.upstreamStatus || null };
+}
+
+/** Revalidate metadata at log boundaries; never copy arbitrary provider fields. */
+export function sanitizedFirebaseDiagnostic(value: unknown) {
+  const d = record(value);
+  return {
+    operation: ['verify_id_token', 'get_identity'].includes(d.operation) ? d.operation : null,
+    category: ['invalid_proof', 'transient_infrastructure', 'configuration', 'unclassified_failure'].includes(d.category) ? d.category : null,
+    firebaseCode: knownCodes.has(d.firebaseCode) ? d.firebaseCode : 'unknown',
+    configurationReason: configurationReasons.has(d.configurationReason) ? d.configurationReason : null,
+    attempt: Number.isInteger(d.attempt) && d.attempt > 0 && d.attempt <= 2 ? d.attempt : null,
+    endpoint: ['certificates', 'identity', 'credentials', 'google_service'].includes(d.endpoint) ? d.endpoint : null,
+    transportCode: transientCodes.has(d.transportCode) || configurationTransportCodes.has(d.transportCode) ? d.transportCode : null,
+    upstreamStatus: Number.isInteger(d.upstreamStatus) && d.upstreamStatus >= 400 && d.upstreamStatus <= 599 ? d.upstreamStatus : null,
+  };
 }
 
 /** Capture transport facts before firebase-admin converts certificate failures into argument errors. */

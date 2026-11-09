@@ -62,6 +62,24 @@ test('Firebase configuration validates partial credentials, project, RSA key and
   assert.equal(firebaseConfiguration({ FIREBASE_PROJECT_ID: 'auth-test', FIREBASE_CLIENT_EMAIL: 'x@auth-test.iam.gserviceaccount.com', FIREBASE_PRIVATE_KEY: privateKey.replaceAll('\n', '\\n') }).credentialMode, 'service_account');
 });
 
+test('wrapped DNS/TLS errors remain 503 configuration failures and retain safe transport metadata', async () => {
+  for (const transportCode of ['ENOTFOUND', 'CERT_HAS_EXPIRED', 'ERR_TLS_CERT_ALTNAME_INVALID', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'CERT_NOT_YET_VALID']) {
+    const diagnostic = classifyFirebaseError({ code: 'auth/argument-error', message: secret }, [{ endpoint: 'certificates', transportCode }]);
+    assert.equal(diagnostic.category, 'configuration');
+    assert.equal(diagnostic.transportCode, transportCode);
+    const logs: Record<string, unknown>[] = [];
+    await assert.rejects(requestContext.run({ requestId: 'dns-tls-test', identityReads: new Map() }, () => firebaseRead('verify_id_token', async () => {
+      throw { code: 'app/network-error', cause: { code: transportCode }, message: secret };
+    }, { log: row => logs.push(row) })), (error: any) => {
+      assert.equal(error.statusCode, 503); assert.equal(error.code, 'AUTH_CONFIGURATION'); assert.equal(error.retryable, false);
+      const row = apiFailureDiagnostic(error, { requestId: 'dns-tls-test', method: 'POST', route: '/api/auth/session' });
+      assert.equal(row.authentication?.transportCode, transportCode);
+      assert.equal(JSON.stringify(row).includes(secret), false); return true;
+    });
+    assert.equal(logs.length, 1); assert.equal(logs[0].requestId, 'dns-tls-test');
+  }
+});
+
 test('real Firebase Admin SDK recovers certificate HTTP failure and still verifies signature, audience, expiry and revocation', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'zawana-firebase-sdk-')), keyPath = join(dir, 'key.pem'), certPath = join(dir, 'cert.pem');
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', keyPath, '-out', certPath, '-subj', '/CN=localhost', '-days', '1'], { stdio: 'ignore' });
@@ -80,8 +98,12 @@ test('real Firebase Admin SDK recovers certificate HTTP failure and still verifi
   });
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
   const port = (server.address() as any).port;
+  let transportFailure: string | undefined;
   class TestAgent extends FirebaseHttpAgent {
-    createConnection(options: any, callback: any) { return super.createConnection({ ...options, host: '127.0.0.1', hostname: '127.0.0.1', port, servername: 'localhost', ca: certificate }, callback); }
+    createConnection(options: any, callback: any): any {
+      if (transportFailure) { const code = transportFailure; setImmediate(() => callback(Object.assign(new Error(secret), { code }))); return; }
+      return super.createConnection({ ...options, host: '127.0.0.1', hostname: '127.0.0.1', port, servername: 'localhost', ca: certificate }, callback);
+    }
   }
   const agent = new TestAgent({ keepAlive: true });
   const app = initializeApp({ projectId: 'auth-test', httpAgent: agent, credential: { getAccessToken: async () => ({ access_token: 'test-only-credential', expires_in: 3600 }) } }, 'reliability-test');
@@ -93,6 +115,12 @@ test('real Firebase Admin SDK recovers certificate HTTP failure and still verifi
   };
   const verify = (value: string) => firebaseRead('verify_id_token', () => getAuth(app).verifyIdToken(value, true), { sleep: async () => {}, log: row => logs.push(row) });
   try {
+    for (const code of ['ENOTFOUND', 'ERR_TLS_CERT_ALTNAME_INVALID']) {
+      transportFailure = code;
+      await assert.rejects(verify(token()), (error: any) => error.statusCode === 503 && error.code === 'AUTH_CONFIGURATION' && error.retryable === false);
+      assert.equal(logs.at(-1)?.transportCode, code);
+    }
+    transportFailure = undefined; logs.length = 0;
     assert.equal((await verify(token())).uid, 'test-user'); assert.equal(certificateCalls, 2); assert.equal(identityCalls, 1);
     assert.equal(logs[0].category, 'transient_infrastructure'); assert.equal(logs[0].upstreamStatus, 500);
     identityFailures = 1; assert.equal((await verify(token())).uid, 'test-user');

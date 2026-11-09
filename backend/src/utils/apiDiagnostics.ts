@@ -1,4 +1,5 @@
 /** Safe diagnostics: never serialize Error.message, stack, SQL, bind values or requests. */
+import { sanitizedFirebaseDiagnostic } from '../services/firebaseReliability.js';
 type RecordValue = Record<string, unknown>;
 const record = (v: unknown): RecordValue =>
   typeof v === "object" && v !== null ? (v as RecordValue) : {};
@@ -100,12 +101,7 @@ export function apiFailureDiagnostic(
                 : isBookingDatabaseConflict(error)
                   ? "database_contention"
                   : "request_failure",
-    ...(e.authDiagnostic && typeof e.authDiagnostic === "object" ? { authentication: {
-      operation: ['verify_id_token', 'get_identity'].includes(String(record(e.authDiagnostic).operation)) ? record(e.authDiagnostic).operation : null,
-      category: ['invalid_proof', 'transient_infrastructure', 'configuration', 'unclassified_failure'].includes(String(record(e.authDiagnostic).category)) ? record(e.authDiagnostic).category : null,
-      firebaseCode: /^(auth\/[a-z-]+|app\/[a-z-]+|E[A-Z]+|AUTH_CONFIGURATION|unknown)$/.test(String(record(e.authDiagnostic).firebaseCode)) ? record(e.authDiagnostic).firebaseCode : null,
-      attempt: typeof record(e.authDiagnostic).attempt === 'number' ? record(e.authDiagnostic).attempt : null,
-    } } : {}),
+    ...(e.authDiagnostic && typeof e.authDiagnostic === "object" ? { authentication: sanitizedFirebaseDiagnostic(e.authDiagnostic) } : {}),
     conflictCount: Array.isArray(e.conflicts) ? e.conflicts.length : 0,
   };
 }
