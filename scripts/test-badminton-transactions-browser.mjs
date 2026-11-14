@@ -20,7 +20,7 @@ try {
   const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
   for (const mobile of [false, true]) {
-    const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }, isMobile: mobile, hasTouch: mobile, reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 640 } : { width: 1440, height: 1000 }, isMobile: mobile, hasTouch: mobile, reducedMotion: 'no-preference' });
     await context.addInitScript(() => { localStorage.setItem('zawana_access_token', 'isolated-ui-fixture'); localStorage.setItem('zawana_language', 'en'); });
     const page = await context.newPage(), errors = [], external = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -45,10 +45,34 @@ try {
     assert.equal(await page.getByRole('link', { name: 'Court Bookings', exact: true }).count(), 0);
     assert.equal(await page.getByRole('link', { name: 'Course Bookings & Finance', exact: true }).count(), 0);
     await page.getByRole('link', { name: 'Course operations', exact: true }).waitFor();
-    await page.getByRole('button', { name: /QA Customer 1/ }).click();
+    const detailTrigger = page.getByRole('button', { name: /QA Customer 1/ });
+    await detailTrigger.focus();
+    await detailTrigger.click();
     await page.getByRole('dialog', { name: 'Transaction details' }).waitFor();
     await page.getByRole('dialog').getByText(/Simulated confirmation.*no external charge/).waitFor();
+    const dialog = page.getByRole('dialog', { name: 'Transaction details' });
+    await page.waitForTimeout(300);
+    const appearance = await dialog.evaluate(element => { const box = element.getBoundingClientRect(), style = getComputedStyle(element); return { background: style.backgroundColor, overflow: style.overflowY, top: box.top, bottom: box.bottom, viewport: window.innerHeight }; });
+    await page.screenshot({ path: `${previewDir}/transaction-dialog-${mobile ? 'mobile' : 'desktop'}.png`, fullPage: true });
+    console.log(JSON.stringify({ mobile, appearance }));
+    assert.notEqual(appearance.background, 'rgba(0, 0, 0, 0)', 'Receipt dialog must have an opaque surface');
+    assert.ok(['auto', 'scroll'].includes(appearance.overflow), 'Long receipt must be scrollable');
+    assert.ok(appearance.top >= 8 && appearance.bottom <= appearance.viewport - 8, 'Receipt must remain inside the viewport');
+    await dialog.getByRole('link', { name: 'Open course operations' }).scrollIntoViewIfNeeded();
+    assert.ok(await dialog.getByRole('link', { name: 'Open course operations' }).isVisible());
     await page.getByRole('button', { name: 'Close transaction details' }).click();
+    await dialog.waitFor({ state: 'detached' });
+    assert.ok(await detailTrigger.evaluate(element => document.activeElement === element), 'Closing restores trigger focus');
+    if (mobile) await detailTrigger.click();
+    else await page.getByRole('row').filter({ hasText: 'QA Customer 1' }).getByRole('cell').nth(1).click();
+    await dialog.waitFor();
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached' });
+    await detailTrigger.click(); await dialog.waitFor();
+    await page.locator('.premium-dialog-backdrop').click({ position: { x: 2, y: 2 } });
+    await dialog.waitFor({ state: 'detached' });
+    assert.equal(await page.evaluate(() => document.body.style.overflow), '');
+
     async function select(label, value, option) {
       if (mobile) await page.locator(`select[aria-label="${label}"]`).selectOption(value);
       else { await page.getByRole('combobox', { name: label, exact: true }).click(); await page.getByRole('option', { name: option, exact: true }).click(); }
