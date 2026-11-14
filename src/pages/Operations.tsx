@@ -1,7 +1,13 @@
+import { usePaymentRevision } from '../hooks/usePaymentRevision';
 import { startPayment } from '../services/paymentFlow';
 import { BadmintonCategoryField, BadmintonCategorySettings, categoryLabel } from '../components/BadmintonCategoryField';
 import { courtReschedulePath } from '../types/courtChanges';
 import { CourtChangeDialog } from "../components/CourtChangeDialog";
+import { CourtTimetable, type DeskBlock, type DeskStatus } from '../components/court-desk/CourtTimetable';
+import { courtFloor } from '../components/court-desk/timetable';
+import { emptyDeskPayment } from '../components/court-desk/DeskPaymentFields';
+import { DeskPrivateCourseDialog } from '../components/court-desk/DeskPrivateCourseDialog';
+import { shiftDateKey } from '../utils/bookingDates';
 import { QrDesk } from '../components/QrDesk';
 import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
@@ -9,9 +15,9 @@ import { DialogSurface, SegmentedControl, useDialog } from '../components/Intera
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { motionTokens } from '../design/motion';
 import { Select } from '../components/Select';
-import { Children, useMemo, useState, useEffect, type ReactNode } from 'react';
+import { Children, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import {
   Plus,
@@ -24,6 +30,7 @@ import {
   Printer,
   ArrowRight,
   ChevronRight,
+  ChevronLeft,
   CalendarDays,
   UserPlus,
   PackagePlus,
@@ -1006,7 +1013,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-bold">Payment method
               <Select className="mt-1 w-full rounded-xl border p-3" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                <option value="Cash">Cash</option><option value="KPay">KPay</option>
+                <option value="Cash">Cash</option><option value="Manual (simulated)">Manual (simulated)</option>
               </Select>
             </label>
             <label className="text-sm font-bold">Discount (%)
@@ -1116,7 +1123,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
       <Card className="overflow-hidden lg:sticky lg:top-6">
         <div className="border-b border-zawana-border p-5 sm:p-6"><p className="text-xs font-medium uppercase tracking-[.14em] text-zawana-500">Payment summary</p><h3 className="mt-3 text-lg font-semibold">{salePackage?.title || 'Select a package'}</h3><p className="mt-1 truncate text-xs text-zawana-500">{customerType === 'member' ? selectedStudent?.name || 'Select a customer to continue' : walkIn.name || 'Walk-in customer'}</p></div>
         <div className="space-y-6 p-5 sm:p-6">
-          <fieldset disabled={busy}><legend className="mb-2 text-xs font-medium text-zawana-500">Payment method</legend><div className="grid grid-cols-2 gap-2">{['Cash', 'KPay'].map(method => <button key={method} type="button" aria-pressed={paymentMethod === method} onClick={() => setPaymentMethod(method)} className={`min-h-11 rounded-xl border text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${paymentMethod === method ? 'border-zawana-950 bg-zawana-950 text-white' : 'border-zawana-border text-zawana-500 hover:border-zawana-500'}`}>{method}</button>)}</div></fieldset>
+          <fieldset disabled={busy}><legend className="mb-2 text-xs font-medium text-zawana-500">Payment method</legend><div className="grid grid-cols-2 gap-2">{['Cash', 'Manual (simulated)'].map(method => <button key={method} type="button" aria-pressed={paymentMethod === method} onClick={() => setPaymentMethod(method)} className={`min-h-11 rounded-xl border text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${paymentMethod === method ? 'border-zawana-950 bg-zawana-950 text-white' : 'border-zawana-border text-zawana-500 hover:border-zawana-500'}`}>{method}</button>)}</div></fieldset>
           <label className="block text-xs font-medium text-zawana-500">Discount (%)<div className="relative mt-2"><input disabled={busy} type="number" min="0" max="100" step="0.01" className="w-full rounded-xl border !pr-10 text-sm text-zawana-950" value={discountPercent} onChange={e => setDiscountPercent(e.target.value)} aria-invalid={!validDiscount} aria-describedby={!validDiscount ? 'activation-discount-error' : undefined} /><span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-zawana-500">%</span></div></label>
           {!validDiscount && <p id="activation-discount-error" role="alert" className="text-xs text-red-700">Enter a discount from 0 to 100%.</p>}
           <dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt className="text-zawana-500">Package price</dt><dd>{money(salePackage?.price || 0)}</dd></div><div className="flex justify-between gap-3"><dt className="text-zawana-500">Discount{validDiscount && percent > 0 ? ` (${percent}%)` : ''}</dt><dd className={discountAmount > 0 ? 'text-emerald-700' : ''}>−{money(discountAmount)}</dd></div></dl>
@@ -2533,7 +2540,7 @@ function GymCheckInWorkflow({
   </Card>
 }
 
-function AppointmentTable({
+export function AppointmentTable({
   notify,
   professional
 }: {
@@ -2547,12 +2554,13 @@ function AppointmentTable({
     [open, setOpen] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState('');
+  const [appointmentPrices, setAppointmentPrices] = useState<Record<string, number>>({});
   const [form, setForm] = useState({
     userId: '',
     doctorId: '',
     date: '',
     time: '',
-    type: 'Physiotherapy'
+    type: 'Physiotherapy', price: 0
   });
   useEffect(() => {
     if (['admin', 'clinic_fo'].includes(user?.role || '')) {
@@ -2586,7 +2594,7 @@ function AppointmentTable({
       <div className="mb-4 flex justify-end">
         <Button
           onClick={() => {
-            setForm({ userId: '', doctorId: '', date: '', time: '', type: 'Physiotherapy' });
+            setForm({ userId: '', doctorId: '', date: '', time: '', type: 'Physiotherapy', price: 0 });
             setOpen(true)
           }}
         >
@@ -2606,7 +2614,9 @@ function AppointmentTable({
           <Cell>{a.time}</Cell>
           <Cell>{a.type}</Cell>
           <Cell>
-            <Badge>{a.paymentStatus}</Badge>
+            <Badge>{a.paymentStatus}</Badge>{a.paymentStatus === 'pending' && !a.price && ['admin', 'clinic_fo'].includes(user?.role || '') && <div className="mt-2 flex flex-wrap gap-2"><input aria-label={`Service price for ${a.patient}`} type="number" min="1" className="w-28" placeholder="MMK" value={appointmentPrices[a.id] || ''} onChange={event => setAppointmentPrices(values => ({ ...values, [a.id]: Number(event.target.value) }))} /><Button variant="secondary" disabled={saving || !appointmentPrices[a.id]} onClick={async () => { setSaving(true); try { await patch(`/payments/appointments/${a.id}/price`, { price: appointmentPrices[a.id] }); await o.refresh(); } catch (error) { notify(error instanceof Error ? error.message : 'Price could not be saved.'); } finally { setSaving(false); } }}>Save price</Button></div>}
+
+            {a.paymentStatus === 'pending' && a.status !== 'cancelled' && ['admin', 'clinic_fo'].includes(user?.role || '') && <Button variant="secondary" disabled={saving || !a.price} onClick={async () => { setSaving(true); try { await startPayment('/payments/confirm', { resourceType: 'appointment', resourceId: a.id }); await o.refresh(); } catch (error) { notify(error instanceof Error ? error.message : 'Payment failed.'); } finally { setSaving(false); } }}>Confirm manual payment</Button>}
           </Cell>
           <Cell>
             <Badge>{a.status}</Badge>
@@ -2684,7 +2694,7 @@ function AppointmentTable({
             value={form.type}
             onChange={e => setForm({ ...form, type: e.target.value })}
             placeholder="Appointment type"
-          />
+          /><label className="text-xs">Service price (MMK)<input type="number" min="1" value={form.price} onChange={event => setForm({ ...form, price: Number(event.target.value) })} /></label>
         </div>
         {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
@@ -3315,6 +3325,7 @@ function StudentManager({
 }
 
 function Finance() {
+  const paymentRevision = usePaymentRevision();
   const [business, setBusiness] = useState('');
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<any[]>([]);
@@ -3346,7 +3357,7 @@ function Finance() {
       filters.q ? 250 : 0
     );
     return () => window.clearTimeout(timer)
-  }, [page, business, filters]);
+  }, [page, business, filters, paymentRevision]);
   const setFilter = (key: string, value: string) => {
     setPage(1);
     setFilters(f => ({ ...f, [key]: value }))
@@ -3392,7 +3403,7 @@ function Finance() {
         onChange={e => setFilter('paymentMethod', e.target.value)}
       >
         <option value="">All payment types</option>
-        {['Cash', 'KPay', 'Pay Later', 'Temporarily disabled'].map(s =>
+        {['Cash', 'Manual (simulated)', 'Pay Later', 'Temporarily disabled'].map(s =>
           <option key={s}>{s}</option>
         )}
       </Select>
@@ -3438,7 +3449,7 @@ function Finance() {
             <Cell>
               <b>{money(t.finalAmount)}</b>
             </Cell>
-            <Cell>{t.paymentMethod}</Cell>
+            <Cell>{t.paymentMethod}{t.status === "paid" && t.confirmationMode && t.confirmationMode !== "LEGACY" && <p className="mt-1 text-[10px] text-zawana-500">{t.confirmationMode === "SIMULATED" ? "Simulated confirmation" : "Manually confirmed"}</p>}</Cell>
             <Cell>{t.staff}</Cell>
           </tr>
         )}
@@ -3474,6 +3485,7 @@ function Finance() {
 }
 
 function Transactions({ business }: { business: Transaction['business'] }) {
+  const paymentRevision = usePaymentRevision();
   const [rows, setRows] = useState<any[]>([]),
     [page, setPage] = useState(1),
     [pageInfo, setPageInfo] = useState<any>({ total: 0, totalPages: 0 }),
@@ -3506,7 +3518,7 @@ function Transactions({ business }: { business: Transaction['business'] }) {
     return () => {
       alive = false
     }
-  }, [business, page, query, item, status]);
+  }, [business, page, query, item, status, paymentRevision]);
   return <div>
     <form
       className="mb-4 grid gap-3 rounded-2xl border border-zawana-950/10 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4"
@@ -3566,7 +3578,7 @@ function Transactions({ business }: { business: Transaction['business'] }) {
                 <Cell>
                   <b>{money(t.finalAmount)}</b>
                 </Cell>
-                <Cell>{t.paymentMethod}</Cell>
+                <Cell>{t.paymentMethod}{t.status === "paid" && t.confirmationMode && t.confirmationMode !== "LEGACY" && <p className="mt-1 text-[10px] text-zawana-500">{t.confirmationMode === "SIMULATED" ? "Simulated confirmation" : "Manually confirmed"}</p>}</Cell>
                 <Cell>
                   <Badge good={t.status === 'paid'}>{t.status}</Badge>
                 </Cell>
@@ -4463,6 +4475,7 @@ function StoreOrders({ notify }: { notify: (s: string) => void }) {
           <Cell>{x.dueDate || '—'}</Cell>
           <Cell>
             <Badge>{x.status}</Badge>
+            {x.status === 'pending' && <Button variant="secondary" onClick={async () => { try { await startPayment('/payments/confirm', { resourceType: 'store_order', resourceId: x.id }); await o.refresh(); } catch (error) { notify(error instanceof Error ? error.message : 'Payment failed.'); } }}>Confirm manual payment</Button>}
           </Cell>
         </tr>
       ) :
@@ -4513,7 +4526,7 @@ function CafeOrders({ notify }: { notify: (s: string) => void }) {
 
   const settle = async (order: any) => {
     try {
-      await patch(`/cafe/orders/${order.id}/payment`, { paymentMethod: 'CASH' });
+      await patch(`/cafe/orders/${order.id}/payment`, { paymentMethod: 'CASH', confirmed: true });
       await o.refresh();
       notify('Cash payment recorded.')
     } catch (e: any) {
@@ -4836,7 +4849,7 @@ function CafePOS({ notify }: { notify: (s: string) => void }) {
         ...(customer.trim() ? { customer: customer.trim() } : {}),
         items: items.map(item => ({ id: item.id, quantity: item.qty })),
         discount,
-        paymentMethod
+        paymentMethod, confirmed: true
       });
       const order = result?.order;
       if (paymentMethod === 'CASH') {
@@ -5035,7 +5048,7 @@ function CafePOS({ notify }: { notify: (s: string) => void }) {
         </div>
       </div>
 
-      <p className="mt-3 text-[11px] text-zawana-500">Online orders stay unpaid until a verified payment flow is connected. No payment is marked successful here.</p>
+      <p className="mt-3 text-[11px] text-zawana-500">Confirm a manual/simulated payment when placing an order. No external charge is made.</p>
       <div className="mt-3 grid grid-cols-3 gap-2">
         {CAFE_PAYMENT_METHODS.map(method =>
           <button
@@ -5056,7 +5069,7 @@ function CafePOS({ notify }: { notify: (s: string) => void }) {
           ? 'Saving order…'
           : paymentMethod === 'CASH'
             ? 'Record cash & send'
-            : 'Create online order'}
+            : 'Confirm simulated payment & send'}
       </Button>
     </Card>
   </div>
@@ -5118,9 +5131,6 @@ function POS({
     if (!cart.length) {
       notify('Cart is empty.');
       return }
-    if (paymentMethod === 'Pay Online') {
-      notify('Online checkout is not configured yet. No payment or sale was recorded.');
-      return }
     if (paymentMethod === 'Pay Later' && !customer.trim()) {
       notify('Customer name is required for pay later.');
       return }
@@ -5141,7 +5151,7 @@ function POS({
           itemSummary: items.map(x => `${x.name} ×${x.qty}`).join(', '),
           dueDate: paymentMethod === 'Pay Later' ? dueDate : undefined,
           status: paymentMethod === 'Pay Later' ? 'pending' : 'paid',
-          paymentMethod,
+          paymentMethod, confirmed: paymentMethod !== 'Pay Later',
           items: cart.map(x => ({ productId: x.id, quantity: x.qty }))
         });
       } else {
@@ -5367,23 +5377,34 @@ function POS({
           onClick={() => void complete('Pay Online')}
         >Pay online</Button>
       </div>
-      <p className="mt-3 text-center text-[11px] text-zawana-500">Online checkout will not record a sale until KPay is configured.</p>
+      <p className="mt-3 text-center text-[11px] text-zawana-500">Explicit manual/simulated confirmation. No external charge is made.</p>
     </Card>
   </div>
 }
 
 function CourtDesk({ notify }: { notify: (s: string) => void }) {
   const o = useOperations();
+  const navigate = useNavigate();
+  const deskLocation = useLocation();
   const [courtQuery, setCourtQuery] = useState('');
   const [floorFilter, setFloorFilter] = useState('all');
   const [reservationType, setReservationType] = useState('rental');
+  const [statusFilter, setStatusFilter] = useState<DeskStatus>('all');
+  const [changeBooking, setChangeBooking] = useState<string | null>(null);
+  const [inspectedBlock, setInspectedBlock] = useState<DeskBlock | null>(null);
+  const [calendarDate, setCalendarDate] = useState('');
+  const [calendarError, setCalendarError] = useState('');
+  const availabilityRequest = useRef(0);
   const now = useBookingClock();
 
   const [date, setDate] = useState(() => bookingClock().date);
 
   const [court, setCourt] = useState<any>(null);
   const [slot, setSlot] = useState('');
-  const [walkInName, setWalkInName] = useState('Walk-in Customer');
+  const [walkInName, setWalkInName] = useState('');
+  const [deskPayment, setDeskPayment] = useState(emptyDeskPayment);
+  const rentalRetry = useRef({ payload: '', key: '' });
+  const [courseBookings, setCourseBookings] = useState<any[]>([]);
 
   const [saving, setSaving] = useState(false);
   const [blocks, setBlocks] = useState<any[]>([]);
@@ -5408,31 +5429,36 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     return { start: f(r.start), end: f(r.end) };
   };
 
-  const refreshBlocks = async () => {
+  const refreshBlocks = useCallback(async () => {
+    const request = ++availabilityRequest.current;
+    setCalendarError('');
     try {
-      const [availability, weekly] = await Promise.all([
+      const [availability, weekly, privateBookings] = await Promise.all([
         get<any>(`/bookings/availability?date=${date}`),
 
-        get<any[]>(`/court-blocks?date=${date}&courtId=${court?.id || ''}`),
+        get<any[]>(`/court-blocks?date=${date}&courtId=`),
+        get<any[]>(`/staff/private-courses/bookings?date=${date}`),
       ]);
 
       const merged = [...(weekly || []), ...(availability.blocks || [])];
 
       const unique = Array.from(new Map(merged.map((b: any) => [b.id, b])).values());
+      if (request !== availabilityRequest.current) return;
 
       setBlocks(unique);
+      setCourseBookings(privateBookings.filter(b => b.date === date && ['PENDING_COACH_CONFIRMATION', 'AWAITING_PAYMENT', 'CONFIRMED', 'confirmed'].includes(b.status)));
       setHoliday(availability.holiday || null);
       setDateOverride(availability.dateOverride || null);
       setOverrideType(availability.dateOverride?.type || 'open');
       setOverrideTitle(availability.dateOverride?.title || 'Holiday');
       setOverrideReason(availability.dateOverride?.reason || '');
+      setCalendarDate(date);
     } catch {
-      try {
-        const weekly = await get<any[]>(`/court-blocks?date=${date}&courtId=${court?.id || ''}`);
-        setBlocks(weekly || []);
-      } catch {}
+      if (request !== availabilityRequest.current) return;
+      setCalendarDate('');
+      setCalendarError('Availability could not be loaded. Refresh before making a reservation.');
     }
-  };
+  }, [date]);
 
   const saveDateOverride = async () => {
     setSaving(true);
@@ -5469,8 +5495,8 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
   };
 
   useEffect(() => {
-    refreshBlocks()
-  }, [date, o.courtBookings]);
+    void refreshBlocks();
+  }, [refreshBlocks, o.courtBookings]);
 
   const isBlocked = (c: any, t: string) =>
     blocks.some(
@@ -5483,6 +5509,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     bookings.some(
       b => b.court === c.name && slotOverlaps(b.time, t) && !['cancelled'].includes(b.status)
     ) ||
+    courseBookings.some(b => b.courtId === c.id && slotOverlaps(b.time, t)) ||
     isBlocked(c, t);
 
   const status = (c: any, t: string) =>
@@ -5563,17 +5590,11 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       return }
     setSaving(true);
     try {
-      await post<any>('/bookings', {
-        kind: 'court',
-        title: court.name,
-        date,
-        time: slot,
-        location: 'Zawana Badminton Arena',
-        price: slotPrice(court, slot),
-        courtId: court.id,
-        meta: JSON.stringify({ source: 'walk_in', customerName: walkInName || 'Walk-in Customer' }),
-        paymentStatus: 'pending'
-      });
+      if (!walkInName.trim() || !deskPayment.method) { notify('Enter the customer and choose a payment method.'); return; }
+      const payload = { courtId: court.id, date, time: slot, customer: walkInName.trim(), expectedPrice: slotPrice(court, slot), payment: { method: deskPayment.method } };
+      const serialized = JSON.stringify(payload);
+      if (rentalRetry.current.payload !== serialized) rentalRetry.current = { payload: serialized, key: crypto.randomUUID() };
+      await post('/staff/court-desk/rentals', { ...payload, requestKey: rentalRetry.current.key });
       await o.refresh();
       notify(`${court.name} reserved for ${walkInName || 'Walk-in Customer'} · ${slot}.`);
       setCourt(null);
@@ -5587,27 +5608,46 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
   };
 
   const activeClassBlocks = blocks.filter(
-    b => b.courtId === court?.id && b.type === 'class' && b.active !== false
+    b => calendarDate === date && b.courtId === court?.id && b.type === 'class' && b.active !== false
   );
 
-  const courtStats = useMemo(() => new Map(o.managedCourts.map(c => {
-    const states = courtSlots.map(t => status(c, t));
-    return [c.id, { open: states.filter(s => s === 'open').length, reserved: states.filter(s => s === 'booked' || s === 'class').length, states }];
-  })), [o.managedCourts, o.courtBookings, blocks, date, now]);
+  const floors = [...new Set(o.managedCourts.map(courtFloor))];
+  const visibleCourts = o.managedCourts.filter(c => c.name.toLowerCase().includes(courtQuery.trim().toLowerCase()) && (floorFilter === 'all' || courtFloor(c) === floorFilter))
+    .sort((a, b) => courtFloor(a).localeCompare(courtFloor(b)) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const changeDate = (value: string) => { if (value) { setDate(value); setCourt(null); setSlot(''); setInspectedBlock(null); } };
+  const openCourt = (selected: typeof o.managedCourts[number], time = '', block: DeskBlock | null = null) => {
+    setCourt(selected); setSlot(time); setInspectedBlock(block); setDeskPayment(emptyDeskPayment());
+  };
+  const calendarLoading = calendarDate !== date || !!calendarError;
 
-  return <div>
-    <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]">
-      <div className="py-2"><p className="text-xs font-medium uppercase tracking-[.14em] text-zawana-500">Court operations</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">Court availability</h2><p className="mt-2 text-sm leading-relaxed text-zawana-500">Choose a court to view times, make a rental or reserve a weekly class.</p></div>
-      <label className="rounded-2xl border border-zawana-border bg-white p-4">
-        <span className="block text-[10px] font-black uppercase tracking-widest text-zawana-500">Operating day</span>
-        <input
-          className="mt-2"
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-        />
-      </label>
+  return <div className="court-desk">
+    {changeBooking && <CourtChangeDialog bookingId={changeBooking} onClose={() => setChangeBooking(null)} onChanged={() => { void o.refresh(); void refreshBlocks(); }} />}
+    <div className="desk-toolbar">
+      <div className="desk-toolbar__date">
+        <Button variant="secondary" aria-label="Previous Day" onClick={() => changeDate(shiftDateKey(date, -1))}><ChevronLeft size={16} /></Button>
+        <label><span>Operating day</span><input type="date" value={date} onChange={e => changeDate(e.target.value)} /></label>
+        <Button variant="secondary" aria-label="Next Day" onClick={() => changeDate(shiftDateKey(date, 1))}><ChevronRight size={16} /></Button>
+        <Button variant="secondary" onClick={() => changeDate(bookingClock().date)}>Today</Button>
+      </div>
+      <SegmentedControl label="Reservation type" value={reservationType} onChange={setReservationType} options={[{ value: 'rental', label: 'Court Rental' }, { value: 'weekly', label: 'Weekly Class' }, { value: 'private', label: 'Private Course' }]} />
     </div>
+    <div className="desk-filters">
+      <label className="desk-search"><Search size={16} aria-hidden="true" /><input aria-label="Search courts" placeholder="Search courts" value={courtQuery} onChange={e => setCourtQuery(e.target.value)} /></label>
+      <label><span>Floor</span><Select aria-label="Court floor" value={floorFilter} onChange={event => setFloorFilter(event.target.value)}><option value="all">All courts</option>{floors.map(floor => <option key={floor} value={floor}>{floor}</option>)}</Select></label>
+      <label><span>Status</span><Select aria-label="Timetable status" value={statusFilter} onChange={event => setStatusFilter(event.target.value as DeskStatus)}>
+        <option value="all">All statuses</option><option value="open">Available</option><option value="booked">Booked rentals</option><option value="pending">Pending bookings</option><option value="weekly">Weekly classes</option><option value="private">Private courses</option><option value="blocked">Blocked periods</option><option value="maintenance">Maintenance</option>
+      </Select></label>
+      <Button variant="secondary" onClick={() => void refreshBlocks()}>Refresh availability</Button>
+    </div>
+    <div className="desk-legend" aria-label="Timetable legend"><span data-kind="open">Available</span><span data-kind="booked">Court rental</span><span data-kind="weekly">Weekly class</span><span data-kind="pending">Pending booking</span><span data-kind="blocked">Blocked / unavailable</span></div>
+    {calendarError && <div className="desk-load-error" role="alert">{calendarError}</div>}
+    {visibleCourts.length > 0 && <CourtTimetable courts={visibleCourts} bookings={bookings} blocks={calendarDate === date ? [...blocks, ...courseBookings.flatMap(b => { const range = to24(b.time); return range ? [{ id: b.id, courtId: b.courtId, ...range, type: 'private', status: b.status, paymentStatus: b.paymentStatus, title: `${b.user?.name || 'Member'} · ${b.title}`, coach: b.coach, note: `Booking: ${b.status.replaceAll('_', ' ')} · Payment: ${b.paymentStatus}` }] : []; })] : []} slots={courtSlots} date={date}
+      statusFilter={statusFilter} parseRange={rangeOf} slotStatus={status} loading={calendarLoading}
+      onSelectCourt={selected => openCourt(selected)} onSelectSlot={(selected, time) => openCourt(selected, time)}
+      onSelectBooking={booking => setChangeBooking(booking.id)}
+      onSelectBlock={(selected, block) => { if (block.type === 'private') { navigate(`${deskLocation.pathname.startsWith('/admin') ? '/admin' : '/badminton-fo'}/course-finance?booking=${encodeURIComponent(block.id)}`); return; } setReservationType(block.type === 'class' ? 'weekly' : 'rental'); openCourt(selected, `${block.start} — ${block.end}`, block); }}
+    />}
+    {!!o.managedCourts.length && !visibleCourts.length && <Empty title="No matching courts" body="Try a different court name or floor." />}
 
     <details className="mb-5 rounded-2xl border border-zawana-border bg-white p-5" open={!!dateOverride}>
       <summary className="cursor-pointer text-sm font-semibold">Special opening hours <span className="ml-2 text-xs font-normal text-zawana-500">One-day opening or closure</span></summary>
@@ -5652,25 +5692,8 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       </div>
     </details>
 
-    {holiday?.active &&
+    {holiday?.active && calendarDate === date &&
       <div className="mb-5 rounded-2xl border border-zawana-gold/30 bg-zawana-gold/10 p-4 text-sm font-black">Public holiday · {holiday.title} · {Number(holiday.price).toLocaleString()} MMK / hour</div>}
-
-    <div className="mb-5 flex items-center justify-between gap-4"><div className="flex w-full max-w-sm items-center gap-3 rounded-xl border bg-white px-4"><Search size={16} className="shrink-0 text-zawana-500" /><input aria-label="Search courts" placeholder="Search courts" value={courtQuery} onChange={e => setCourtQuery(e.target.value)} className="min-w-0 w-full !border-0 !bg-transparent !px-0 !shadow-none !outline-none !ring-0" /></div><span className="shrink-0 text-xs text-zawana-500">{o.managedCourts.length} courts</span></div>
-    <div className="mb-5"><SegmentedControl label="Court floor" value={floorFilter} onChange={setFloorFilter} options={[{value:'all',label:'All courts'}, {value:'2',label:'2nd floor'}, {value:'6',label:'6th floor'}]} /></div>
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {o.managedCourts.filter(c => c.name.toLowerCase().includes(courtQuery.trim().toLowerCase()) && (floorFilter === 'all' || (floorFilter === '2' ? Number(c.name.match(/(\d+)\D*$/)?.[1]) >= 1 && Number(c.name.match(/(\d+)\D*$/)?.[1]) <= 4 : Number(c.name.match(/(\d+)\D*$/)?.[1]) >= 5 && Number(c.name.match(/(\d+)\D*$/)?.[1]) <= 8))).map(c => {
-        const stats = courtStats.get(c.id)!;
-        const openSlots = stats.open;
-        return <button
-          key={c.id}
-          onClick={() => setCourt(c)}
-          className="group overflow-hidden rounded-2xl border border-zawana-border bg-white text-left transition hover:border-zawana-500/40 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-zawana-gold"
-        >
-          <div className="flex items-center gap-3 border-b border-zawana-border p-5"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-lg font-semibold ${Number(c.name.match(/(\d+)\D*$/)?.[1]) <= 4 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>{c.name.match(/(\d+)\D*$/)?.[1] || <MapPin size={18} />}</span><div className="min-w-0 flex-1"><h3 className="text-base font-semibold">{c.name}</h3><p className="mt-1 text-xs text-zawana-500">{c.type} court · {c.surface}</p></div><Badge good={c.status === 'available'}>{c.status}</Badge></div>
-          <div className="px-5 py-4"><div className="mb-3 flex items-center justify-between gap-3 text-xs"><span className="text-zawana-500">{openSlots} available <span className="mx-1">·</span> {stats.reserved} reserved</span><span className="font-medium">{money(c.price)} / hr</span></div><div aria-hidden="true" className="flex gap-1">{stats.states.map((st, i) => <span key={i} className={`h-1 flex-1 rounded-full ${st === 'open' ? 'bg-zawana-gold/70' : st === 'class' || st === 'booked' ? 'bg-rose-300' : 'bg-zawana-950/10'}`} />)}</div><p className="mt-3 flex items-center justify-between text-xs text-zawana-500"><span>06:00 — 21:00</span><span className="inline-flex items-center gap-1">View times <ChevronRight size={13} /></span></p></div>
-        </button>
-      })}
-    </div>
 
     {!o.managedCourts.length &&
       <Empty
@@ -5678,14 +5701,17 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
         body="Admin must create courts before the FO can accept rentals."
       />}
 
-    <AnimatePresence>{court &&
-      <DialogSurface title={`${court.name} · availability`} onClose={() => { if (!saving) { setCourt(null); setSlot('') } }} className="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white">
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-zawana-border px-5 py-5 sm:px-7"><div><p className="text-[10px] font-medium uppercase tracking-[.16em] text-zawana-500">Court reservation</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{court.name}</h2><p className="mt-1 text-xs text-zawana-500">{new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · One-hour sessions</p></div><button type="button" aria-label="Close dialog" disabled={saving} onClick={() => { setCourt(null); setSlot('') }} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-zawana-950/5 text-zawana-500 transition hover:bg-zawana-950/10 focus-visible:ring-2 focus-visible:ring-zawana-gold"><X size={17} /></button></header>
-        <div className="min-h-0 overflow-y-auto p-5 sm:p-7">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_290px]">
+    <AnimatePresence>{court && reservationType === 'private' && <DeskPrivateCourseDialog court={court} date={date} initialTime={slot} onClose={() => { setCourt(null); setSlot(''); }} onCreated={() => { setCourt(null); setSlot(''); void o.refresh(); void refreshBlocks(); notify('Payment recorded. Awaiting assigned coach confirmation.'); }} />}{court && reservationType !== 'private' &&
+      <DialogSurface title={`${court.name} · availability`} onClose={() => { if (!saving) { setCourt(null); setSlot(''); setInspectedBlock(null) } }} className="desk-reservation-dialog">
+        <header className="desk-reservation-dialog__header"><div><p className="text-[10px] font-medium uppercase tracking-[.16em] text-zawana-500">{inspectedBlock ? 'Reservation management' : reservationType === 'weekly' ? 'Weekly class reservation' : 'Court rental reservation'}</p><h2 className="mt-1 text-xl font-semibold tracking-tight">{court.name}</h2><p className="mt-1 text-xs text-zawana-500">{new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · One-hour sessions</p></div><button type="button" aria-label="Close dialog" disabled={saving} onClick={() => { setCourt(null); setSlot('') }} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-zawana-500 transition hover:bg-zawana-950/5 focus-visible:ring-2 focus-visible:ring-zawana-gold"><X size={18} /></button></header>
+        <div className="desk-reservation-dialog__body">
+        <div className="desk-selection" aria-label="Selected reservation"><span><small>Court</small><strong>{court.name}</strong></span><span><small>Date</small><strong>{date}</strong></span><span><small>Time</small><strong>{slot || 'Choose a time'}</strong></span></div>
+        {inspectedBlock && <div className="desk-inspected-block"><strong>{inspectedBlock.title || 'Blocked period'}</strong><p>{inspectedBlock.type === 'class' ? `Weekly class · Every ${dayName}` : 'Blocked period'} · {inspectedBlock.start}–{inspectedBlock.end}</p>{inspectedBlock.note && <p>{inspectedBlock.note}</p>}</div>}
+        {calendarError && <p className="desk-load-error" role="alert">{calendarError}</p>}
+        <div className="desk-reservation-dialog__layout">
           <div>
-            <div className="mb-4 flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold">Choose a time</h3><p className="mt-1 text-xs text-zawana-500">06:00 — 21:00 · Select an available session</p></div><span className="mt-1 flex items-center gap-1.5 text-[10px] text-zawana-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Available</span></div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="mb-4 flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold">Choose a time</h3><p className="mt-1 text-xs text-zawana-500">{courtSlots[0].split(' — ')[0]} – {courtSlots.at(-1)?.split(' — ')[1]} · Select an available session</p></div><span className="mt-1 flex items-center gap-1.5 text-[10px] text-zawana-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Available</span></div>
+            <div className="desk-time-grid">
               {courtSlots.map(t => {
                 const st = status(court, t);
                 const booking = bookings.find(
@@ -5702,20 +5728,20 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
                 return <button
                   key={t}
                   onClick={() => {
-                    if (st === 'open') setSlot(t)
+                    if (st === 'open') { setSlot(t); setDeskPayment(emptyDeskPayment()); }
                   }}
-                  disabled={st !== 'open'}
+                  disabled={st !== 'open' || calendarLoading}
                   aria-label={`${t} ${reserved ? `reserved every ${dayName}` : st !== 'open' ? st : 'available'}`}
                   aria-pressed={slot === t}
-                  className={`min-h-20 rounded-xl border p-3 text-left transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${slot === t ? 'border-zawana-950 bg-zawana-950 text-white' : st === 'open' ? 'border-zawana-border bg-white hover:border-zawana-500' : 'border-transparent bg-zawana-950/[.035] text-zawana-400'}`}
+                  className={`desk-time-slot ${slot === t ? 'desk-time-slot--selected' : ''}`}
                 >
-                  <span className="flex items-center justify-between gap-2 text-xs font-semibold">{t.split(' — ')[0]}{slot === t && <Check size={13} />}</span>
-                  <span className={`mt-1 block text-[10px] ${slot === t ? 'text-white/70' : st === 'open' ? 'text-zawana-500' : reserved ? 'text-rose-700' : 'text-zawana-400'}`}>{st === 'open' ? money(slotPrice(court, t)) : reserved ? block?.title || 'Weekly class' : st === 'elapsed' ? 'Time passed' : court.status !== 'available' ? 'Maintenance' : `Booked${booking?.customer ? ` · ${booking.customer}` : ''}`}</span>
+                  <span className="desk-time-slot__time">{t.replace(' — ', ' – ')}{slot === t && <Check size={12} aria-hidden="true" />}</span>
+                  <span className="desk-time-slot__status">{st === 'open' ? money(slotPrice(court, t)) : reserved ? block?.title || 'Weekly class' : st === 'elapsed' ? 'Time passed' : court.status !== 'available' ? 'Maintenance' : `Booked${booking?.customer ? ` · ${booking.customer}` : ''}`}</span>
                 </button>
               })}
             </div>
 
-            <details className="mt-5 rounded-xl border border-zawana-border p-4"><summary className="cursor-pointer text-xs font-semibold">Weekly reservations <span className="ml-1 font-normal text-zawana-500">({activeClassBlocks.length})</span></summary><div className="mt-3">
+            <details open={!!inspectedBlock} className="mt-5 rounded-xl border border-zawana-border p-4"><summary className="cursor-pointer text-xs font-semibold">Weekly reservations <span className="ml-1 font-normal text-zawana-500">({activeClassBlocks.length})</span></summary><div className="mt-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-zawana-purple">Weekly reservations · {dayName}
@@ -5748,17 +5774,20 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
                 <p className="mt-3 text-xs text-zawana-500">No weekly class reservation for this court/day.</p>}
             </div></details>
           </div>
-          <div className="h-fit rounded-2xl border border-zawana-border bg-zawana-950/[.015] p-5 lg:sticky lg:top-0">
+          <div className="desk-reservation-form">
             <p className="text-[10px] font-medium uppercase tracking-[.14em] text-zawana-500">Reservation details</p>
-            <div className="my-5"><SegmentedControl label="Reservation type" value={reservationType} onChange={setReservationType} options={[{ value: 'rental', label: 'Rental' }, { value: 'weekly', label: 'Weekly class' }]} /></div>
-            {reservationType === 'rental' ? <label className="block text-xs font-medium text-zawana-500">Walk-in customer<input disabled={saving} className="mt-2 w-full rounded-xl bg-white text-sm text-zawana-950" value={walkInName} onChange={e => setWalkInName(e.target.value)} /></label> : <label className="block text-xs font-medium text-zawana-500">Weekly class / facility block<input disabled={saving} className="mt-2 w-full rounded-xl bg-white text-sm text-zawana-950" value={classTitle} onChange={e => setClassTitle(e.target.value)} /></label>}
-            <dl className="mt-6 space-y-4 text-xs"><div className="flex justify-between gap-3"><dt className="text-zawana-500">Court</dt><dd className="font-medium">{court.name}</dd></div><div className="flex justify-between gap-3"><dt className="text-zawana-500">Time</dt><dd className="text-right font-medium">{slot || 'Choose a time'}</dd></div><div className="flex justify-between gap-3"><dt className="text-zawana-500">{reservationType === 'weekly' ? 'Repeats' : 'Date'}</dt><dd className="font-medium">{reservationType === 'weekly' ? `Every ${dayName}` : date}</dd></div></dl>
-            <div className="mt-6 border-t border-zawana-border pt-5"><p className="text-xs text-zawana-500">{reservationType === 'rental' ? 'Total rental' : 'Weekly court reservation'}</p><p className="mt-1 text-2xl font-semibold tracking-tight">{reservationType === 'rental' ? slot ? money(slotPrice(court, slot)) : '—' : 'Recurring class'}</p></div>
-            <Button loading={saving} disabled={!slot || saving || isBusy(court, slot)} onClick={reservationType === 'rental' ? bookWalkIn : reserveClass} className="mt-5 w-full">{saving ? 'Reserving…' : reservationType === 'rental' ? 'Walk-in booking' : 'Reserve weekly class'}{!saving && <ArrowRight size={15} />}</Button>
+            <div className="my-3"><SegmentedControl label="Reservation type" value={reservationType} onChange={setReservationType} options={[{ value: 'rental', label: 'Rental' }, { value: 'weekly', label: 'Weekly' }, { value: 'private', label: 'Private' }]} /></div>
+            {reservationType === 'rental' ? <label className="block text-xs font-medium text-zawana-500">Customer name<input maxLength={100} disabled={saving} className="mt-2 w-full rounded-xl bg-white text-sm text-zawana-950" value={walkInName} onChange={e => { setWalkInName(e.target.value); setDeskPayment(emptyDeskPayment()); }} /></label> : <label className="block text-xs font-medium text-zawana-500">Weekly class / facility block<input disabled={saving} className="mt-2 w-full rounded-xl bg-white text-sm text-zawana-950" value={classTitle} onChange={e => setClassTitle(e.target.value)} /></label>}
+            {reservationType === 'weekly' && <p className="desk-recurrence"><CalendarDays size={15} aria-hidden="true" />Repeats every {dayName}</p>}
+            {reservationType === 'rental' && <fieldset disabled={saving} className="desk-payment-fields"><legend>Payment method</legend><SegmentedControl label="Rental payment method" value={deskPayment.method} onChange={method => setDeskPayment({ ...emptyDeskPayment(), method: method as 'CASH' | 'ONLINE' })} options={[{ value: 'CASH', label: 'Cash' }, { value: 'ONLINE', label: 'Online payment' }]} /><p className="mt-3 text-xs text-zawana-500">Booking records payment together. Online payments are simulated; no external charge.</p></fieldset>}
             <p className="mt-3 text-xs leading-relaxed text-zawana-500">{reservationType === 'rental' ? 'Reserve this one-hour session for your customer.' : `Reserves this time every ${dayName} until you remove it.`}</p>
           </div>
         </div>
         </div>
+        <footer className="desk-reservation-dialog__footer">
+          <div><p>{reservationType === 'rental' ? 'Total rental' : 'Weekly court reservation'}</p><strong>{reservationType === 'rental' ? slot ? money(slotPrice(court, slot)) : 'Choose a time' : 'Recurring class'}</strong></div>
+          <Button loading={saving} disabled={!slot || saving || calendarLoading || isBusy(court, slot) || (reservationType === 'rental' && (!walkInName.trim() || !deskPayment.method))} onClick={reservationType === 'rental' ? bookWalkIn : reserveClass}>{saving ? 'Reserving…' : reservationType === 'rental' ? 'Record rental & payment' : 'Reserve weekly class'}{!saving && <ArrowRight size={15} />}</Button>
+        </footer>
       </DialogSurface>}</AnimatePresence>
   </div>
 }
@@ -6116,14 +6145,14 @@ function NotificationCenter({ role }: { role: UserRole }) {
     setBusy(item.id);
     setError('');
     try {
-      await post(`/coach/private-courses/${item.entityId}/decision`, { decision });
+      const result = await post<{ paymentStatus: string }>(`/coach/private-courses/${item.entityId}/decision`, { decision });
       await patch(`/notifications/${item.id}/read`, {});
       setItems(rows => rows.filter(n => n.id !== item.id));
       window.dispatchEvent(
         new CustomEvent('zawana-toast', {
           detail:
             decision === 'accept'
-              ? 'Request accepted. The member has 24 hours to pay.'
+              ? result.paymentStatus === 'paid' ? 'Paid session approved.' : 'Request accepted. The member has 24 hours to pay.'
               : 'Request declined; the reservation was released.'
         })
       );
@@ -6140,6 +6169,7 @@ function NotificationCenter({ role }: { role: UserRole }) {
     setError('');
     try {
       await startPayment(`/member/private-courses/${item.entityId}/pay`);
+      await load();
     } catch (e: any) {
       setError(e.message || 'Could not confirm this booking.')
     } finally {
@@ -6222,7 +6252,7 @@ function NotificationCenter({ role }: { role: UserRole }) {
                 {busy === item.id ? 'Saving…' : 'Cancel booking'}
               </Button>
               <Button disabled={!!busy} onClick={() => void confirmBooking(item)}>
-                {busy === item.id ? 'Starting payment…' : 'Pay now'}
+                {busy === item.id ? 'Starting payment…' : 'Confirm simulated payment'}
               </Button>
             </> :
             item.link &&

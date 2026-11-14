@@ -130,7 +130,7 @@ export function NotificationBell() {
   const confirmBooking = async (item: any) => {
     if (!item.entityId || busy) return;
     setBusy(item.id); setError('');
-    try { await startPayment(`/member/private-courses/${item.entityId}/pay`); }
+    try { await startPayment(`/member/private-courses/${item.entityId}/pay`); setItems(rows => rows.filter(row => row.id !== item.id)); await removeViewedNotifications([item.id]).catch(() => {}); }
     catch (e: any) { setError(e.message || 'Could not start payment.'); }
     finally { setBusy(''); }
   };
@@ -272,7 +272,7 @@ export function NotificationBell() {
                           onClick={() => void confirmBooking(item)}
                           className="min-h-10 flex-1 rounded-xl bg-zawana-950 px-3 text-xs font-black text-white disabled:opacity-50"
                         >
-                          {busy === item.id ? 'Starting payment…' : 'Pay now'}
+                          {busy === item.id ? 'Starting payment…' : 'Confirm simulated payment'}
                         </button>
                       </div>}
                   </div>

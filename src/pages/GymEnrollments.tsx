@@ -1,4 +1,3 @@
-import { startPayment } from '../services/paymentFlow';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, CreditCard, Plus, ReceiptText, RefreshCw, RotateCcw, X } from 'lucide-react';
@@ -112,33 +111,32 @@ function EnrollmentWizard({ renewal, onSaved, onClose, trainingOnly }: { trainin
       <label className="block text-sm font-bold">Start date<input type="date" className="mt-2 w-full" min={policy?.today || gymToday()} value={startDate} onChange={e => setStartDate(e.target.value)} /></label>
       <label className="block text-sm font-bold">Gym coach{pkg?.coachRequired ? ' (required)' : ' (optional)'}<Select className="mt-2 w-full" value={coachId} onChange={e => setCoachId(e.target.value)}><option value="">Choose coach</option>{coaches.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>
       <p className="rounded-xl bg-zawana-50 p-4 text-sm text-zawana-500">After activation, schedule sessions from Private Training. Available times are checked against the coach and every participant.</p>
-    </div> : <div className="space-y-4"><h3 className="text-xl font-bold">{pkg?.title}</h3><p>{selected.map(m => m.name).join(', ')}</p><p className="text-sm text-zawana-500">Starts {startDate} · {pkg?.kind === 'MEMBERSHIP' ? `${pkg.months} calendar months` : `${pkg?.validityDays} day validity`} · {coaches.find(c => c.id === coachId)?.name || 'No coach assigned'}</p><p className="text-3xl font-bold">{gymMoney(pkg?.price || 0)}</p><p className="rounded-xl bg-zawana-50 p-4 text-sm">The next step is payment. Access and session scheduling become available only after verified payment.</p></div>}
+    </div> : <div className="space-y-4"><h3 className="text-xl font-bold">{pkg?.title}</h3><p>{selected.map(m => m.name).join(', ')}</p><p className="text-sm text-zawana-500">Starts {startDate} · {pkg?.kind === 'MEMBERSHIP' ? `${pkg.months} calendar months` : `${pkg?.validityDays} day validity`} · {coaches.find(c => c.id === coachId)?.name || 'No coach assigned'}</p><p className="text-3xl font-bold">{gymMoney(pkg?.price || 0)}</p><p className="rounded-xl bg-zawana-50 p-4 text-sm">The next step is payment. Access and session scheduling become available only after explicit manual payment confirmation.</p></div>}
     <div className="mt-7 flex items-center justify-between gap-3"><Button variant="secondary" disabled={busy || step === 0} onClick={() => setStep(s => s - 1)}><ArrowLeft size={15} />Back</Button>{step < 3 ? <Button disabled={loading || busy || !pkg || (step === 1 && !validMembers) || (step === 2 && (!startDate || (!!pkg.coachRequired && !coachId)))} onClick={() => { setError(''); setStep(s => s + 1); }}>Continue<ArrowRight size={15} /></Button> : <Button disabled={busy || !validMembers} onClick={() => void save()}>{busy ? 'Saving…' : 'Continue to payment'}<ArrowRight size={15} /></Button>}</div>
   </div></DialogSurface>;
 }
 
 function GymPayment({ enrollment, onClose, onPaid }: { enrollment: GymEnrollment; onClose: () => void; onPaid: (row: GymEnrollment) => void }) {
-  const [policy, setPolicy] = useState<Policy | null>(null), [method, setMethod] = useState('KPay'), [received, setReceived] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [policy, setPolicy] = useState<Policy | null>(null), [method, setMethod] = useState('Manual (simulated)'), [received, setReceived] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   useEffect(() => { let active = true; get<Policy>('/gym/policy').then(p => { if (active) setPolicy(p); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, []);
   const checkPayment = async () => {
     setBusy(true); setError('');
     try { onPaid((await get<{ enrollment: GymEnrollment }>(`/gym/enrollments/${enrollment.id}/receipt`)).enrollment); }
-    catch (e) { setError(e instanceof Error && (e as Error & { status?: number }).status === 404 ? 'Payment is not verified yet. Complete checkout, then check again.' : e instanceof Error ? e.message : 'Could not check payment.'); }
+    catch (e) { setError(e instanceof Error && (e as Error & { status?: number }).status === 404 ? 'Payment has not been confirmed yet. Confirm payment, then check again.' : e instanceof Error ? e.message : 'Could not check payment.'); }
     finally { setBusy(false); }
   };
   const pay = async () => {
     if (busy) return;
     setBusy(true); setError('');
     try {
-      if (method === 'KPay') { await startPayment(`/gym/enrollments/${enrollment.id}/payment`, { method }); return; }
-      const result = await post<{ enrollment?: GymEnrollment }>(`/gym/enrollments/${enrollment.id}/payment`, { method, ...(method === 'Cash' ? { cashReceived: received } : {}) });
+      const result = await post<{ enrollment?: GymEnrollment }>(`/gym/enrollments/${enrollment.id}/payment`, { method, confirmed: true, ...(method === 'Cash' ? { cashReceived: received } : {}) });
       if (result.enrollment) onPaid(result.enrollment);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not start payment.'); }
     finally { setBusy(false); }
   };
-  return <DialogSurface title="Enrollment payment" onClose={() => { if (!busy) onClose(); }} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"><div className="max-h-[85vh] overflow-y-auto p-6"><div className="flex justify-between gap-3"><h2 className="text-xl font-bold">Payment & activation</h2><Button variant="ghost" aria-label="Close payment" disabled={busy} onClick={onClose}><X size={18} /></Button></div><p className="mt-4 font-bold">{enrollment.snapshot.title}</p><p className="mt-2 text-3xl font-bold">{gymMoney(enrollment.totalPrice)}</p><p className="mt-2 text-xs text-zawana-500">{enrollment.code}</p>
+  return <DialogSurface title="Enrollment payment" onClose={() => { if (!busy) onClose(); }} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"><div className="max-h-[85vh] overflow-y-auto p-6"><div className="flex justify-between gap-3"><h2 className="text-xl font-bold">Payment & activation</h2><Button variant="ghost" aria-label="Close payment" disabled={busy} onClick={onClose}><X size={18} /></Button></div><p className="mt-4 font-bold">{enrollment.snapshot.title}</p><p className="mt-2 text-3xl font-bold">{gymMoney(enrollment.totalPrice)}</p><p className="mt-2 text-xs text-zawana-500">{enrollment.code} · Manual/simulated confirmation; no external charge.</p>
     {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    <><label className="mt-5 block text-sm font-bold">Payment method<Select className="mt-2 w-full" value={method} onChange={e => setMethod(e.target.value)}>{(policy?.paymentMethods || ['KPay']).map(m => <option key={m}>{m}</option>)}</Select></label>{method === 'Cash' && <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={received} onChange={e => setReceived(e.target.checked)} />I have received the full cash amount.</label>}<Button className="mt-5 w-full" loading={busy} disabled={busy || !policy || (method === 'Cash' && !received)} onClick={() => void pay()}><CreditCard size={15} />{busy ? 'Processing…' : method === 'Cash' ? 'Record cash & activate' : 'Pay now'}</Button></>
+    <><label className="mt-5 block text-sm font-bold">Payment method<Select className="mt-2 w-full" value={method} onChange={e => setMethod(e.target.value)}>{(policy?.paymentMethods || ['Manual (simulated)']).map(m => <option key={m}>{m}</option>)}</Select></label>{method === 'Cash' && <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={received} onChange={e => setReceived(e.target.checked)} />I have received the full cash amount.</label>}<Button className="mt-5 w-full" loading={busy} disabled={busy || !policy || (method === 'Cash' && !received)} onClick={() => void pay()}><CreditCard size={15} />{busy ? 'Processing…' : method === 'Cash' ? 'Record cash & activate' : 'Pay now'}</Button></>
     <Button className="mt-3 w-full" variant="ghost" disabled={busy} onClick={() => void checkPayment()}>Refresh activation status</Button>
   </div></DialogSurface>;
 }

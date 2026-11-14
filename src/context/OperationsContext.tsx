@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useCallback, useMemo, useState, type ReactNode } from "react";
 import type {
   Appointment,
   BadmintonPackage,
@@ -57,6 +57,7 @@ type Ops = {
     customer?: string;
     items: { id: string; quantity: number; notes?: string }[];
     discount?: number;
+    confirmed?: boolean;
     paymentMethod: "CASH" | "ONLINE" | "PAY_LATER"
   }) => Promise<unknown>;
   addTransaction: (t: Omit<Transaction, "id"> | CafeCashTransactionInput) => Promise<void>;
@@ -71,7 +72,7 @@ type Ops = {
   deleteMenuItem: (id: string) => Promise<void>;
   addStoreOrder: (
     o: Omit<StoreOrder, "id"> & {
-      paymentMethod: "Cash" | "KPay" | "Pay Later" | "Pay Online";
+      confirmed?: boolean; paymentMethod: "Cash" | "Manual (simulated)" | "Pay Later" | "Pay Online";
       itemSummary?: string
     }
   ) => Promise<StoreOrder>;
@@ -127,7 +128,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setLoadError('');
@@ -227,11 +228,12 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
     if (failed.length)
       setLoadError(failed[0].reason?.message || 'Some operations data could not be loaded.');
     setLoading(false);
-  };
+  }, [user]);
   useEffect(() => {
     refresh().catch(console.error)
-  }, [user?.id]);
+  }, [refresh]);
 
+  useEffect(() => { const update = () => { void refresh(); }; window.addEventListener('zawana-payments-refresh', update); return () => window.removeEventListener('zawana-payments-refresh', update); }, [refresh]);
   const action = async (fn: () => Promise<unknown>) => {
     await fn();
     await refresh()
@@ -258,6 +260,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
     customer?: string;
     items: { id: string; quantity: number; notes?: string }[];
     discount?: number;
+    confirmed?: boolean;
     paymentMethod: "CASH" | "ONLINE" | "PAY_LATER"
   }) => action(() => post("/cafe/orders", order));
   const addTransaction = (t: any) => action(() => post("/transactions", t).then(() => undefined));

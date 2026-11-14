@@ -154,7 +154,7 @@ export function Notifications() {
         });
       else if (action === 'pay') {
         await startPayment(`/member/private-courses/${notification.entityId}/pay`);
-        return;
+        result = { message: 'Manual/simulated payment confirmed. No external charge was made.' };
       }
       else result = await post(`/member/private-courses/${notification.entityId}/cancel`, {});
       await removeViewedNotifications([notification.id]).catch(() => {});
@@ -164,7 +164,7 @@ export function Notifications() {
           detail:
             result?.message ||
             (action === 'accept'
-              ? 'Request accepted. The member can now confirm the booking.'
+              ? result?.paymentStatus === 'paid' ? 'Paid session approved.' : 'Request accepted. The member can now confirm the booking.'
               : action === 'decline'
                 ? 'Request declined; the reservation was released.'
                 : 'Booking cancelled and the reservation released.')
@@ -273,7 +273,7 @@ export function Notifications() {
                             onClick={() => void actOnCourse(notification, 'pay')}
                             className="min-h-11 rounded-xl bg-zawana-950 px-4 text-sm font-black text-white disabled:opacity-50"
                           >
-                            {busy === notification.id ? 'Starting payment…' : 'Pay now'}
+                            {busy === notification.id ? 'Starting payment…' : 'Confirm simulated payment'}
                           </button>
                         </>}</div>}
                     </div>

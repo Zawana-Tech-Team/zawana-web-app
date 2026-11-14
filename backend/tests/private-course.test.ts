@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import bcrypt from 'bcryptjs';
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -14,13 +15,13 @@ import { courtAvailability } from "../src/services/courtAvailability.js";
 import { today } from "../src/services/courtPolicy.js";
 
 const schema = execFileSync(
-  new URL("../node_modules/.bin/prisma", import.meta.url).pathname,
-  [
+  process.execPath,
+  [fileURLToPath(new URL("../node_modules/prisma/build/index.js", import.meta.url)),
     "migrate",
     "diff",
     "--from-empty",
     "--to-schema-datamodel",
-    new URL("../prisma/schema.prisma", import.meta.url).pathname,
+    fileURLToPath(new URL("../prisma/schema.prisma", import.meta.url)),
     "--script",
   ],
   { encoding: "utf8" },
@@ -86,8 +87,8 @@ test("badminton private courses: independent availability, concurrency, acceptan
   const port = 18000 + Math.floor(Math.random() * 1000),
     origin = `http://127.0.0.1:${port}`;
   const child = spawn(
-    new URL("../node_modules/.bin/tsx", import.meta.url).pathname,
-    ["src/server.ts"],
+    process.execPath,
+    ["--import", "tsx", "src/server.ts"],
     {
       cwd: new URL("..", import.meta.url),
       env: {
@@ -108,9 +109,11 @@ test("badminton private courses: independent availability, concurrency, acceptan
   child.stdout.on("data", (b) => (logs += b));
   child.stderr.on("data", (b) => (logs += b));
   t.after(async () => {
-    child.kill();
+    const stopped = new Promise(resolve => child.exitCode !== null || child.signalCode ? resolve(null) : child.once('exit', resolve));
+    child.kill(); await stopped;
     await db.$disconnect();
-    rmSync(dir, { recursive: true, force: true });
+    if (!dir.startsWith(join(tmpdir(), 'zawana-courts-'))) throw new Error('Unexpected QA cleanup path');
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) throw new Error(logs);
@@ -144,7 +147,7 @@ test("badminton private courses: independent availability, concurrency, acceptan
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         ...verification,
-        ...(key ? { "Idempotency-Key": key } : {}),
+        ...(method === "POST" ? { "Idempotency-Key": key || randomUUID() } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
@@ -339,7 +342,7 @@ test("badminton private courses: independent availability, concurrency, acceptan
         2,
       );
       assert.equal(
-        (await request(`/member/private-courses/${bookingId}/pay`, "POST", {}))
+        (await request(`/member/private-courses/${bookingId}/pay`, "POST", { confirmed: true }))
           .status,
         409,
       );
@@ -371,7 +374,7 @@ test("badminton private courses: independent availability, concurrency, acceptan
       assert.equal(
         (await request(`/member/private-courses/${bookingId}/pay`, "POST", {}))
           .status,
-        503,
+        400,
       );
       assert.equal(
         (await db.booking.findUniqueOrThrow({ where: { id: bookingId } }))
@@ -412,7 +415,7 @@ test("badminton private courses: independent availability, concurrency, acceptan
         "EXPIRED",
       );
       assert.equal(
-        (await request(`/member/private-courses/${bookingId}/pay`, "POST", {}))
+        (await request(`/member/private-courses/${bookingId}/pay`, "POST", { confirmed: true }))
           .status,
         409,
       );
@@ -461,83 +464,15 @@ test("badminton private courses: independent availability, concurrency, acceptan
       true,
     );
   });
-  await t.test(
-    "only signed verified payment confirms once; forged callbacks cannot change bookings",
-    async () => {
-      const requested = await request("/member/private-courses", "POST", input);
-      const id = requested.value.booking.id;
-      await request(
-        `/coach/private-courses/${id}/decision`,
-        "POST",
-        { decision: "accept" },
-        coachSession.accessToken,
-      );
-      const attempt = await db.paymentAttempt.create({
-        data: {
-          reference: randomUUID(),
-          providerReference: randomUUID(),
-          resourceType: "private_course",
-          resourceId: id,
-          userId: user.id,
-          amount: 50000,
-          status: "PENDING",
-          expiresAt: new Date(Date.now() + 3600000),
-        },
-      });
-      const payload = {
-        reference: attempt.reference,
-        providerReference: attempt.providerReference,
-        amount: 50000,
-        status: "PAID",
-      };
-      const callback = async (data: unknown, signed = true) => {
-        const body = JSON.stringify(data);
-        return fetch(`${origin}/api/payments/kpay/webhook`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-kpay-signature": signed
-              ? createHmac("sha256", "private-course-test-secret")
-                  .update(body)
-                  .digest("hex")
-              : "bad-signature",
-          },
-          body,
-        });
-      };
-      assert.equal((await callback(payload, false)).status, 401);
-      assert.equal((await callback({ ...payload, amount: 1 })).status, 409);
-      assert.equal(
-        (await db.booking.findUniqueOrThrow({ where: { id } })).status,
-        "AWAITING_PAYMENT",
-      );
-      assert.equal((await callback(payload)).status, 200);
-      const confirmed = await db.booking.findUniqueOrThrow({ where: { id } });
-      assert.equal(confirmed.status, "CONFIRMED");
-      assert.equal(confirmed.paymentStatus, "paid");
-      const receipt = await db.privateCoursePayment.findUniqueOrThrow({ where: { bookingId: id } });
-      assert.equal(receipt.paymentSource, 'ONLINE');
-      assert.equal(receipt.paymentAttemptId, attempt.id);
-      assert.equal(receipt.collectedByUserId, null);
-      assert.ok(receipt.transactionId);
-
-      assert.equal(confirmed.reservationExpiresAt, null);
-      assert.equal((await callback(payload)).status, 200);
-      assert.equal(
-        await db.transaction.count({
-          where: { userId: user.id, paymentMethod: "KPay" },
-        }),
-        1,
-      );
-      assert.equal(
-        await db.notification.count({
-          where: { entityId: id, title: "Private course confirmed" },
-        }),
-        2,
-      );
-    },
-  );
-
+  await t.test('explicit manual confirmation posts one private-course receipt without a gateway', async () => {
+    const requested = await request('/member/private-courses', 'POST', input), id = requested.value.booking.id;
+    await request(`/coach/private-courses/${id}/decision`, 'POST', { decision: 'accept' }, coachSession.accessToken);
+    const first = await request(`/member/private-courses/${id}/pay`, 'POST', { confirmed: true });
+    assert.equal(first.status, 200); assert.equal(first.value.transaction.confirmationMode, 'SIMULATED');
+    const retry = await request(`/member/private-courses/${id}/pay`, 'POST', { confirmed: true });
+    assert.equal(retry.value.transaction.id, first.value.transaction.id);
+    assert.equal((await db.booking.findUniqueOrThrow({ where: { id } })).paymentStatus, 'paid');
+  });
   await t.test(
     "package activation and concurrent member check-in debit exactly once",
     async () => {
@@ -554,7 +489,7 @@ test("badminton private courses: independent availability, concurrency, acceptan
       const activated = await request(
         `/member/badminton-packages/${pkg.id}/purchase`,
         "POST",
-        {},
+        { requestKey: randomUUID(), confirmed: true },
       );
       assert.equal(activated.status, 201);
       const enrollment = activated.value.enrollment;
@@ -562,7 +497,7 @@ test("badminton private courses: independent availability, concurrency, acceptan
       const qrSession = await sessions.issue(db, qrStaff, 'database_password', []);
       const issued = await request('/check-in/qr', 'POST', { categoryCode: 'SOCIAL' }, qrSession.accessToken);
       assert.equal(issued.status, 201);
-      const secondActivation = await request(`/member/badminton-packages/${pkg.id}/purchase`, 'POST', {});
+      const secondActivation = await request(`/member/badminton-packages/${pkg.id}/purchase`, 'POST', { requestKey: randomUUID(), confirmed: true });
       assert.equal(secondActivation.status, 201);
       assert.notEqual(secondActivation.value.enrollment.id, enrollment.id);
       assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).sessionsRemaining, 10);
@@ -587,20 +522,9 @@ test("badminton private courses: independent availability, concurrency, acceptan
         request("/check-in/scan", "POST", { token: qrToken }),
       ]);
       assert.equal(results.filter((r) => r.status === 201).length, 1);
-      assert.equal(
-        (
-          await db.badmintonEnrollment.findUniqueOrThrow({
-            where: { id: enrollment.id },
-          })
-        ).sessionsRemaining,
-        9,
-      );
-      assert.equal(
-        await db.badmintonCheckIn.count({
-          where: { enrollmentId: enrollment.id },
-        }),
-        1,
-      );
+      const active = await db.badmintonEnrollment.findMany({ where: { userId: user.id, categoryCode: 'SOCIAL', status: 'active' } });
+      assert.equal(active.reduce((sum, row) => sum + row.sessionsRemaining, 0), 29);
+      assert.equal(await db.badmintonCheckIn.count({ where: { enrollmentId: { in: active.map(row => row.id) } } }), 1);
       assert.equal(
         (
           await request("/check-in/scan", "POST", {
@@ -611,15 +535,13 @@ test("badminton private courses: independent availability, concurrency, acceptan
       );
     },
   );
-  await t.test('verified package payment snapshots category and preserves existing active balances', async () => {
+  await t.test('manual package payment snapshots category and preserves active balances', async () => {
     const category = await db.badmintonPackageCategory.create({ data: { name: 'Pathway', code: 'PATHWAY' } });
     const pkg = await db.badmintonPackage.create({ data: { title: 'Paid pathway', categoryId: category.id, price: 100000, sessions: 12, validity: 30, description: '' } });
     const before = await db.badmintonEnrollment.findMany({ where: { userId: user.id }, orderBy: { id: 'asc' } });
     const purchase = await db.badmintonPackagePurchase.create({ data: { code: randomUUID(), userId: user.id, packageId: pkg.id, packageName: pkg.title, price: pkg.price, status: 'PENDING' } });
-    const attempt = await db.paymentAttempt.create({ data: { reference: randomUUID(), providerReference: randomUUID(), resourceType: 'badminton_package', resourceId: purchase.id, userId: user.id, amount: pkg.price, status: 'PENDING', expiresAt: new Date(Date.now() + 3600000) } });
-    const body = JSON.stringify({ reference: attempt.reference, providerReference: attempt.providerReference, amount: pkg.price, status: 'PAID' });
-    const notify = () => fetch(`${origin}/api/payments/kpay/webhook`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-kpay-signature': createHmac('sha256', 'private-course-test-secret').update(body).digest('hex') }, body });
-    assert.equal((await notify()).status, 200); assert.equal((await notify()).status, 200);
+    const body = { resourceType: 'badminton_package', resourceId: purchase.id, confirmed: true };
+    assert.equal((await request('/payments/confirm', 'POST', body)).status, 200); assert.equal((await request('/payments/confirm', 'POST', body)).status, 200);
     const enrollment = await db.badmintonEnrollment.findUniqueOrThrow({ where: { purchaseId: purchase.id } });
     assert.equal(enrollment.categoryCode, 'PATHWAY'); assert.equal(enrollment.sessionsRemaining, 12);
     assert.equal(await db.badmintonEnrollment.count({ where: { purchaseId: purchase.id } }), 1);

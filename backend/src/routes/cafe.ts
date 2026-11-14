@@ -1,3 +1,6 @@
+import { today } from '../services/courtPolicy.js';
+import { paymentOperation, operationMetadata } from "../middleware/paymentOperation.js";
+import { confirmManualPayment } from "../services/manualPayments.js";
 import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
@@ -28,6 +31,7 @@ const router = Router();
 const manager = roles("admin", "cafe_fo");
 const newOrderSchema = z
   .object({
+    confirmed: z.boolean().default(false),
     location: z.enum(CAFE_LOCATIONS).optional(),
     floor: z.enum(["Ground Floor", "First Floor", "Outdoor"]).optional(),
     courtId: z.string().min(1).nullable().optional(),
@@ -47,10 +51,10 @@ const newOrderSchema = z
       .enum(CAFE_PAYMENT_METHODS)
       .or(
         z
-          .enum(["Cash", "KPay", "Pay Later"])
+          .enum(["Cash", "Manual (simulated)", "Pay Later"])
           .transform(
             value =>
-              ({ Cash: "CASH", KPay: "ONLINE", "Pay Later": "PAY_LATER" }[
+              ({ Cash: "CASH", "Manual (simulated)": "ONLINE", "Pay Later": "PAY_LATER" }[
                 value
               ] as typeof CAFE_PAYMENT_METHODS[number]
           )))
@@ -130,6 +134,7 @@ router.get(
 router.post(
   "/orders",
   auth,
+  paymentOperation(prisma),
   asyncRoute(async (req: AuthRequest, res) => {
     const role = req.user!.role;
     if (!(["admin", "cafe_fo", "member"].includes(role)))
@@ -203,18 +208,19 @@ router.post(
     const now = new Date();
     const orderNumber = `C-${now.getTime().toString().slice(-6)}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
     const customer = staffCreating ? input.customer || "Walk-in Customer" : req.user!.name;
-    const paymentStatus = input.paymentMethod === "CASH" ? "paid" : "pending";
+    const paymentStatus = input.confirmed && input.paymentMethod !== "PAY_LATER" ? "paid" : "pending";
     const paymentLabel =
       input.paymentMethod === "CASH"
         ? "Cash"
         : input.paymentMethod === "PAY_LATER"
           ? "Pay Later"
-          : "Online";
+          : "Manual (simulated)";
+    const orderId = crypto.randomUUID();
     const order = await prisma.$transaction(async tx => {
       const transaction = await tx.transaction.create({
         data: {
           userId: role === "member" ? req.user!.id : null,
-          date: now.toISOString().slice(0, 10),
+          date: today(),
           customer,
           business: "Cafe",
           item: `${orderNumber} · ${lines.map(line => `${line.name} ×${line.quantity}`).join(", ")}`,
@@ -225,11 +231,12 @@ router.post(
           paymentMethod: paymentLabel,
           staff: req.user!.name,
           status: paymentStatus,
+          resourceType: "cafe_order", resourceId: orderId, confirmationMode: paymentStatus === "paid" ? (input.paymentMethod === "CASH" ? "MANUAL" : "SIMULATED") : "UNCONFIRMED", confirmedById: paymentStatus === "paid" ? req.user!.id : null, ...operationMetadata(res),
         }
       });
       const created = await tx.cafeOrder.create({
         data: {
-          orderNumber,
+          id: orderId, orderNumber,
           customerId: role === "member" ? req.user!.id : null,
           customer,
           items: lines.map(line => ({
@@ -273,7 +280,7 @@ router.post(
           data: {
             userId: req.user!.id,
             title: "Cafe order received",
-            body: `${orderNumber} is in the cafe queue. Online payment is pending.`,
+            body: `${orderNumber} is in the cafe queue. ${paymentStatus === 'paid' ? 'Manual/simulated payment confirmed; no external charge.' : 'Payment is pending.'}`,
             link: "/cafe-order",
             type: "booking",
             entityType: "cafe_order",
@@ -288,7 +295,7 @@ router.post(
         order: displayOrder(order),
         message:
           paymentStatus === "paid"
-            ? "Cash payment recorded and order sent to the cafe."
+            ? "Manual payment confirmed and order sent to the cafe."
             : "Order received. Payment is pending; no online payment has been collected."
       });
   })
@@ -329,37 +336,9 @@ router.patch(
   auth,
   manager,
   asyncRoute(async (req, res) => {
-    const { paymentMethod } = z
-      .object({ paymentMethod: z.enum(["CASH", "ONLINE"]) })
-      .parse(req.body);
-    if (paymentMethod === "ONLINE")
-      return res
-        .status(503)
-        .json({
-          message:
-            "Online cafe payment is not connected to a verified provider yet. The order remains unpaid."
-        });
-    const order = await prisma.cafeOrder.findUnique({
-      where: { id: String(req.params.id) },
-      include: { transaction: true }
-    });
-    if (!order) return res.status(404).json({ message: "Cafe order not found." });
-    if (order.paymentStatus === "paid")
-      return res.status(409).json({ message: "This order is already paid." });
-    if (!order.transaction)
-      return res.status(409).json({ message: "This order has no linked finance transaction." });
-    const updated = await prisma.$transaction(async tx => {
-      await tx.transaction.update({
-        where: { id: order.transaction!.id },
-        data: { paymentMethod: "Cash", status: "paid", staff: req.user!.name }
-      });
-      return tx.cafeOrder.update({
-        where: { id: order.id },
-        data: { paymentMethod, paymentStatus: "paid" },
-        include: { orderItems: true, court: { select: { id: true, name: true } } }
-      });
-    });
-    res.json(displayOrder(updated));
+    const { paymentMethod, confirmed } = z.object({ paymentMethod: z.enum(['CASH', 'ONLINE']), confirmed: z.literal(true) }).parse(req.body);
+    await confirmManualPayment(prisma, (req as AuthRequest).user!, 'cafe_order', String(req.params.id), paymentMethod === 'CASH' ? 'Cash' : 'Manual (simulated)');
+    res.json(displayOrder(await prisma.cafeOrder.findUniqueOrThrow({ where: { id: String(req.params.id) }, include: { orderItems: true } })));
   })
 );
 

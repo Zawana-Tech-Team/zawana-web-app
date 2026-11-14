@@ -1,4 +1,6 @@
+import { paymentOperation, operationMetadata } from "./middleware/paymentOperation.js";
 import { requestContextMiddleware } from "./utils/requestContext.js";
+import { createCourtDeskRouter } from './routes/courtDesk.js';
 import { notifyExpiredBadmintonPackages } from "./services/attendanceNotifications.js";
 import { createNotificationRouter } from "./routes/notifications.js";
 import { createPackageSecurity, recordPackageMutation } from "./services/packageSecurity.js";
@@ -32,7 +34,8 @@ import { checkGymSchedule } from "./services/gymSessions.js";
 import { auth, roles } from "./middleware/auth.js";
 import type { AuthRequest } from "./types/auth.js";
 import { env } from "./config/env.js";
-import { createKPayCheckout, kpayIsConfigured, verifyKPaySignature } from "./services/kpay.js";
+import { confirmManualPayment, operationId } from "./services/manualPayments.js";
+import { createManualPaymentRouter } from "./routes/manualPayments.js";
 import { prisma } from "./lib/prisma.js";
 import { toSafeAppUser } from "./services/userSerializer.js";
 import { registerBookingQueryRoutes } from "./routes/bookingQueries.js";
@@ -91,6 +94,7 @@ app.use(
   })
 );
 app.use("/api/staff/private-courses", createPrivateCourseFinanceRouter(prisma, expirePrivateCourseReservations));
+app.use('/api/staff/court-desk', createCourtDeskRouter(prisma, expirePrivateCourseReservations));
 app.use("/uploads/coaches", express.static(coachUploadPath));
 app.use("/uploads/courses", express.static(courseUploadPath));
 app.use("/uploads/profiles", express.static(profileUploadPath));
@@ -114,7 +118,9 @@ app.use("/api/media", mediaRoutes);
 app.use("/api/cafe", cafeRoutes);
 app.use("/api", gymTrainingRoutes);
 app.use("/api", createPublicStoriesRoutes(prisma));
-app.use("/api", createGymManagementRoutes(prisma, startKPayAttempt));
+app.use("/api", createGymManagementRoutes(prisma));
+app.use("/api/payments", createManualPaymentRouter(prisma));
+app.use("/api/notifications", createNotificationRouter());
 app.use("/api", createCourtBookingRoutes(prisma, expirePrivateCourseReservations));
 
 const businessTimeZone = process.env.BUSINESS_TIME_ZONE || "Asia/Yangon";
@@ -148,87 +154,6 @@ const code = (prefix: string) =>
   `${prefix}-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 const publicApiUrl = () => env.publicApiUrl.replace(/\/$/, "");
 const clientUrl = () => env.clientUrls[0].replace(/\/$/, "");
-
-async function startKPayAttempt(
-  userId: string,
-  resourceType: string,
-  resourceId: string,
-  amount: number,
-  description: string,
-  expiresAt = new Date(Date.now() + 15 * 60 * 1000)
-) {
-  if (!kpayIsConfigured())
-    throw Object.assign(
-      new Error(
-        resourceType === "private_course"
-          ? "KPay checkout is not configured yet. Your accepted course remains reserved until its payment deadline."
-          : "KPay checkout is not configured yet."
-      ),
-      { statusCode: 503 }
-    );
-  const reference = code("KP");
-  const { attempt, isNew } = await prisma.$transaction(async tx => {
-    if (resourceType === "gym_enrollment") {
-      const enrollment = await lockEnrollment(tx, resourceId);
-      if (enrollment.status !== "PENDING_PAYMENT" || enrollment.expiryDate < today() || enrollment.totalPrice !== amount)
-        throw gymError("This enrollment is no longer payable.");
-    }
-    if (resourceType === "private_course") {
-      await rawExec(tx, `UPDATE "Booking" SET id=id WHERE id=?`, resourceId);
-      const booking = await tx.booking.findUnique({
-        where: { id: resourceId },
-        select: { status: true, paymentExpiresAt: true, reservationExpiresAt: true }
-      });
-      const deadline = booking?.paymentExpiresAt || booking?.reservationExpiresAt;
-      if (booking?.status !== "AWAITING_PAYMENT" || !deadline || deadline <= new Date())
-        throw Object.assign(
-          new Error("The private course payment window has expired or is no longer active."),
-          { statusCode: 409 }
-        );
-    }
-    const active = await tx.paymentAttempt.findFirst({
-      where: {
-        userId,
-        resourceType,
-        resourceId,
-        status: { in: ["PENDING", "INITIATING"] },
-        expiresAt: { gt: new Date() }
-      },
-      orderBy: { createdAt: "desc" }
-    });
-    return active
-      ? { attempt: active, isNew: false }
-      : {
-          attempt: await tx.paymentAttempt.create({
-            data: { reference, userId, resourceType, resourceId, amount, expiresAt }
-          }),
-          isNew: true
-        };
-  });
-  if (!isNew) return attempt;
-  try {
-    const checkout = await createKPayCheckout({
-      reference,
-      amount,
-      currency: "MMK",
-      description,
-      callbackUrl: process.env.KPAY_CALLBACK_URL || `${publicApiUrl()}/api/payments/kpay/webhook`,
-      returnUrl: `${clientUrl()}/payment/${attempt.id}`
-    });
-    return await prisma.paymentAttempt.update({
-      where: { id: attempt.id },
-      data: {
-        providerReference: checkout.providerReference,
-        checkoutUrl: checkout.checkoutUrl,
-        qrCode: checkout.qrCode,
-        status: "PENDING"
-      }
-    });
-  } catch (error) {
-    await prisma.paymentAttempt.delete({ where: { id: attempt.id } });
-    throw error;
-  }
-}
 
 async function expirePrivateCourseReservations() {
   const now = new Date();
@@ -339,7 +264,7 @@ async function expirePrivateCourseReservations() {
           data: {
             userId: attempt.userId,
             title: "Payment session expired",
-            body: "Your KPay checkout expired. No payment was recorded; you can start a new checkout.",
+            body: "The legacy payment expired. No payment was recorded. Confirm payment manually from the booking or order.",
             link: attempt.resourceType === "gym_enrollment" ? "/member/training" : attempt.resourceType === "badminton_package" ? "/membership" : "/bookings",
             audience: "member",
             type: "payment",
@@ -2187,6 +2112,7 @@ app.patch(
         status: z.nativeEnum(BookingStatus).optional()
       })
       .parse(req.body);
+    if (b.paymentStatus !== undefined && b.paymentStatus !== existing.paymentStatus) return res.status(409).json({ message: 'Use explicit payment confirmation or the audited refund workflow.' });
     if (existing.kind === "court") {
       if (!["admin", "badminton_fo"].includes(req.user!.role)) return res.status(403).json({ message: "Only badminton staff can manage court reservations." });
       if (b.date !== undefined || b.time !== undefined || b.price !== undefined || b.status !== undefined)
@@ -2741,7 +2667,7 @@ app.post(
   asyncRoute(async (_req, res) =>
     res
       .status(410)
-      .json({ message: "Memberships can only be activated by verified KPay payment." })
+      .json({ message: "Create a Gym enrollment, then explicitly confirm its manual payment to activate membership." })
   )
 );
 // Badminton package ownership + check-in
@@ -2794,6 +2720,7 @@ app.post(
   "/api/badminton/enrollments",
   auth,
   roles("admin", "badminton_fo"),
+  paymentOperation(prisma),
   asyncRoute(async (req: AuthRequest, res) => {
     const b = z
       .object({
@@ -2849,7 +2776,7 @@ app.post(
           studentId: member?.id || `WALKIN-${crypto.randomUUID()}`,
           userId: member?.id || null,
           studentName: member?.name || b.walkIn!.name,
-          phone: member?.phone || b.walkIn!.phone,
+          phone: member?.phone || b.walkIn?.phone || '',
           packageId: pkg.id,
           packageName: pkg.title,
           categoryCode: await packageCategory(tx, pkg.id),
@@ -2867,10 +2794,11 @@ app.post(
       await tx.transaction.create({
         data: {
           userId: member?.id || null,
-          date: start,
+          date: today(),
           customer: member?.name || b.walkIn!.name,
           business: "Badminton",
           item: `Package · ${pkg.title}`,
+          resourceType: "badminton_enrollment", resourceId: row.id, confirmationMode: b.paymentMethod === "Cash" ? "MANUAL" : "SIMULATED", confirmedById: staff.id, ...operationMetadata(res),
           ...badmintonSaleTotals(pkg.price, b.discountPercent),
           paymentMethod: b.paymentMethod,
           staff: staff.name,
@@ -2916,55 +2844,17 @@ app.post(
         .json({ message: "This badminton package is not currently available to purchase." });
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) return res.status(404).json({ message: "Member account not found." });
-    const start = today(),
-      expiry = addDaysIso(start, pkg.validity);
-    const result = await prisma.$transaction(async tx => {
-      const purchase = await tx.badmintonPackagePurchase.create({
-        data: {
-          code: code("BP"),
-          userId: user.id,
-          packageId: pkg.id,
-          packageName: pkg.title,
-          price: pkg.price,
-          paymentMethod: "Temporarily disabled",
-          status: "ACTIVE"
-        }
-      });
-      const enrollment = await tx.badmintonEnrollment.create({
-        data: {
-          studentId: user.id,
-          userId: user.id,
-          studentName: user.name,
-          phone: user.phone || "",
-          packageId: pkg.id,
-          packageName: pkg.title,
-          categoryCode: await packageCategory(tx, pkg.id),
-          sessionsTotal: pkg.sessions,
-          sessionsRemaining: pkg.sessions,
-          startDate: start,
-          expiryDate: expiry,
-          status: "active",
-          renewalCount: 0,
-          purchaseId: purchase.id
-        }
-      });
-      await tx.user.update({ where: { id: user.id }, data: { membership: pkg.title } });
-      await tx.notification.create({
-        data: {
-          userId: user.id,
-          title: "Badminton package activated",
-          body: `${pkg.title} is active with ${pkg.sessions} sessions through ${expiry}. Payment checkout is temporarily disabled.`,
-          link: "/membership",
-          audience: "member",
-          type: "package",
-          icon: "package",
-          entityType: "package",
-          entityId: pkg.id
-        }
-      });
-      return { purchase, enrollment };
-    });
-    res.status(201).json(result);
+    const input = z.object({ confirmed: z.literal(true).optional(), requestKey: z.string().uuid() }).parse(req.body);
+    const id = `bp-${operationId(req.user!.id, input.requestKey)}`;
+    let purchase = await prisma.badmintonPackagePurchase.findUnique({ where: { id } });
+    if (purchase && (purchase.userId !== user.id || purchase.packageId !== pkg.id)) throw Object.assign(new Error('Retry key belongs to another purchase.'), { statusCode: 409 });
+    if (!purchase) {
+      try { purchase = await prisma.badmintonPackagePurchase.create({ data: { id, code: code('BP'), userId: user.id, packageId: pkg.id, packageName: pkg.title, price: pkg.price, paymentMethod: 'Manual (simulated)', status: 'PENDING' } }); }
+      catch (error) { if ((error as {code?: string}).code !== 'P2002') throw error; purchase = await prisma.badmintonPackagePurchase.findUniqueOrThrow({ where: { id } }); }
+    }
+    if (purchase.userId !== user.id || purchase.packageId !== pkg.id) throw Object.assign(new Error('Retry key belongs to another purchase.'), { statusCode: 409 });
+    const payment = input.confirmed ? await confirmManualPayment(prisma, req.user!, 'badminton_package', purchase.id) : null;
+    res.status(201).json({ ...payment, purchase: await prisma.badmintonPackagePurchase.findUniqueOrThrow({ where: { id } }), enrollment: await prisma.badmintonEnrollment.findUnique({ where: { purchaseId: id } }) });
   })
 );
 app.get(
@@ -3003,33 +2893,15 @@ app.post(
   auth,
   roles("admin", "badminton_fo"),
   asyncRoute(async (req: AuthRequest, res) => {
-    return res
-      .status(410)
-      .json({
-        message:
-          "Manual package settlement has been removed. Package activation follows verified KPay payment."
-      });
-    /* const b=z.object({paymentMethod:z.literal("KPay")}).parse(req.body);
-  const result=await prisma.$transaction(async tx=>{
-    const purchase=await tx.badmintonPackagePurchase.findUnique({where:{id:String(req.params.id)},include:{user:true,package:true}});
-    if(!purchase)return null;
-    if(purchase.status!=="AWAITING_PAYMENT")throw Object.assign(new Error("This package request has already been processed."),{statusCode:409});
-    const changed=await tx.badmintonPackagePurchase.updateMany({where:{id:purchase.id,status:"AWAITING_PAYMENT"},data:{status:"PAID",paymentMethod:b.paymentMethod,paidAt:new Date()}});
-    if(!changed.count)throw Object.assign(new Error("This package request has already been processed."),{statusCode:409});
-    const start=today(),expiry=addDaysIso(start,purchase.package.validity),enrollmentId=code("BM");
-    const enrollment=(await rawQuery<any[]>(tx,`INSERT INTO "BadmintonEnrollment" (id,studentId,userId,studentName,phone,packageId,packageName,sessionsTotal,sessionsRemaining,startDate,expiryDate,status,renewalCount,purchaseId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *`,enrollmentId,purchase.userId,purchase.userId,purchase.user.name,purchase.user.phone||"",purchase.packageId,purchase.packageName,purchase.package.sessions,purchase.package.sessions,start,expiry,"active",0,purchase.id))[0];
-    await tx.transaction.create({data:{userId:purchase.userId,date:start,customer:purchase.user.name,business:"Badminton",item:`Package · ${purchase.packageName}`,amount:purchase.price,discount:0,tax:0,finalAmount:purchase.price,paymentMethod:b.paymentMethod,staff:req.user!.name,status:"paid"}});
-    await tx.notification.create({data:{userId:purchase.userId,title:"Badminton package activated",body:`Payment received for ${purchase.packageName}. Your sessions are ready to use.`,link:"/membership",audience:"member",type:"payment"}});
-    return enrollment;
-  });
-  if(!result)return res.status(404).json({message:"Package request not found."});
-  res.json(result); */
+    const body = z.object({ confirmed: z.literal(true), method: z.enum(['Cash', 'Manual (simulated)']).default('Manual (simulated)') }).parse(req.body);
+    res.json(await confirmManualPayment(prisma, req.user!, 'badminton_package', String(req.params.id), body.method));
   })
 );
 app.post(
   "/api/badminton/enrollments/:id/renew",
   auth,
   roles("admin", "badminton_fo"),
+  paymentOperation(prisma),
   asyncRoute(async (req, res) => {
     const b = z
         .object({ packageId: z.string().min(1), ...badmintonSaleFields })
@@ -3089,10 +2961,11 @@ app.post(
       await tx.transaction.create({
         data: {
           userId: member.id,
-          date: start,
+          date: today(),
           customer: member.name,
           business: "Badminton",
           item: `Package renewal · ${pkg.title}`,
+          resourceType: "badminton_enrollment", resourceId: row.id, confirmationMode: b.paymentMethod === "Cash" ? "MANUAL" : "SIMULATED", confirmedById: staff.id, ...operationMetadata(res),
           ...badmintonSaleTotals(pkg.price, b.discountPercent),
           paymentMethod: b.paymentMethod,
           staff: staff.name,
@@ -3180,6 +3053,7 @@ app.post(
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         time: z.string(),
         type: z.string().min(2),
+        price: z.number().int().nonnegative().max(2_000_000_000).optional(),
         notes: z.string().optional(),
         paymentStatus: z.enum(["pending", "paid", "refunded"]).optional(),
         status: z.enum(["pending", "confirmed", "checked_in", "completed", "cancelled"]).optional()
@@ -3265,7 +3139,8 @@ app.post(
           type: b.type,
           notes: b.notes,
           status: b.status || "pending",
-          paymentStatus: b.paymentStatus || "pending"
+          paymentStatus: "pending",
+          price: b.price || 0
         },
         include: {
           user: { select: { id: true, name: true, email: true } },
@@ -3633,6 +3508,7 @@ app.post(
   "/api/transactions",
   auth,
   roles("admin", "cafe_fo"),
+  paymentOperation(prisma),
   asyncRoute(async (req: AuthRequest, res) => {
     const b = z
       .object({
@@ -3674,7 +3550,7 @@ app.post(
           finalAmount: total,
           paymentMethod: "Cash",
           staff: req.user!.name,
-          status: "paid"
+          status: "paid", confirmationMode: "MANUAL", confirmedById: req.user!.id, ...operationMetadata(res)
         }
       });
       await tx.notification.create({
@@ -4327,7 +4203,7 @@ app.post(
           data: {
             userId: booking.userId,
             title: "Coach declined your private course",
-            body: `Unfortunately, ${coach.name} is unavailable for ${booking.title} · ${booking.date} · ${booking.time}. The reservation has been released; you will not be charged.`,
+            body: `Unfortunately, ${coach.name} is unavailable for ${booking.title} · ${booking.date} · ${booking.time}. ${booking.paymentStatus === 'paid' ? 'Payment was already received. Contact the desk for refund or rebooking review.' : 'The reservation has been released; you will not be charged.'}`,
             link: "/private-course",
             audience: "member",
             type: "booking",
@@ -4336,6 +4212,12 @@ app.post(
             entityId: booking.id
           }
         });
+        if (booking.paymentStatus === 'paid') {
+          await tx.bookingChangeHistory.create({ data: { bookingId: booking.id, action: 'PAID_COURSE_DECLINED', requestedById: req.user!.id,
+            previous: 'PENDING_COACH_CONFIRMATION', current: 'COACH_DECLINED', reason: 'Coach declined after desk payment. Refund or rebooking requires separate staff review; no automatic refund issued.' } });
+          await tx.notification.createMany({ data: ['admin', 'badminton_fo'].map(audience => ({ userId: null, audience, title: 'Paid course needs desk review',
+            body: `${booking.code} was declined after payment. Review refund or rebooking.`, link: audience === 'admin' ? '/admin/course-finance' : '/badminton-fo/course-finance', type: 'booking', entityId: booking.id })) });
+        }
         return tx.booking.findUniqueOrThrow({
           where: { id },
           include: { court: true, coach: true }
@@ -4403,11 +4285,11 @@ app.post(
         throw Object.assign(new Error("The court is blocked during this time."), {
           statusCode: 409
         });
-      const paymentExpiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const paymentExpiresAt = booking.paymentStatus === 'paid' ? null : new Date(now.getTime() + 24 * 60 * 60 * 1000);
       const changed = await tx.booking.updateMany({
         where: { id, status: "PENDING_COACH_CONFIRMATION" },
         data: {
-          status: "AWAITING_PAYMENT",
+          status: booking.paymentStatus === 'paid' ? 'CONFIRMED' : "AWAITING_PAYMENT",
           coachAcceptedAt: now,
           paymentExpiresAt,
           reservationExpiresAt: paymentExpiresAt
@@ -4424,13 +4306,13 @@ app.post(
       await tx.notification.create({
         data: {
           userId: booking.userId,
-          title: "Coach confirmed your private course",
-          body: `${coach.name} accepted ${booking.title} for ${booking.date} · ${booking.time}. Complete payment by ${paymentExpiresAt.toLocaleString("en-US", { timeZone: businessTimeZone })}.`,
+          title: booking.paymentStatus === 'paid' ? 'Coach approved your paid private course' : "Coach confirmed your private course",
+          body: `${coach.name} accepted ${booking.title} for ${booking.date} · ${booking.time}. ${paymentExpiresAt ? `Complete payment by ${paymentExpiresAt.toLocaleString("en-US", { timeZone: businessTimeZone })}.` : 'Payment is already recorded and your session is approved.'}`,
           link: "/bookings",
           audience: "member",
           type: "booking",
           icon: "check-circle",
-          actionLabel: "Pay now",
+          actionLabel: paymentExpiresAt ? "Pay now" : 'View booking',
           entityType: "booking",
           entityId: booking.id
         }
@@ -4563,7 +4445,7 @@ app.post(
         if (activeAttempt)
           throw Object.assign(
             new Error(
-              "A KPay checkout is already active. Complete the payment or wait for its checkout deadline before cancelling."
+              "A legacy payment is active. Refresh the booking before cancelling."
             ),
             { statusCode: 409 }
           );
@@ -4615,37 +4497,10 @@ app.post(
   auth,
   roles("member"),
   asyncRoute(async (req: AuthRequest, res) => {
+    z.object({ confirmed: z.literal(true) }).parse(req.body);
     await expirePrivateCourseReservations();
-    const current = await prisma.booking.findUnique({
-      where: { id: String(req.params.id) },
-      include: { coach: true, court: true, user: true }
-    });
-    if (!current || current.userId !== req.user!.id || current.kind !== "private_course")
-      return res.status(404).json({ message: "Private course booking not found." });
-    if (current.status !== "AWAITING_PAYMENT")
-      return res
-        .status(409)
-        .json({
-          message:
-            current.status === "EXPIRED"
-              ? "The reservation window expired and this slot has been released."
-              : "This private course is not awaiting confirmation."
-        });
-    const expiresAt =
-      current.paymentExpiresAt ||
-      current.reservationExpiresAt ||
-      (current.coachAcceptedAt
-        ? new Date(current.coachAcceptedAt.getTime() + 24 * 60 * 60 * 1000)
-        : null);
-    if (!expiresAt || expiresAt <= new Date())
-      return res
-        .status(409)
-        .json({
-          message:
-            "This reservation window has expired. Refresh your bookings and choose another time."
-        });
-    const payment = await startKPayAttempt(req.user!.id, "private_course", current.id, current.price, `Private course · ${current.title}`, expiresAt);
-    res.json({ payment, booking: current });
+    res.json(await confirmManualPayment(prisma, req.user!, 'booking', String(req.params.id)));
+
   })
 );
 app.get(
@@ -4667,333 +4522,11 @@ app.post(
   auth,
   roles("admin", "badminton_fo"),
   asyncRoute(async (req: AuthRequest, res) => {
-    return res
-      .status(410)
-      .json({
-        message:
-          "Manual booking settlement is disabled. Confirmations come from verified KPay payment."
-      });
-    /*
-  await expirePrivateCourseReservations();
-  const b=z.object({paymentMethod:z.enum(["Cash","KPay","Bank Transfer"])}).parse(req.body);
-  const booking=await prisma.booking.findUnique({where:{id:String(req.params.id)},include:{user:true,coach:true}});
-  if(!booking||booking.kind!=="private_course")return res.status(404).json({message:"Private course booking not found."});
-  if(booking.status!=="AWAITING_PAYMENT")return res.status(409).json({message:"This booking is not awaiting payment."});
-  const result=await prisma.$transaction(async tx=>{
-    const changed=await tx.booking.updateMany({where:{id:booking.id,status:"AWAITING_PAYMENT"},data:{status:"CONFIRMED",paymentStatus:"paid",reservationExpiresAt:null}});
-    if(!changed.count)throw Object.assign(new Error("This booking is no longer awaiting payment."),{statusCode:409});
-    await tx.transaction.create({data:{userId:booking.userId,date:booking.date,customer:booking.user.name,business:"Badminton",item:`Private course · ${booking.title}`,amount:booking.price,discount:0,tax:0,finalAmount:booking.price,paymentMethod:b.paymentMethod,staff:req.user!.name,status:"paid"}});
-    const confirmed=await tx.booking.findUniqueOrThrow({where:{id:booking.id}});
-    await tx.notification.create({data:{userId:booking.userId,title:"Private course confirmed",body:`Payment received. ${booking.title} on ${booking.date} at ${booking.time} is confirmed.`,link:"/bookings",audience:"member",type:"booking"}});
-    const coachUser=booking.coach?.userId?await tx.user.findUnique({where:{id:booking.coach.userId}}):null;
-    if(coachUser)await tx.notification.create({data:{userId:coachUser.id,title:"Private course booked",body:`${booking.user.name} paid for ${booking.title} · ${booking.date} · ${booking.time} · ${booking.location}.`,link:"/coach/schedule",audience:"coach",type:"booking"}});
-    return confirmed;
-  });
-  res.json(result); */
+    const body = z.object({ confirmed: z.literal(true), method: z.enum(['Cash', 'Manual (simulated)']).default('Manual (simulated)') }).parse(req.body);
+    res.json(await confirmManualPayment(prisma, req.user!, 'booking', String(req.params.id), body.method));
   })
 );
 
-// KPay status is read-only for the owner. Only a signed provider webhook can
-// transition a payment and activate its associated service.
-app.get(
-  "/api/payments/:id",
-  auth,
-  asyncRoute(async (req: AuthRequest, res) => {
-    const attempt = await prisma.paymentAttempt.findUnique({
-      where: { id: String(req.params.id) }
-    });
-    if (!attempt) return res.status(404).json({ message: "Payment not found." });
-    if (
-      attempt.userId !== req.user!.id &&
-      !['admin', 'badminton_fo', 'gym_fo', 'store_fo', 'cafe_fo'].includes(req.user!.role)
-    )
-      return res.status(403).json({ message: "Not allowed." });
-    res.json({
-      id: attempt.id,
-      reference: attempt.reference,
-      resourceType: attempt.resourceType,
-      amount: attempt.amount,
-      currency: attempt.currency,
-      status: attempt.status,
-      checkoutUrl: attempt.checkoutUrl,
-      qrCode: attempt.qrCode,
-      expiresAt: attempt.expiresAt
-    });
-  })
-);
-app.post(
-  "/api/payments/kpay/webhook",
-  asyncRoute(async (req: Request, res: Response) => {
-    const raw = (req as any).rawBody as Buffer | undefined;
-    if (!raw || !verifyKPaySignature(raw, req.headers["x-kpay-signature"] as string | undefined))
-      return res.status(401).json({ message: "Invalid KPay signature." });
-    const payload = z
-      .object({
-        reference: z.string(),
-        providerReference: z.string(),
-        amount: z.number().int().positive(),
-        status: z.enum(["PAID", "FAILED", "EXPIRED"])
-      })
-      .parse(req.body);
-    await expirePrivateCourseReservations();
-    const attempt = await prisma.paymentAttempt.findUnique({
-      where: { reference: payload.reference }
-    });
-    if (!attempt) return res.status(404).json({ message: "Payment reference not found." });
-    if (
-      attempt.amount !== payload.amount ||
-      attempt.providerReference !== payload.providerReference
-    )
-      return res.status(409).json({ message: "Payment does not match the initiated transaction." });
-    if (attempt.status === "SUCCEEDED") return res.json({ received: true });
-    if (attempt.status !== "PENDING")
-      return res.status(409).json({ message: "Payment is no longer active." });
-    if (attempt.expiresAt < new Date()) payload.status = "EXPIRED";
-    if (payload.status !== "PAID") {
-      await prisma.$transaction(async tx => {
-        await tx.paymentAttempt.updateMany({
-          where: { id: attempt.id, status: "PENDING" },
-          data: {
-            status: payload.status === "FAILED" ? "FAILED" : "EXPIRED",
-            failureReason: payload.status
-          }
-        });
-        if (["court", "booking"].includes(attempt.resourceType))
-          await tx.booking.updateMany({
-            where: { id: attempt.resourceId, status: "AWAITING_PAYMENT" },
-            data: { status: "EXPIRED", reservationExpiresAt: null, paymentExpiresAt: null }
-          });
-        if (attempt.resourceType === "badminton_package")
-          await tx.badmintonPackagePurchase.updateMany({
-            where: { id: attempt.resourceId, status: "PENDING" },
-            data: { status: "PAYMENT_FAILED" }
-          });
-      });
-      return res.json({ received: true });
-    }
-    const result = await prisma.$transaction(async tx => {
-      const changed = await tx.paymentAttempt.updateMany({
-        where: { id: attempt.id, status: "PENDING" },
-        data: { status: "SUCCEEDED", paidAt: new Date() }
-      });
-      if (!changed.count) return "already";
-      const user = await tx.user.findUniqueOrThrow({ where: { id: attempt.userId } });
-      if (attempt.resourceType === "gym_enrollment") {
-        await activateGymEnrollment(tx, attempt.resourceId, attempt.amount, "KPay", "kpay:webhook", "KPay");
-        return "activated";
-      }
-      if (["court", "private_course", "booking"].includes(attempt.resourceType)) {
-        const booking = await tx.booking.findUnique({
-          where: { id: attempt.resourceId },
-          include: { court: true, coach: true }
-        });
-        const paymentDeadline =
-          booking?.kind === "private_course"
-            ?(booking.paymentExpiresAt || booking.reservationExpiresAt): booking?.reservationExpiresAt;
-        if (
-          !booking ||
-          booking.status !== "AWAITING_PAYMENT" ||paymentDeadline && paymentDeadline <= new Date())
-          throw Object.assign(new Error("Booking reservation expired before payment completed."), {
-            statusCode: 409
-          });
-        const updated = await tx.booking.updateMany({
-          where: { id: booking.id, status: "AWAITING_PAYMENT" },
-          data: {
-            status: "CONFIRMED",
-            paymentStatus: "paid",
-            reservationExpiresAt: null,
-            paymentExpiresAt: null
-          }
-        });
-        if (!updated.count)
-          throw Object.assign(new Error("Booking is no longer payable."), { statusCode: 409 });
-        const isCourse = booking.kind === "private_course",
-          isCourt = booking.kind === "court",
-          business = isCourt || isCourse ? "Badminton" : "Gym";
-        const postedTransaction = await tx.transaction.create({
-          data: {
-            userId: user.id,
-            date: booking.date,
-            customer: user.name,
-            business,
-            item: isCourt
-              ? `Court rental · ${booking.title}`
-              : isCourse
-                ? `Private course · ${booking.title}`
-                : `Personal training · ${booking.title}`,
-            amount: attempt.amount,
-            discount: 0,
-            tax: 0,
-            finalAmount: attempt.amount,
-            paymentMethod: "KPay",
-            staff: "KPay",
-            status: "paid"
-          }
-        });
-        if (isCourse) await tx.privateCoursePayment.create({ data: {
-          bookingId: booking.id, transactionId: postedTransaction.id, paymentAttemptId: attempt.id,
-          amount: attempt.amount, paymentSource: "ONLINE", paymentMethod: attempt.provider,
-          providerReference: attempt.providerReference, receivedAt: new Date(), verifiedAt: new Date(),
-          notes: "Verified signed provider callback"
-        } });
-        await tx.notification.create({
-          data: {
-            userId: user.id,
-            title: isCourt
-              ? "Court booking confirmed"
-              : isCourse
-                ? "Private course confirmed"
-                : "Training confirmed",
-            body: `KPay payment received. ${booking.title} · ${booking.date} · ${booking.time} is confirmed.`,
-            link: "/bookings",
-            audience: "member",
-            type: "booking",
-            icon: "check-circle",
-            imageUrl: booking.coach?.imageUrl || undefined,
-            actionLabel: "View booking",
-            entityType: "booking",
-            entityId: booking.id
-          }
-        });
-        if (booking.coach?.userId)
-          await tx.notification.create({
-            data: {
-              userId: booking.coach.userId,
-              title: isCourse ? "Private course confirmed" : "New training booking",
-              body: isCourse
-                ? `${user.name}'s payment is complete. ${booking.title} · ${booking.date} · ${booking.time} · ${booking.location} is confirmed.`
-                : `${user.name} booked ${booking.title} · ${booking.date} · ${booking.time} · ${booking.location}.`,
-              link: "/coach/schedule",
-              audience: "coach",
-              type: "booking",
-              icon: "calendar",
-              imageUrl: booking.coach.imageUrl || undefined,
-              actionLabel: "View schedule",
-              entityType: "booking",
-              entityId: booking.id
-            }
-          });
-        return "confirmed";
-      }
-      if (attempt.resourceType === "badminton_package") {
-        const purchase = await tx.badmintonPackagePurchase.findUnique({
-          where: { id: attempt.resourceId },
-          include: { package: true }
-        });
-        if (!purchase || purchase.status !== "PENDING")
-          throw Object.assign(new Error("Package purchase is no longer active."), {
-            statusCode: 409
-          });
-        await tx.badmintonPackagePurchase.update({
-          where: { id: purchase.id },
-          data: { status: "PAID", paidAt: new Date(), paymentMethod: "KPay" }
-        });
-        const start = today(),
-          expiry = addDaysIso(start, purchase.package.validity),
-          enrollmentId = code("BM");
-        await tx.badmintonEnrollment.create({ data: {
-          id: enrollmentId, studentId: user.id, userId: user.id, studentName: user.name, phone: user.phone || '',
-          packageId: purchase.packageId, packageName: purchase.packageName,
-          categoryCode: await packageCategory(tx, purchase.packageId), sessionsTotal: purchase.package.sessions,
-          sessionsRemaining: purchase.package.sessions, startDate: start, expiryDate: expiry, purchaseId: purchase.id,
-        } });
-        await tx.transaction.create({
-          data: {
-            userId: user.id,
-            date: start,
-            customer: user.name,
-            business: "Badminton",
-            item: `Package · ${purchase.packageName}`,
-            amount: attempt.amount,
-            discount: 0,
-            tax: 0,
-            finalAmount: attempt.amount,
-            paymentMethod: "KPay",
-            staff: "KPay",
-            status: "paid"
-          }
-        });
-        await tx.notification.create({
-          data: {
-            userId: user.id,
-            title: "Badminton package activated",
-            body: `KPay payment received for ${purchase.packageName}. Your sessions are ready to use.`,
-            link: "/membership",
-            audience: "member",
-            type: "payment",
-            icon: "trophy",
-            actionLabel: "View package",
-            entityType: "package",
-            entityId: purchase.id
-          }
-        });
-        return "activated";
-      }
-      if (attempt.resourceType === "cafe_order") {
-        const order = await tx.cafeOrder.findUnique({ where: { id: attempt.resourceId } });
-        if (!order || order.status !== "payment_pending")
-          throw Object.assign(new Error("Cafe order is no longer payable."), { statusCode: 409 });
-        await tx.cafeOrder.update({
-          where: { id: order.id },
-          data: { status: "confirmed", paymentMethod: "KPay" }
-        });
-        const lines = order.items as Array<{ name: string; quantity: number }>;
-        const summary = lines.map(line => `${line.name} ×${line.quantity}`).join(", ");
-        await tx.transaction.create({
-          data: {
-            userId: user.id,
-            date: today(),
-            customer: user.name,
-            business: "Cafe",
-            item: summary,
-            amount: attempt.amount,
-            discount: 0,
-            tax: 0,
-            finalAmount: attempt.amount,
-            paymentMethod: "KPay",
-            staff: "KPay",
-            status: "paid"
-          }
-        });
-        await tx.notification.create({
-          data: {
-            userId: user.id,
-            title: "Cafe order confirmed",
-            body: `KPay payment received. Your order is being prepared for ${order.floor}.`,
-            link: "/cafe-order",
-            audience: "member",
-            type: "payment",
-            icon: "shopping-bag",
-            actionLabel: "View order",
-            entityType: "cafe_order",
-            entityId: order.id
-          }
-        });
-        await tx.notification.create({
-          data: {
-            userId: null,
-            audience: "cafe_fo",
-            title: "New paid cafe order",
-            body: `${user.name} · ${summary} · ${order.floor}`,
-            link: "/cafe/orders",
-            type: "transaction",
-            icon: "shopping-bag",
-            entityType: "cafe_order",
-            entityId: order.id
-          }
-        });
-        return "confirmed";
-      }
-      throw Object.assign(new Error("Unsupported payment type."), { statusCode: 400 });
-    });
-    res.json({ received: true, result });
-  })
-);
-
-// Notifications use independently authorized recipient receipts.
-app.use("/api/notifications", createNotificationRouter());
-
-// Analytics
 app.get(
   "/api/analytics/overview",
   auth,

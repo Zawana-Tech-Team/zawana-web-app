@@ -1,3 +1,4 @@
+import { usePaymentRevision } from '../hooks/usePaymentRevision';
 import { Select } from '../components/Select';
 import { useEffect, useState } from "react";
 import { CreditCard, ReceiptText, Search } from "lucide-react";
@@ -11,10 +12,12 @@ type Transaction = {
   business: string;
   finalAmount: number;
   status: string;
+  confirmationMode?: string;
   paymentMethod: string
 };
 
 export default function PaymentHistory() {
+  const paymentRevision = usePaymentRevision();
   const [rows, setRows] = useState<Transaction[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
@@ -51,7 +54,7 @@ export default function PaymentHistory() {
     return () => {
       active = false
     }
-  }, [page, query, status, from, to]);
+  }, [page, query, status, from, to, paymentRevision]);
   const searchNow = (event: React.FormEvent) => {
     event.preventDefault();
     setPage(1);
@@ -134,6 +137,7 @@ export default function PaymentHistory() {
                   <p className="mt-1 text-xs text-zawana-500">
                     {r.id} · {r.paymentMethod}
                   </p>
+                  {r.status === 'paid' && r.confirmationMode && r.confirmationMode !== 'LEGACY' && <p className="mt-1 text-xs text-zawana-500">{r.confirmationMode === 'SIMULATED' ? 'Simulated confirmation · no external charge' : 'Manually confirmed'}</p>}
                 </div>
               </div>
               <div className="flex items-center justify-between gap-3 sm:justify-end">

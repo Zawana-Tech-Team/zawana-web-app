@@ -7,11 +7,11 @@ import { AlertCircle, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Inf
 import { Link } from 'react-router-dom';
 import { LocalizedTree, useLanguage } from '../context/LanguageContext';
 
-export function Logo({ compact = false }: { compact?: boolean }) {
+export function Logo({ compact = false, variant = 'default' }: { compact?: boolean; variant?: 'default' | 'brand' }) {
   return (
     <div className="zawana-app-logo flex items-center gap-3" data-compact={compact}>
       <img
-        src="/logo.png"
+        src={variant === 'brand' ? '/brand/zawana-logo-transparent.png' : '/logo.png'}
         alt="The Zawana crowned-lion logo and official wordmark"
         className={`${compact ? 'h-11 w-11' : 'h-[72px] w-[72px]'} shrink-0 object-contain`}
         width={compact ? 44 : 72}

@@ -1,3 +1,4 @@
+import { recordCourtRentalPayment } from "./courtRentalPayment.js";
 import { createHash } from "node:crypto";
 import type {
   Booking,
@@ -97,6 +98,7 @@ export async function createCourtBooking(
   user: { id: string; name: string },
   b: Input,
   key?: string,
+  onReserved?: (tx: Prisma.TransactionClient, rows: Booking[]) => Promise<void>,
 ) {
   try {
     const requested =
@@ -336,6 +338,8 @@ export async function createCourtBooking(
           rows.push(row);
         }
         await tx.notification.createMany({ data: notifications });
+        if (onReserved) await onReserved(tx, rows);
+        else for (const row of rows) Object.assign(row, await recordCourtRentalPayment(tx, row, user));
         if (key)
           await tx.bookingSubmission.update({
             where: { userId_key: { userId: user.id, key } },

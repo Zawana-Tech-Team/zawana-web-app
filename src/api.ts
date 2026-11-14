@@ -37,6 +37,16 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && options.body) headers.set("Content-Type", "application/json");
   const method = options.method || 'GET';
+  let paymentRetrySlot = '';
+  if (method === 'POST' && /^\/(?:bookings$|store\/orders$|cafe\/orders$|transactions$|badminton\/enrollments(?:\/[^/]+\/renew)?$)/.test(path) && !headers.has('Idempotency-Key')) {
+    const bytes = new TextEncoder().encode(`${path}:${String(options.body || '')}`);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    paymentRetrySlot = 'zawana-payment-retry:' + Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    const key = sessionStorage.getItem(paymentRetrySlot) || crypto.randomUUID();
+    sessionStorage.setItem(paymentRetrySlot, key);
+    headers.set('Idempotency-Key', key);
+  }
+
   if (['POST', 'PATCH', 'DELETE'].includes(method) && /^\/(?:packages\/(?:badminton|gym)|gym\/packages)(?:\/|$)/.test(path)) {
     const challenge = await post<{ id: string }>('/package-security/challenge', { method, path, body: options.body ? JSON.parse(String(options.body)) : undefined });
     const proof = await verifyPackageAccount();
@@ -68,6 +78,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (typeof window !== 'undefined' && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && !path.startsWith('/notifications')) {
     window.dispatchEvent(new Event('zawana-notifications-refresh'));
   }
+  if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:payments|staff\/court-desk|store\/orders|cafe\/orders|gym\/enrollments|badminton\/enrollments|member\/(?:badminton-packages|private-courses))/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
+  if (paymentRetrySlot) sessionStorage.removeItem(paymentRetrySlot);
   return data as T;
 }
 

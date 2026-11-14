@@ -34,10 +34,10 @@ export function CafeCustomer() {
         location,
         ...(useCourt && courtId ? { courtId } : {}),
         items: cart.map(item => ({ id: item.id, quantity: item.qty })),
-        paymentMethod: 'ONLINE'
+        paymentMethod: 'ONLINE', confirmed: true
       });
       setSuccess(
-        `${result.order?.orderNumber || 'Order'} received. Payment is pending; no online charge has been collected.`
+        `${result.order?.orderNumber || 'Order'} confirmed. Manual/simulated payment saved; no external charge was made.`
       );
       setCart([])
     } catch (e: any) {
@@ -166,9 +166,9 @@ export function CafeCustomer() {
           disabled={!cart.length || busy}
           onClick={() => void checkout()}
         >
-          {busy ? 'Submitting order…' : 'Submit online order'}
+          {busy ? 'Submitting order…' : 'Confirm payment & place order'}
         </Button>
-        <p className="mt-2 text-center text-[11px] text-zawana-500">Online checkout is not configured. The order will remain unpaid until staff records payment.</p>
+        <p className="mt-2 text-center text-[11px] text-zawana-500">Confirm a simulated payment. No external charge is made.</p>
         <Link
           to="/bookings"
           className="mt-4 flex items-center justify-center gap-1 text-xs font-bold text-zawana-500"

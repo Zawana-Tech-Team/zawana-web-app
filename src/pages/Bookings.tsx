@@ -136,7 +136,9 @@ export function Bookings() {
     setError("");
     setMessage("");
     try {
-      await startPayment(`/member/private-courses/${booking.id}/pay`);
+      await startPayment('/payments/confirm', { resourceType: 'booking', resourceId: booking.id });
+      setMessage('Manual/simulated payment confirmed. No external charge was made.');
+      await load();
     } catch (e: any) {
       setError(e.message || "Could not confirm this private course.");
     } finally {
@@ -304,7 +306,7 @@ export function Bookings() {
                               : "Private course"}
                     </Badge>}
                 </div>
-                {booking.kind === 'private_course' && booking.paymentStatus !== 'pending' && <p className="mt-2 text-xs text-zawana-500">{({ ONLINE: 'Paid Online', BADMINTON_FO: 'Paid at Badminton Front Office', COACH: 'Paid directly to Coach' } as Record<string, string>)[booking.privateCoursePayment?.paymentSource] || 'Legacy Payment — Source Unknown'}</p>}
+                {booking.kind === 'private_course' && booking.paymentStatus !== 'pending' && <p className="mt-2 text-xs text-zawana-500">{({ SIMULATED: 'Simulated payment', ONLINE: 'Paid Online', BADMINTON_FO: 'Paid at Badminton Front Office', COACH: 'Paid directly to Coach' } as Record<string, string>)[booking.privateCoursePayment?.paymentSource] || 'Legacy Payment — Source Unknown'}</p>}
                 <p className="mt-2 text-sm text-zawana-500">
                   {formatBookingDate(
                     booking.date,
@@ -316,7 +318,7 @@ export function Bookings() {
                 <p className="mt-1 text-xs text-zawana-500">
                   {booking.code} · {Number(booking.price).toLocaleString(locale)} MMK</p>
                 {booking.kind === "private_course" && booking.status === "AWAITING_PAYMENT" &&
-                  <p className="mt-2 text-sm font-bold text-amber-800">Coach accepted. Complete verified payment within 24 hours to confirm your session.</p>}
+                  <p className="mt-2 text-sm font-bold text-amber-800">Coach accepted. Confirm manual/simulated payment within 24 hours to confirm your session.</p>}
                 {booking.kind === "private_course" &&
                   booking.status === "CONFIRMED" &&
                   booking.paymentStatus !== "paid" &&
@@ -328,9 +330,9 @@ export function Bookings() {
               <div className="flex flex-wrap gap-2">
                 {booking.kind === "court" && <Button variant="secondary" onClick={() => setChangeBooking(booking.id)}>Details & history</Button>}
                 {booking.kind === "court" && booking.status.toLowerCase() === "confirmed" && <Link to={courtReschedulePath(booking.id)}><Button variant="secondary">Change Date / Time</Button></Link>}
-                {booking.kind === "private_course" && booking.status === "AWAITING_PAYMENT" &&
+                {booking.kind !== 'court' && booking.paymentStatus === 'pending' && (booking.status === 'AWAITING_PAYMENT' || (booking.kind !== 'private_course' && booking.status.toLowerCase() === 'confirmed')) &&
                   <Button loading={paying === booking.id} disabled={!!paying} onClick={() => confirmCourse(booking)}>
-                    {paying === booking.id ? "Starting payment…" : "Pay & confirm"}
+                    {paying === booking.id ? "Starting payment…" : "Confirm manual payment"}
                   </Button>}
                 {ACTIVE_STATUSES.includes(booking.status) &&
                   <Button

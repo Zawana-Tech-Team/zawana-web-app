@@ -4,6 +4,7 @@ import { z } from "zod";
 import { privateCourseAvailability } from "./privateCourseAvailability.js";
 import { code, today } from "./courtPolicy.js";
 import { bookingFailure as fail } from "./courtBooking.js";
+import { recordDeskPayment, type DeskPayment } from './deskPayment.js';
 
 type Actor = { id: string; role: Role; name: string };
 type Tx = Prisma.TransactionClient;
@@ -62,6 +63,7 @@ export async function recordCourseCash(
   const transaction = await tx.transaction.create({
     data: {
       userId: b.userId,
+      resourceType: "booking", resourceId: b.id, confirmationMode: "MANUAL", confirmedById: actor.id,
       date: today(),
       customer: b.user.name,
       business: "Badminton",
@@ -117,9 +119,10 @@ export async function createStaffCourse(
   db: PrismaClient,
   actor: Actor,
   raw: unknown,
+  deskPayment?: DeskPayment,
 ) {
   const b = staffCourseInput.parse(raw),
-    payloadHash = hash(b);
+    payloadHash = hash(deskPayment ? { ...b, deskPayment } : b);
   const replay = async () => {
     const r = await db.bookingSubmission.findUnique({
       where: { userId_key: { userId: actor.id, key: b.requestKey } },
@@ -196,7 +199,8 @@ export async function createStaffCourse(
             }),
           },
         });
-        if (["COACH", "BADMINTON_FO"].includes(b.paymentSource))
+        if (deskPayment) await recordDeskPayment(tx, booking, actor, deskPayment, member.name, true);
+        else if (["COACH", "BADMINTON_FO"].includes(b.paymentSource))
           await recordCourseCash(tx, booking.id, actor, b.reference, b.notes);
         await tx.bookingSubmission.update({
           where: { userId_key: { userId: actor.id, key: b.requestKey } },
@@ -214,7 +218,8 @@ export async function createStaffCourse(
             },
             {
               userId: coach!.userId,
-              title: "Private course booking created",
+              title: deskPayment ? "New private course request" : "Private course booking created",
+              ...(deskPayment ? { entityType: 'booking', audience: 'coach', icon: 'calendar', actionLabel: 'Review request' } : {}),
               body: `${member.name} · ${course.title} · ${b.date} · ${b.time}`,
               link: "/coach/bookings",
               type: "booking",

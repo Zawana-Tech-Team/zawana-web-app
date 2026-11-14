@@ -1,0 +1,161 @@
+.court-desk {
+  --desk-line: var(--color-zawana-border, #e2e4db);
+  --desk-ink: #20281f;
+  --desk-muted: #62685d;
+  --desk-rental: #eef1f8;
+  --desk-weekly: #edf4eb;
+  --desk-pending: #fff6dc;
+  min-width: 0;
+}
+.desk-toolbar, .desk-toolbar__date, .desk-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.desk-toolbar { justify-content: space-between; padding-bottom: 16px; }
+.desk-toolbar__date { align-items: center; }
+.desk-toolbar label > span, .desk-filters label > span { display: block; margin-bottom: 5px; color: var(--desk-muted); font-size: 10px; font-weight: 600; }
+.desk-toolbar__date label > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.desk-toolbar__date input { width: 166px; min-height: 44px; padding: 9px 11px; background: white; }
+.desk-toolbar__date .zawana-button { padding: 10px 12px; }
+.desk-filters { padding-bottom: 14px; }
+.desk-filters > label:not(.desk-search) { min-width: 160px; }
+.desk-filters .premium-select { width: 100%; }
+.desk-search { display: flex; align-items: center; gap: 10px; flex: 1 1 220px; border: 1px solid var(--desk-line); border-radius: var(--ui-radius-sm, 8px); padding-inline: 12px; background: #fff; color: var(--desk-muted); }
+.court-desk .desk-search input { padding-inline: 0; border: 0; background: transparent; box-shadow: none; }
+.desk-search:focus-within { outline: 2px solid var(--color-zawana-gold); outline-offset: 2px; }
+.desk-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-bottom: 16px; font-size: 11px; color: #51594b; }
+.desk-legend > span { display: inline-flex; align-items: center; gap: 7px; }
+.desk-legend > span::before { content: ''; width: 10px; height: 10px; border: 1px solid #d2d8ca; border-radius: 3px; background: white; }
+.desk-legend [data-kind='booked']::before { background: var(--desk-rental); border-color: #bac5dd; }
+.desk-legend [data-kind='weekly']::before { background: var(--desk-weekly); border-color: #aac2a0; }
+.desk-legend [data-kind='pending']::before { background: var(--desk-pending); border-color: #d5bd74; }
+.desk-legend [data-kind='blocked']::before { background: #e9ebe6; border-color: #c6cbbd; }
+.court-timetable { overflow: hidden; border: 1px solid var(--desk-line); border-radius: 10px; background: white; box-shadow: 0 2px 8px rgb(22 28 24 / 2%); }
+.desk-timetable-caption { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 11px 14px; color: var(--desk-muted); font-size: 11px; border-block: 1px solid #eef0e9; background: #fafbf8; }
+.desk-timetable-caption:first-child { border-top: 0; }
+.desk-timetable-caption:last-child { border-bottom: 0; }
+.court-timetable__scroll { position: relative; max-height: 72dvh; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #b9c1b0 #f5f6f1; }
+.court-timetable__scroll:focus-visible { outline: 2px solid var(--color-zawana-gold); outline-offset: -3px; }
+.court-timetable__grid { display: grid; align-items: start; }
+.court-timetable { --desk-day-height: var(--desk-default-day-height); }
+.court-timetable__grid { grid-template-columns: 84px repeat(var(--desk-court-count), minmax(176px, 1fr)); min-width: calc(84px + var(--desk-court-count) * 176px); }
+.court-timetable__times, .court-timetable__column { height: var(--desk-day-height); }
+.desk-event-time-compact { display: none; }
+.court-timetable__corner, .court-timetable__heading { position: sticky; top: 0; z-index: 3; height: 88px; padding: 13px 16px; border-right: 1px solid var(--desk-line); border-bottom: 1px solid var(--desk-line); background: #f8f9f5; text-align: left; }
+.court-timetable__corner { left: 0; z-index: 4; display: flex; align-items: center; color: var(--desk-muted); font-size: 11px; font-weight: 500; }
+.court-timetable__heading { width: 100%; color: var(--desk-ink); }
+.court-timetable__heading > span { display: block; color: var(--desk-muted); font-size: 10px; letter-spacing: .03em; }
+.court-timetable__heading > strong { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; }
+.court-timetable__heading > small { display: block; margin-top: 4px; color: var(--desk-muted); font-size: 10px; }
+.court-timetable__times { position: sticky; left: 0; z-index: 2; border-right: 1px solid var(--desk-line); background: #fafbf8; }
+.court-timetable__times > div { position: absolute; width: 100%; padding: 12px 9px; border-bottom: 1px solid #e9ece3; text-align: center; font-size: 11px; font-weight: 500; color: #535d4c; }
+.court-timetable__column { position: relative; border-right: 1px solid #e9ece3; }
+.court-timetable__slot { position: absolute; inset-inline: 0; width: 100%; padding: 8px; border-bottom: 1px solid #e9ece3; background: #fff; text-align: center; color: #68725e; font-size: 10px; }
+.court-timetable__slot > span { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.court-timetable__slot[data-state='open'] > span { opacity: 0; transition: opacity var(--ui-fast, 140ms); }
+.court-timetable__slot[data-state='open']:is(:hover, :focus-visible) { background: #f7f8ef; }
+.court-timetable__slot[data-state='open']:is(:hover, :focus-visible) > span { opacity: 1; }
+.court-timetable__slot:disabled { background: #f6f7f3; color: #697160; cursor: default; }
+.court-timetable__slot[data-muted='true'] { color: #72796c; }
+.court-timetable__event { position: absolute; z-index: 1; display: flex; flex-direction: column; align-items: start; gap: 2px; overflow: hidden; padding: 6px 8px; border: 1px solid #c6cee0; border-left: 3px solid #63759b; border-radius: 7px; background: var(--desk-rental); color: #344666; text-align: left; font-size: 11px; transition: filter var(--ui-fast, 140ms), opacity var(--ui-fast, 140ms); }
+.court-timetable__event[data-kind='weekly'] { background: var(--desk-weekly); color: #2d5135; border-color: #c5d5be; border-left-color: #6a8c5d; }
+.court-timetable__event[data-kind='pending'] { background: var(--desk-pending); color: #6f5213; border-color: #e4d7a3; border-left-color: #bb953d; }
+.court-timetable__event[data-kind='blocked'] { background: #eff0ec; color: #535d4b; border-color: #d5dace; border-left-color: #8a9482; }
+.court-timetable__event[data-muted='true'] { background: #f5f6f2; color: #535d4b; border-color: #c8cebf; border-left-color: #8a9482; border-style: dashed; }
+.court-timetable__event:hover { filter: brightness(.98); opacity: 1; }
+.court-timetable__event > strong { max-width: 100%; font-size: 12px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.court-timetable__event > span, .court-timetable__event > small { max-width: 100%; line-height: 1.2; }
+.court-timetable__event > small { font-size: 10px; }
+.desk-event-status { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 10px; }
+.desk-event-status > span { border-bottom: 1px solid currentColor; padding-bottom: 1px; }
+.court-timetable :is(button, [tabindex]):focus-visible { outline: 2px solid #8a792b; outline-offset: -3px; z-index: 5; }
+.desk-empty, .desk-load-error { padding: 16px; font-size: 13px; }
+.desk-load-error { margin-bottom: 12px; border: 1px solid #e5c4b9; border-radius: 8px; background: #fff6f2; color: #8d402e; }
+.court-desk > details { margin-top: 18px; }
+.desk-reservation-dialog { display: flex; flex-direction: column; width: 100%; max-width: 880px; max-height: calc(100dvh - 32px); overflow: hidden; border: 1px solid #e2e4db; border-radius: 12px; background: white; }
+.desk-reservation-dialog__header { display: flex; flex-shrink: 0; align-items: start; justify-content: space-between; gap: 16px; padding: 16px 20px; border-bottom: 1px solid #e2e4db; }
+.desk-reservation-dialog__body { min-height: 0; overflow-y: auto; padding: 16px 20px; }
+.desk-reservation-dialog__layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; }
+.desk-reservation-dialog .desk-selection { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #e2e4db; }
+.desk-selection > span { display: flex; flex-direction: column; gap: 5px; }
+.desk-selection small { font-size: 10px; color: #62685d; text-transform: uppercase; letter-spacing: .07em; }
+.desk-selection strong { font-size: 13px; font-weight: 600; color: #20281f; }
+.desk-reservation-dialog label { display: block; font-size: 12px; line-height: 1.5; }
+.desk-reservation-dialog input, .desk-reservation-dialog select { min-height: 44px; border-radius: 8px; }
+.desk-reservation-dialog .desk-inspected-block { margin-bottom: 20px; border-left: 3px solid #6a8c5d; padding: 12px 16px; background: #edf4eb; font-size: 12px; color: #2d5135; }
+.desk-inspected-block p { margin-top: 5px; }
+.desk-reservation-dialog .zawana-button { min-height: 44px; box-shadow: none; }
+.desk-time-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.desk-time-slot { min-width: 0; min-height: 50px; padding: 7px 8px; border: 1px solid #dce1d4; border-radius: 6px; background: white; color: #20281f; text-align: left; }
+.desk-time-slot:not(:disabled):hover { border-color: #9caa8c; background: #f8f9f4; }
+.desk-time-slot:disabled { border-color: transparent; background: #f2f3ef; color: #62685d; cursor: default; }
+.desk-time-slot--selected { border-color: #b3a04b; background: #f4efd8; }
+.desk-time-slot__time { display: flex; align-items: center; justify-content: space-between; gap: 3px; font-size: 10px; font-weight: 600; line-height: 1.35; }
+.desk-time-slot__time svg { flex-shrink: 0; }
+.desk-time-slot__status { display: block; margin-top: 3px; color: #62685d; font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+.desk-time-slot:focus-visible { outline: 2px solid #a08c30; outline-offset: 2px; }
+.desk-reservation-form { min-width: 0; padding-left: 20px; border-left: 1px solid #e2e4db; }
+.desk-recurrence { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 10px; border-radius: 6px; background: #f3f5ee; color: #47593d; font-size: 12px; }
+.desk-reservation-dialog__footer { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 20px; border-top: 1px solid #e2e4db; background: #fafbf8; }
+.desk-reservation-dialog__footer p { color: #62685d; font-size: 11px; }
+.desk-reservation-dialog__footer strong { display: block; margin-top: 4px; font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
+.desk-reservation-dialog__footer .zawana-button { min-width: 190px; }
+@media (max-width: 767px) {
+  .desk-reservation-dialog__layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .desk-reservation-form { grid-row: 1; padding: 0 0 16px; border: 0; border-bottom: 1px solid #e2e4db; }
+  .desk-reservation-dialog__header, .desk-reservation-dialog__body, .desk-reservation-dialog__footer { padding: 14px 16px; }
+  .desk-reservation-dialog__footer .zawana-button { flex: 1 1 160px; min-width: 0; }
+  .desk-reservation-dialog__footer strong { font-size: 18px; }
+}
+@media (hover: none) {
+  .court-timetable__slot[data-state='open'] > span { opacity: 1; }
+}
+@media (max-width: 639px) {
+  .desk-toolbar { align-items: stretch; }
+  .desk-toolbar__date { width: 100%; gap: 6px; }
+  .desk-toolbar__date input { width: 140px; min-width: 0; }
+  .desk-toolbar__date .zawana-button { padding-inline: 10px; }
+  .desk-filters > label:not(.desk-search) { flex: 1 1 130px; min-width: 0; }
+  .desk-search { flex-basis: 100%; }
+  .court-timetable__scroll { max-height: 66dvh; }
+  .desk-legend { gap: 9px 13px; }
+  .desk-selection > span { flex: 1 1 100px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .court-timetable__slot > span, .court-timetable__event { transition: none; }
+}
+.desk-payment-fields { border: 0; padding: 0; margin: 20px 0 0; min-width: 0; }
+.desk-payment-fields legend { margin-bottom: 10px; font-size: 12px; font-weight: 600; }
+.desk-payment-fields > label, .desk-private-fields > label { display: grid; gap: 8px; margin-top: 14px; font-size: 12px; font-weight: 500; }
+.desk-payment-fields small { font-weight: 400; color: var(--color-zawana-500, #737373); line-height: 1.5; }
+.desk-payment-fields input:not([type='checkbox']), .desk-private-fields input, .desk-private-fields select { width: 100%; min-width: 0; min-height: 44px; }
+.desk-payment-fields > .desk-payment-confirm { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 400; line-height: 1.6; cursor: pointer; }
+.desk-payment-confirm input { width: 18px; height: 18px; flex-shrink: 0; accent-color: #ac8d51; }
+.desk-reservation-dialog .desk-payment-confirm input { min-height: 18px; }
+.desk-reservation-dialog h3 { font-size: 14px; line-height: 1.5; letter-spacing: normal; }
+.desk-private-dialog { max-width: 580px; }
+.desk-private-fields { border: 0; padding: 0; min-width: 0; }
+.desk-member-results { border: 1px solid #e6e4e0; border-radius: 8px; max-height: 150px; overflow-y: auto; margin-top: 6px; }
+.desk-member-results button { width: 100%; text-align: left; display: grid; gap: 4px; min-height: 48px; padding: 10px 12px; }
+.desk-member-results button:hover, .desk-member-results button:focus-visible { background: #faf8f4; }
+.desk-member-results small { color: #737373; }
+.desk-close { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; }
+.desk-close:hover { background: #f4f3f1; }
+.court-timetable__event[data-kind='private'] { background: #f1eef7; border-left-color: #88779d; }
+/* A single desktop overview: every configured court and the complete operating day. */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .court-timetable { --desk-day-height: clamp(420px, calc(100dvh - 240px), 630px); }
+  .court-timetable__scroll { max-height: none; overflow: visible; }
+  .court-timetable__grid { width: 100%; min-width: 0; grid-template-columns: 64px repeat(var(--desk-court-count), minmax(0, 1fr)); }
+  .court-timetable__corner, .court-timetable__heading { min-width: 0; height: 58px; padding: 8px; }
+  .court-timetable__heading > span { font-size: 9px; }
+  .court-timetable__heading > strong { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .court-timetable__heading > small { display: none; }
+  .court-timetable__times > div { display: flex; align-items: center; justify-content: center; padding: 2px; font-size: 10px; }
+  .court-timetable__slot { padding: 2px; }
+  .court-timetable__slot > span { font-size: 9px; }
+  .court-timetable__slot[data-state='open'] > span > span { display: none; }
+  .court-timetable__event { padding: 2px 4px; gap: 1px; border-radius: 4px; border-left-width: 2px; }
+  .court-timetable__event > strong { font-size: 10px; }
+  .court-timetable__event > .desk-event-time-compact { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+  .court-timetable__event > :is(.desk-event-time-full, small, .desk-event-status) { display: none; }
+  .desk-scroll-hint { display: none; }
+  .desk-timetable-caption { padding: 7px 10px; font-size: 10px; }
+}

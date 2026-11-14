@@ -173,7 +173,7 @@ export type Transaction = {
   discount: number;
   tax: number;
   finalAmount: number;
-  paymentMethod: 'Cash' | 'KPay' | 'Pay Later' | 'Other';
+  paymentMethod: 'Cash' | 'Manual (simulated)' | 'Pay Online' | 'Pay Later' | 'Other';
   staff: string;
   status: 'paid' | 'pending' | 'refunded';
 };
@@ -338,7 +338,7 @@ export type StoreOrder = {
   dueDate?: string;
   status: 'pending' | 'partially_paid' | 'paid' | 'overdue';
   items: { productId: string; quantity: number; name?: string; price?: number }[];
-  paymentMethod?: 'Cash' | 'KPay' | 'Pay Later' | 'Pay Online';
+  paymentMethod?: 'Cash' | 'Manual (simulated)' | 'Pay Later' | 'Pay Online';
   itemSummary?: string;
 };
 
@@ -353,7 +353,7 @@ export type CafeOrder = {
   court?: { id: string; name: string } | null;
   courtId?: string | null;
   orderTime: string;
-  paymentMethod: 'CASH' | 'ONLINE' | 'PAY_LATER' | 'Cash' | 'KPay' | 'Pay Later';
+  paymentMethod: 'CASH' | 'ONLINE' | 'PAY_LATER' | 'Cash' | 'Manual (simulated)' | 'Pay Later';
   paymentStatus?: 'pending' | 'paid';
   subtotal?: number;
   discount?: number;

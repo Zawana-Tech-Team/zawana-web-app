@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -12,13 +13,13 @@ import { createSessionService } from "../src/services/authSession.js";
 import { today } from "../src/services/courtPolicy.js";
 
 const schema = execFileSync(
-  new URL("../node_modules/.bin/prisma", import.meta.url).pathname,
-  [
+  process.execPath,
+  [fileURLToPath(new URL("../node_modules/prisma/build/index.js", import.meta.url)),
     "migrate",
     "diff",
     "--from-empty",
     "--to-schema-datamodel",
-    new URL("../prisma/schema.prisma", import.meta.url).pathname,
+    fileURLToPath(new URL("../prisma/schema.prisma", import.meta.url)),
     "--script",
   ],
   { encoding: "utf8" },
@@ -83,8 +84,8 @@ test("staff private course booking, finance and cash custody", async (t) => {
   const port = 20000 + Math.floor(Math.random() * 1000),
     origin = `http://127.0.0.1:${port}`;
   const child = spawn(
-    new URL("../node_modules/.bin/tsx", import.meta.url).pathname,
-    ["src/server.ts"],
+    process.execPath,
+    ["--import", "tsx", "src/server.ts"],
     {
       cwd: new URL("..", import.meta.url),
       env: {
@@ -103,9 +104,11 @@ test("staff private course booking, finance and cash custody", async (t) => {
   child.stdout.on("data", (b) => (logs += b));
   child.stderr.on("data", (b) => (logs += b));
   t.after(async () => {
-    child.kill();
+    const stopped = new Promise(resolve => child.exitCode !== null || child.signalCode ? resolve(null) : child.once('exit', resolve));
+    child.kill(); await stopped;
     await db.$disconnect();
-    rmSync(dir, { recursive: true, force: true });
+    if (!dir.startsWith(join(tmpdir(), 'zawana-courts-'))) throw new Error('Unexpected QA cleanup path');
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) throw new Error(logs);

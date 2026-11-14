@@ -628,9 +628,10 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
               </span>
             </p>
             <p className="mt-3 text-xs text-zawana-500">
-              Your court sessions are confirmed. Payment checkout is currently
-              unavailable.
+              Your booking and simulated payment were saved together. No external charge was made.
             </p>
+            {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+            <p className="mt-4 text-sm font-semibold text-emerald-800">Payment recorded with your booking.</p>
             <div className="mt-6 flex flex-wrap gap-2">
               <Button
                 onClick={() => {
@@ -671,7 +672,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
           {!isRescheduling && <button
             type="button"
             onClick={() => setCheckoutOpen(true)}
-            aria-label={`Open checkout, ${selected.length} selected sessions`}
+            aria-label={`Review booking, ${selected.length} selected sessions`}
             className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-zawana-950 text-white shadow-lg transition hover:bg-zawana-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zawana-gold"
           >
             <ShoppingCart size={19} />
@@ -1196,11 +1197,11 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                     onClick={confirm}
                     className="mt-5 w-full"
                   >
-                    {busy ? "Confirming bookings…" : "Confirm all bookings"}{" "}
+                    {busy ? "Confirming bookings…" : "Book & record payment"}{" "}
                     <ChevronRight size={16} />
                   </Button>
                   <p className="mt-3 text-center text-[11px] leading-5 text-zawana-500">
-                    Your selected sessions will be confirmed together.
+                    Your selected sessions and payment will be saved together.
                   </p>
                 </>
               ) : (
@@ -1236,7 +1237,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
       <AnimatePresence>
         {!isRescheduling && checkoutOpen && (
           <DialogSurface
-            title="Review checkout"
+            title="Review booking"
             labelledBy="mobile-checkout-title"
             drawer
             onClose={() => setCheckoutOpen(false)}
@@ -1249,7 +1250,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                   id="mobile-checkout-title"
                   className="mt-1 text-xl font-black"
                 >
-                  Review checkout
+                  Review booking
                 </h2>
                 <p className="mt-1 text-xs text-zawana-500">
                   {selected.length} selected session
@@ -1352,11 +1353,11 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                 onClick={confirm}
                 className="w-full"
               >
-                {busy ? "Confirming bookings…" : "Confirm all bookings"}
+                {busy ? "Confirming bookings…" : "Book & record payment"}
                 <ChevronRight size={16} />
               </Button>
               <p className="mt-3 text-center text-[11px] leading-5 text-zawana-500">
-                Your selected sessions will be confirmed together.
+                Your selected sessions and payment will be saved together.
               </p>
             </footer>
           </DialogSurface>

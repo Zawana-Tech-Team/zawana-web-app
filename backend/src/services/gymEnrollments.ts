@@ -79,8 +79,8 @@ export async function createGymEnrollment(db: PrismaClient, actorId: string, raw
   }
 }
 
-/** Called only by authorized cash collection or the existing verified KPay webhook. */
-export async function activateGymEnrollment(tx: GymTx, id: string, amount: number, method: "Cash" | "KPay", actorId: string, staff: string) {
+/** Called by explicit authorized manual payment confirmation. */
+export async function activateGymEnrollment(tx: GymTx, id: string, amount: number, method: string, actorId: string, staff: string) {
   const row = await lockEnrollment(tx, id);
   if (row.totalPrice !== amount) throw gymError("Payment amount does not match the enrollment snapshot.");
   if (row.status === "ACTIVE" && row.transactionId) return row;
@@ -94,6 +94,7 @@ export async function activateGymEnrollment(tx: GymTx, id: string, amount: numbe
     userId: lead.id, date: today(), customer: row.members.map(m => m.user.name).join(", "),
     business: "Gym", item: `${snapshot.title} · ${row.code}`, amount, discount: 0, tax: 0,
     finalAmount: amount, paymentMethod: method, staff, status: "paid",
+    resourceType: "gym_enrollment", resourceId: id, confirmationMode: method === "Cash" ? "MANUAL" : "SIMULATED", confirmedById: actorId,
   } });
   const updated = await tx.gymEnrollment.update({ where: { id }, data: { status: "ACTIVE", transactionId: receipt.id, paymentMethod: method, paidAt: new Date() } });
   if (["MEMBERSHIP", "WALK_IN"].includes(row.kind)) await tx.membership.create({ data: {
@@ -106,7 +107,7 @@ export async function activateGymEnrollment(tx: GymTx, id: string, amount: numbe
     userId: m.userId, title: "Gym package activated", body: `${snapshot.title} · valid ${row.startDate}–${row.expiryDate}.`,
     link: "/member/training", type: "payment", audience: "member", entityType: "gym_enrollment", entityId: id,
   })) });
-  await audit(tx, actorId, "PAYMENT_VERIFIED_AND_ACTIVATED", "enrollment", id, { status: row.status }, { ...updated, receiptId: receipt.id });
+  await audit(tx, actorId, "MANUAL_PAYMENT_CONFIRMED_AND_ACTIVATED", "enrollment", id, { status: row.status }, { ...updated, receiptId: receipt.id });
   return tx.gymEnrollment.findUniqueOrThrow({ where: { id }, include: enrollmentInclude });
 }
 

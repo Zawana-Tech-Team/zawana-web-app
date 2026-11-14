@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -13,13 +14,13 @@ import { courtAvailability } from "../src/services/courtAvailability.js";
 import { today } from "../src/services/courtPolicy.js";
 
 const schema = execFileSync(
-  new URL("../node_modules/.bin/prisma", import.meta.url).pathname,
-  [
+  process.execPath,
+  [fileURLToPath(new URL("../node_modules/prisma/build/index.js", import.meta.url)),
     "migrate",
     "diff",
     "--from-empty",
     "--to-schema-datamodel",
-    new URL("../prisma/schema.prisma", import.meta.url).pathname,
+    fileURLToPath(new URL("../prisma/schema.prisma", import.meta.url)),
     "--script",
   ],
   { encoding: "utf8" },
@@ -58,6 +59,8 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
   });
   const sessions = createSessionService(db);
   const session = await sessions.issue(db, user, "database_password", []);
+  const admin = await db.user.create({ data: { name: 'Court Desk', email: 'court-admin@test.local', role: 'admin' } });
+  const adminSession = await sessions.issue(db, admin, 'database_password', []);
   const otherSession = await sessions.issue(db, other, "database_password", []);
   const coachSession = await sessions.issue(db, coach, "database_password", []);
   const court = await db.court.create({
@@ -84,8 +87,8 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
   const port = 18000 + Math.floor(Math.random() * 1000),
     origin = `http://127.0.0.1:${port}`;
   const child = spawn(
-    new URL("../node_modules/.bin/tsx", import.meta.url).pathname,
-    ["src/server.ts"],
+    process.execPath,
+    ["--import", "tsx", "src/server.ts"],
     {
       cwd: new URL("..", import.meta.url),
       env: {
@@ -101,9 +104,10 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
   child.stdout.on("data", (b) => (logs += b));
   child.stderr.on("data", (b) => (logs += b));
   t.after(async () => {
-    child.kill();
-    await db.$disconnect();
-    rmSync(dir, { recursive: true, force: true });
+    const stopped = new Promise(resolve => child.exitCode !== null || child.signalCode ? resolve(null) : child.once('exit', resolve));
+    child.kill(); await stopped; await db.$disconnect();
+    if (!dir.startsWith(join(tmpdir(), 'zawana-courts-'))) throw new Error('Unexpected QA cleanup path');
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) throw new Error(logs);
@@ -415,7 +419,7 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
     price: 1,
   };
   await t.test(
-    "atomic persisted unpaid reservation and safe replay",
+    "atomic paid reservation with one receipt per session and safe replay",
     async () => {
       const response = await request(
         "/bookings",
@@ -432,10 +436,10 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
         const b = await db.booking.findUniqueOrThrow({ where: { id } });
         assert.equal(b.userId, user.id);
         assert.equal(b.status, "CONFIRMED");
-        assert.equal(b.paymentStatus, "pending");
+        assert.equal(b.paymentStatus, "paid");
         assert.equal(b.meta, "QA request");
       }
-      assert.equal(await db.transaction.count(), 0);
+      assert.equal(await db.transaction.count(), 2);
       assert.equal(await db.notification.count(), 6);
       const recovered = await request(`/court-booking/submissions/${retryKey}`);
       assert.equal(recovered.status, 200);
@@ -822,13 +826,13 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
     },
   );
   await t.test(
-    "cancellation releases availability and is repeatable",
+    "paid cancellation requires staff review and is repeatable once approved",
     async () => {
       assert.equal(
         (
           await request(`/bookings/${ids[0]}/status`, "PATCH", {
             status: "cancelled",
-          })
+          }, adminSession.accessToken)
         ).status,
         200,
       );
@@ -836,7 +840,7 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
         (
           await request(`/bookings/${ids[0]}/status`, "PATCH", {
             status: "cancelled",
-          })
+          }, adminSession.accessToken)
         ).status,
         200,
       );
@@ -868,7 +872,7 @@ test("real HTTP court journey, integrity, ownership and retry recovery", async (
         slots: [{ courtId: second.id, time: "6:00 AM - 7:00 AM" }],
       });
       assert.equal(result.booking.time, "6:00 AM — 7:00 AM");
-      assert.equal(result.booking.paymentStatus, "pending");
+      assert.equal(result.booking.paymentStatus, "paid");
     },
   );
 });

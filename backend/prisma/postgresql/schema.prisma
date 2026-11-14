@@ -497,6 +497,13 @@ model CafeOrderItem {
 }
 
 model Transaction {
+  resourceType String?
+  resourceId String?
+  confirmationMode String @default("LEGACY")
+  confirmedById String?
+  requestKey String? @unique
+  requestHash String?
+  @@unique([resourceType, resourceId])
   privateCoursePayment PrivateCoursePayment?
   id            String              @id @default(cuid())
   userId        String?
@@ -521,6 +528,7 @@ model Transaction {
 }
 
 model Appointment {
+  price Int @default(0)
   id            String            @id @default(cuid())
   userId        String?
   user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)

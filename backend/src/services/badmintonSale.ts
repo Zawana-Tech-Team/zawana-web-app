@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const badmintonSaleFields = {
-  paymentMethod: z.enum(['Cash', 'KPay']),
+  paymentMethod: z.enum(['Cash', 'Manual (simulated)']),
   discountPercent: z.number().finite().min(0).max(100).default(0),
 };
 

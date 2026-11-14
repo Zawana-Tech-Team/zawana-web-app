@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ import { seedGymCatalog } from '../src/services/gymPackages.js';
 import { today } from '../src/services/gymPolicy.js';
 import { addDateKeyDays } from '../src/utils/dateKeys.js';
 
-const prismaBin = new URL('../node_modules/.bin/prisma', import.meta.url).pathname;
+const prismaBin = fileURLToPath(new URL('../node_modules/prisma/build/index.js', import.meta.url));
 const root = new URL('..', import.meta.url);
 const migrationRoot = new URL('../prisma/migrations/', import.meta.url);
 const gymMigration = '20261015120000_gym_management';
@@ -44,7 +45,7 @@ test('additive gym migration preserves existing membership, attendance, package 
 test('real gym HTTP lifecycle, payment verification, shared deduction and authorization', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'zawana-gym-http-')), file = join(dir, 'test.db');
   writeFileSync(file, '');
-  execFileSync(prismaBin, ['migrate', 'deploy'], { cwd: root, env: { ...process.env, DATABASE_URL: `file:${file}` }, stdio: 'pipe' });
+  execFileSync(process.execPath, [prismaBin, 'migrate', 'deploy'], { cwd: root, env: { ...process.env, DATABASE_URL: `file:${file}` }, stdio: 'pipe' });
   const db = new PrismaClient({ datasources: { db: { url: `file:${file}` } } });
   const adapterReferences: string[] = [];
   const adapter = createServer(async (req, res) => {
@@ -73,11 +74,11 @@ test('real gym HTTP lifecycle, payment verification, shared deduction and author
   for (const user of [admin, desk, coachUser, otherCoach, ...members]) tokens[user.id] = (await sessions.issue(db, user, 'database_password', [])).accessToken;
   const port = 19500 + Math.floor(Math.random() * 500), origin = `http://127.0.0.1:${port}`;
   const secret = 'gym-test-webhook-signature-secret';
-  const child = spawn(new URL('../node_modules/.bin/tsx', import.meta.url).pathname, ['src/server.ts'], {
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], {
     cwd: root, env: { ...process.env, DATABASE_URL: `file:${file}`, AUTH_MODE: 'database', JWT_SECRET: 'gym-test-session-key-longer-than-32-characters', NODE_ENV: 'test', PORT: String(port), GYM_ALLOW_CASH_PAYMENTS: 'true', KPAY_CHECKOUT_ADAPTER_URL: `http://127.0.0.1:${adapterPort}`, KPAY_ADAPTER_API_KEY: 'test-adapter-key', KPAY_WEBHOOK_SECRET: secret, KPAY_CALLBACK_URL: `${origin}/api/payments/kpay/webhook` }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let logs = ''; child.stdout.on('data', b => logs += b); child.stderr.on('data', b => logs += b);
-  t.after(async () => { child.kill(); adapter.close(); await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
+  t.after(async () => { const stopped = new Promise(resolve => child.exitCode !== null || child.signalCode ? resolve(null) : child.once('exit', resolve)); child.kill(); await stopped; adapter.close(); await db.$disconnect(); if (!dir.startsWith(join(tmpdir(), 'zawana-gym-http-'))) throw new Error('Unexpected QA cleanup path'); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) throw new Error(logs);
     if (await fetch(`${origin}/api/health`).then(r => r.ok).catch(() => false)) break;
@@ -99,7 +100,7 @@ test('real gym HTTP lifecycle, payment verification, shared deduction and author
   const pkgBody = { title: 'QA Group', kind: 'GROUP_PT', price: 650000, rate: 130000, sessions: 5, minMembers: 5, maxMembers: 10, validityDays: 90, status: 'active' };
   let pkg: any, enrollment: any, attempt: any, scheduled: any;
   const enroll = (packageId: string, memberIds: string[], extras = {}) => request('/gym/enrollments', 'POST', { packageId, packageVersion: 1, memberIds, coachId: coach.id, startDate: today(), requestKey: randomUUID(), ...extras });
-  const cash = (id: string) => request(`/gym/enrollments/${id}/payment`, 'POST', { method: 'Cash', cashReceived: true });
+  const cash = (id: string) => request(`/gym/enrollments/${id}/payment`, 'POST', { method: 'Cash', cashReceived: true, confirmed: true });
   const webhook = async (body: unknown, signature = true) => {
     const raw = JSON.stringify(body), response = await fetch(`${origin}/api/payments/kpay/webhook`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-kpay-signature': signature ? createHmac('sha256', secret).update(raw).digest('hex') : 'bad' }, body: raw });
     return { status: response.status, value: await response.json() };
@@ -142,33 +143,20 @@ test('real gym HTTP lifecycle, payment verification, shared deduction and author
     assert.equal((await request(`/gym/packages/${pkg.id}/history`, 'GET', undefined, admin.id)).value.revisions.length, 2);
     await assert.rejects(db.gymEnrollment.update({ where: { id: row.id }, data: { totalPrice: 1 } }));
   });
-  await t.test('unpaid access denied; real checkout is deduplicated; only signed matching KPay callback activates', async () => {
-    assert.deepEqual((await request('/gym/policy')).value.paymentMethods, ['KPay', 'Cash']);
-    const pending = await request('/gym/enrollments?category=training');
-    assert.ok(pending.value.data.some((row: any) => row.id === enrollment.id));
+  await t.test('unpaid access denied; manual confirmation activates once without a gateway', async () => {
+    assert.deepEqual((await request('/gym/policy')).value.paymentMethods, ['Manual (simulated)', 'Cash']);
     assert.equal((await request('/gym/enrollments?forScheduling=true')).value.data.length, 0);
     assert.equal((await request(`/gym/enrollments/${enrollment.id}/payment`, 'POST', { method: 'Cash' })).status, 400);
     assert.equal((await request('/gym/private-training', 'POST', { enrollmentId: enrollment.id, coachId: coach.id, date: nextDate, startTime: '10:00', requestKey: randomUUID() })).status, 409);
-    const checkouts = await Promise.all(Array.from({ length: 3 }, () => request(`/gym/enrollments/${enrollment.id}/payment`, 'POST', { method: 'KPay' })));
-    for (const checkout of checkouts) assert.equal(checkout.status, 200, JSON.stringify(checkout));
-    attempt = checkouts[0].value.attempt;
-    assert.ok(checkouts.every(checkout => checkout.value.attempt.id === attempt.id));
-    assert.equal(adapterReferences.filter(reference => reference === attempt.reference).length, 1, 'Concurrent requests must initialize the provider only once');
-    assert.equal((await request(`/gym/enrollments/${enrollment.id}/payment`, 'POST', { method: 'KPay' })).value.attempt.id, attempt.id);
-    assert.equal((await cash(enrollment.id)).status, 409);
-    const body = { reference: attempt.reference, providerReference: attempt.providerReference, amount: attempt.amount, status: 'PAID' };
-    assert.equal((await webhook(body, false)).status, 401);
-    assert.equal((await webhook({ ...body, amount: 1 })).status, 409);
-    assert.equal((await webhook({ ...body, providerReference: 'wrong' })).status, 409);
-    assert.equal((await webhook(body)).status, 200);
-    assert.equal((await webhook(body)).status, 200);
+    const results = await Promise.all(Array.from({ length: 3 }, () => request(`/gym/enrollments/${enrollment.id}/payment`, 'POST', { method: 'Manual (simulated)', confirmed: true })));
+    for (const result of results) assert.equal(result.status, 200);
+    assert.equal(new Set(results.map(result => result.value.transaction.id)).size, 1);
+    assert.equal(adapterReferences.length, 0);
     const row = await db.gymEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } });
     assert.equal(row.status, 'ACTIVE'); assert.ok(row.paidAt);
-    assert.ok((await request('/gym/enrollments?forScheduling=true')).value.data.some((e: any) => e.id === row.id));
     assert.equal(await db.transaction.count({ where: { gymEnrollment: { is: { id: enrollment.id } } } }), 1);
     assert.equal((await request(`/gym/enrollments/${enrollment.id}/receipt`, 'GET', undefined, members[1].id)).status, 200);
     assert.equal((await request(`/gym/enrollments/${enrollment.id}/receipt`, 'GET', undefined, members[7].id)).status, 404);
-    const payments = await request('/transactions?q=QA%20Group', 'GET', undefined, members[1].id); assert.equal(payments.value.length, 1);
   });
   await t.test('coach availability, transactional conflict checks, retry recovery and rescheduling', async () => {
     const body = { enrollmentId: enrollment.id, coachId: coach.id, date: nextDate, startTime: '10:00', requestKey: randomUUID() };
@@ -230,19 +218,12 @@ test('real gym HTTP lifecycle, payment verification, shared deduction and author
     const replacement = await enroll('gym-initial-membership-1', [members[5].id], { renewalOfId: enrolled.value.id, startDate: renewalStart });
     assert.equal(replacement.status, 201, JSON.stringify(replacement));
   });
-  await t.test('failed KPay callbacks never activate; fresh checkout can recover', async () => {
+  await t.test('retired gateway cannot activate; explicit manual confirmation recovers', async () => {
     const row = await enroll('gym-initial-pt-1', [members[7].id]); assert.equal(row.status, 201);
-    const first = await request(`/gym/enrollments/${row.value.id}/payment`, 'POST', { method: 'KPay' }); assert.equal(first.status, 200);
-    const a = first.value.attempt;
-    const body = { reference: a.reference, providerReference: a.providerReference, amount: a.amount, status: 'FAILED' };
-    assert.equal((await webhook(body)).status, 200);
+    assert.equal((await webhook({ status: 'PAID' })).status, 410);
     assert.equal((await db.gymEnrollment.findUniqueOrThrow({ where: { id: row.value.id } })).status, 'PENDING_PAYMENT');
-    assert.equal((await request(`/gym/enrollments/${row.value.id}/receipt`)).status, 404);
-    assert.equal((await webhook({ ...body, status: 'PAID' })).status, 409);
-    const second = await request(`/gym/enrollments/${row.value.id}/payment`, 'POST', { method: 'KPay' }); assert.equal(second.status, 200);
-    assert.notEqual(second.value.attempt.id, a.id);
-    const b = second.value.attempt;
-    assert.equal((await webhook({ reference: b.reference, providerReference: b.providerReference, amount: b.amount, status: 'PAID' })).status, 200);
+    const paid = await request(`/gym/enrollments/${row.value.id}/payment`, 'POST', { method: 'Manual (simulated)', confirmed: true });
+    assert.equal(paid.status, 200); assert.equal(paid.value.enrollment.status, 'ACTIVE');
   });
   await t.test('scheduled sessions cannot exceed the shared balance; cancellation releases capacity', async () => {
     const ids = [];

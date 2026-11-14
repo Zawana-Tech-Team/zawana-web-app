@@ -1,3 +1,4 @@
+import { paymentOperation, operationMetadata } from "../middleware/paymentOperation.js";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
@@ -103,9 +104,11 @@ router.post(
   "/orders",
   auth,
   storeRoles,
+  paymentOperation(prisma),
   asyncRoute(async (req, res) => {
     const body = z
       .object({
+        confirmed: z.boolean().default(false),
         customer: z.string().min(1).max(120),
         items: z
           .array(
@@ -118,12 +121,6 @@ router.post(
         paymentMethod: z.enum(["Cash", "Pay Later", "Pay Online"])
       })
       .parse(req.body);
-    if (body.paymentMethod === "Pay Online")
-      return res
-        .status(503)
-        .json({
-          message: "Online Store checkout is not configured yet. No order or payment was recorded."
-        });
     const ids = [...new Set(body.items.map(x => x.productId))];
     const result = await prisma.$transaction(async tx => {
       const products = await tx.product.findMany({ where: { id: { in: ids }, status: "active" } });
@@ -163,7 +160,8 @@ router.post(
             statusCode: 409
           });
       }
-      const paid = body.paymentMethod === "Cash" ? total : 0;
+      const isPaid = body.confirmed && body.paymentMethod !== "Pay Later";
+      const paid = isPaid ? total : 0;
       const order = await tx.storeOrder.create({
         data: {
           customer: body.customer,
@@ -172,12 +170,11 @@ router.post(
           tax,
           paid,
           dueDate: body.paymentMethod === "Pay Later" ? body.dueDate || null : null,
-          status: body.paymentMethod === "Cash" ? "paid" : "pending",
+          status: isPaid ? "paid" : "pending",
           items: lines.map(({ taxRate, ...line }) => line)
         }
       });
-      if (body.paymentMethod === "Cash")
-        await tx.transaction.create({
+      await tx.transaction.create({
           data: {
             date: today(),
             customer: body.customer,
@@ -187,9 +184,10 @@ router.post(
             discount: body.discount,
             tax,
             finalAmount: total,
-            paymentMethod: "Cash",
+            paymentMethod: body.paymentMethod === "Pay Online" ? "Manual (simulated)" : body.paymentMethod,
+            resourceType: "store_order", resourceId: order.id, confirmationMode: isPaid ? (body.paymentMethod === "Cash" ? "MANUAL" : "SIMULATED") : "UNCONFIRMED", confirmedById: isPaid ? (req as any).user.id : null, ...operationMetadata(res),
             staff: (req as any).user?.name || "Store FO",
-            status: "paid"
+            status: isPaid ? "paid" : "pending"
           }
         });
       await tx.notification.create({

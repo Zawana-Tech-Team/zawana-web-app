@@ -1,7 +1,8 @@
+import { startPayment } from '../services/paymentFlow';
 import { categoryLabel } from '../components/BadmintonCategoryField';
 import { bookingClock } from '../utils/bookingTime';
 import '../components/member-premium.css';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Trophy } from 'lucide-react';
 import { Badge, Button, Card, Empty, Page } from '../components/UI';
@@ -16,6 +17,7 @@ export function Membership() {
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const retryKeys = useRef(new Map<string, string>());
 
   const load = useCallback(async () => {
     const data = await get<any>('/member/dashboard');
@@ -35,10 +37,14 @@ export function Membership() {
     setBusyId(id);
     setError('');
     try {
-      const result = await post<any>(`/member/badminton-packages/${id}/purchase`, {});
+      const pending = purchases.find(purchase => purchase.packageId === id && ['PENDING', 'AWAITING_PAYMENT'].includes(purchase.status));
+      if (pending) { await startPayment('/payments/confirm', { resourceType: 'badminton_package', resourceId: pending.id }); await load(); setNotice('Manual/simulated payment confirmed. Your package is active.'); return; }
+      const key = retryKeys.current.get(id) || crypto.randomUUID(); retryKeys.current.set(id, key);
+      const result = await post<any>(`/member/badminton-packages/${id}/purchase`, { confirmed: true, requestKey: key });
+      retryKeys.current.delete(id);
       await load();
       setNotice(
-        `${result.enrollment?.packageName || 'Your badminton package'} is active. ${result.enrollment?.sessionsRemaining ?? ''} sessions are ready to use.`
+        `${result.enrollment?.packageName || 'Your badminton package'} is active after simulated payment confirmation (no external charge). ${result.enrollment?.sessionsRemaining ?? ''} sessions are ready to use.`
       );
     } catch (e: any) {
       setError(e.message || 'Package request could not be created. Please try again.');
@@ -52,7 +58,7 @@ export function Membership() {
     purchases.find(p => p.packageId === id && p.status === 'PENDING');
 
   return <Page title="Badminton packages" eyebrow="Sessions & membership">
-    <div className="member-refined">
+    <div className="member-refined"><p className="mb-4 text-xs text-zawana-500">Temporary manual/simulated payment confirmation. No external charge is made.</p>
     {notice &&
       <p
         role="status"
@@ -141,13 +147,13 @@ export function Membership() {
                   </Link> :
                   <Button
                     className="mt-5 w-full"
-                    disabled={!!pending || busyId === p.id || !p.category?.code}
+                    disabled={busyId === p.id || !p.category?.code}
                     onClick={() => buy(p.id)}
                   >
                     {busyId === p.id
                       ? 'Activating package…'
                       : pending
-                        ? 'Purchase processing'
+                        ? 'Confirm manual payment'
                         : `Activate package · ${Number(p.price).toLocaleString()} MMK`}
                   </Button>}
               </Card>;

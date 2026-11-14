@@ -1,5 +1,6 @@
+import { startPayment } from '../services/paymentFlow';
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -148,6 +149,7 @@ const readable: Record<string, string> = {
   pending: "Unpaid",
   refunded: "Refunded",
   VERIFIED: "Verified",
+  SIMULATED: "Simulated confirmation",
   VERIFIED_PROVIDER: "Provider verified",
   LEGACY_UNVERIFIED: "Needs review",
   PENDING: "Not verified",
@@ -198,6 +200,8 @@ export default function StaffPrivateCourses() {
   const { user } = useAuth();
   const isCoach = user?.role === "coach";
   const [view, setView] = useState("book");
+  const location = useLocation();
+  const focusedBooking = new URLSearchParams(location.search).get('booking');
   const [catalog, setCatalog] = useState<{
     courses: Course[];
     courts: Person[];
@@ -646,7 +650,7 @@ export default function StaffPrivateCourses() {
                   <label>
                     Payment method
                     <input
-                      placeholder="Cash, KPay…"
+                      placeholder="Cash, Manual (simulated)…"
                       value={filters.paymentMethod}
                       onChange={(e) =>
                         setFilters({
@@ -695,7 +699,7 @@ export default function StaffPrivateCourses() {
                   <span />
                 </div>
                 {rows.map((b) => (
-                  <details className="pc-booking-row" key={b.id}>
+                  <details className="pc-booking-row" key={b.id} open={focusedBooking === b.id || undefined}>
                     <summary>
                       <div className="pc-member-cell">
                         <span className="pc-avatar">{avatar(b.user.name)}</span>
@@ -761,6 +765,7 @@ export default function StaffPrivateCourses() {
                         </div>
                       )}
                       <div className="pc-row-actions">
+                        {!isCoach && b.status === 'AWAITING_PAYMENT' && b.paymentStatus === 'pending' && <Button disabled={busy} onClick={async () => { setBusy(true); setError(''); try { await startPayment('/payments/confirm', { resourceType: 'booking', resourceId: b.id }); await load(); } catch (error) { setError(message(error)); } finally { setBusy(false); } }}>Confirm simulated payment</Button>}
                         {b.paymentStatus === "pending" &&
                           [
                             "PENDING_COACH_CONFIRMATION",
@@ -1740,7 +1745,7 @@ function StaffCourseForm({
                   {cash
                     ? `This records ${money(course?.price || 0)} cash collected by ${collectorName} and confirms the session.`
                     : form.paymentSource === "ONLINE"
-                      ? "Online selection keeps the booking unpaid until a successful provider payment is verified. It does not record cash."
+                      ? "This creates an unpaid booking. After coach approval, explicitly confirm the manual/simulated payment from the booking. No external charge is made."
                       : "The coach will accept the request first. The member then has the existing 24-hour payment window."}
                 </p>
               </div>

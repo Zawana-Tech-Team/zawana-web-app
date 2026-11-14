@@ -1,3 +1,4 @@
+import { confirmManualPayment } from "../services/manualPayments.js";
 import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
@@ -10,8 +11,7 @@ import { activateGymEnrollment, cancelGymEnrollment, createGymEnrollment } from 
 import { assertGymSchedule, readGymSchedule } from "../services/gymSessions.js";
 import { gymCheckIn } from "../services/gymCheckIn.js";
 
-type StartPayment = (userId: string, resourceType: string, resourceId: string, amount: number, description: string) => Promise<unknown>;
-export function createGymManagementRoutes(db: PrismaClient, startPayment: StartPayment) {
+export function createGymManagementRoutes(db: PrismaClient) {
   const router = Router(), staff = roles("admin", "owner", "gym_fo"), admin = roles("admin");
   const packagePaths = ["/packages/gym", "/gym/packages"];
   router.get(packagePaths, auth, staff, asyncRoute(async (req: AuthRequest, res) => {
@@ -45,7 +45,7 @@ export function createGymManagementRoutes(db: PrismaClient, startPayment: StartP
   }));
   router.get("/gym/policy", auth, staff, (_req, res) => res.json({
     today: today(), timeZone: process.env.BUSINESS_TIME_ZONE || "Asia/Yangon",
-    paymentMethods: ["KPay", ...(process.env.GYM_ALLOW_CASH_PAYMENTS === "true" ? ["Cash"] : [])],
+    paymentMethods: ["Manual (simulated)", ...(process.env.GYM_ALLOW_CASH_PAYMENTS === "true" ? ["Cash"] : [])],
   }));
   router.post("/gym/members", auth, staff, asyncRoute(async (req: AuthRequest, res) => {
     const b = z.object({ name: z.string().trim().min(2).max(120), email: z.string().trim().email().transform(s => s.toLowerCase()), phone: z.string().trim().min(5).max(30) }).parse(req.body);
@@ -81,22 +81,9 @@ export function createGymManagementRoutes(db: PrismaClient, startPayment: StartP
   }));
   router.post("/gym/enrollments/:id/payment", auth, staff, asyncRoute(async (req: AuthRequest, res) => {
     const id = String(req.params.id);
-    const b = z.object({ method: z.enum(["KPay", "Cash"]), cashReceived: z.literal(true).optional() }).parse(req.body);
-    if (b.method === "Cash") {
-      if (process.env.GYM_ALLOW_CASH_PAYMENTS !== "true") throw gymError("Cash collection is not enabled for Gym.", 403);
-      if (!b.cashReceived) throw gymError("Confirm cash has been received.", 400);
-      const row = await gymTransaction(db, async tx => {
-        const enrollment = await lockEnrollment(tx, id);
-        if (await tx.paymentAttempt.count({ where: { resourceType: "gym_enrollment", resourceId: id, status: { in: ["PENDING", "INITIATING"] }, expiresAt: { gt: new Date() } } }))
-          throw gymError("An online checkout is still active. Wait for it to expire before collecting cash.");
-        return activateGymEnrollment(tx, id, enrollment.totalPrice, "Cash", req.user!.id, req.user!.name);
-      });
-      return res.json({ enrollment: row });
-    }
-    const row = await db.gymEnrollment.findUnique({ where: { id }, include: { members: true } });
-    if (!row) throw gymError("Enrollment not found.", 404);
-    const attempt = await startPayment(row.members[0].userId, "gym_enrollment", id, row.totalPrice, (row.snapshot as { title: string }).title);
-    res.json({ attempt });
+    const b = z.object({ method: z.enum(['Cash', 'Manual (simulated)']), confirmed: z.literal(true), cashReceived: z.literal(true).optional() }).parse(req.body);
+    if (b.method === 'Cash' && !b.cashReceived) throw gymError('Confirm cash received.', 400);
+    res.json(await confirmManualPayment(db, req.user!, 'gym_enrollment', id, b.method));
   }));
   router.post("/gym/enrollments/:id/cancel", auth, staff, asyncRoute(async (req: AuthRequest, res) => {
     const { reason } = z.object({ reason: z.string().trim().min(3).max(500) }).parse(req.body);

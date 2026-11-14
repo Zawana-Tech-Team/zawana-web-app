@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { badmintonSaleFields, badmintonSaleTotals } from '../src/services/badmintonSale.js';
 
 const input = z.object(badmintonSaleFields);
-test('front desk accepts Cash and KPay and defaults existing sales to no discount', () => {
-  for (const paymentMethod of ['Cash', 'KPay']) {
+test('front desk accepts Cash and Manual (simulated) and defaults existing sales to no discount', () => {
+  for (const paymentMethod of ['Cash', 'Manual (simulated)']) {
     assert.deepEqual(input.parse({ paymentMethod }), { paymentMethod, discountPercent: 0 });
   }
   assert.throws(() => input.parse({ paymentMethod: 'Card' }));

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
@@ -8,7 +9,7 @@ import { createServer } from 'node:net';
 
 const require = createRequire(new URL('../tooling/gym/package.json', import.meta.url));
 const { chromium } = require('playwright');
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = fileURLToPath(new URL('..', import.meta.url));
 const temp = mkdtempSync(join(tmpdir(), 'zawana-court-browser-'));
 const artifacts = process.env.COURT_QA_ARTIFACT_DIR || join(temp, 'artifacts');
 mkdirSync(artifacts, { recursive: true });
@@ -40,17 +41,17 @@ const ready = async url => {
   throw new Error(`Server did not become ready: ${logs}`);
 };
 try {
-  execFileSync(join(root, 'backend/node_modules/.bin/prisma'), ['migrate', 'deploy'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
-  execFileSync(join(root, 'backend/node_modules/.bin/tsx'), ['tests/court-browser-fixture.ts'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  execFileSync(process.execPath, ['node_modules/prisma/build/index.js', 'migrate', 'deploy'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  execFileSync(process.execPath, ['--import', 'tsx', 'tests/court-browser-fixture.ts'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
   const data = JSON.parse(readFileSync(fixture, 'utf8'));
-  start(join(root, 'backend/node_modules/.bin/tsx'), ['src/server.ts'], join(root, 'backend'));
-  start(join(root, 'node_modules/.bin/vite'), ['--host', '127.0.0.1', '--port', String(uiPort), '--strictPort'], root);
+  start(process.execPath, ['--import', 'tsx', 'src/server.ts'], join(root, 'backend'));
+  start(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(uiPort), '--strictPort'], root);
   await Promise.all([ready(`${api}/health`), ready(ui)]);
   const request = async (path, { token, body, method = 'GET' } = {}) => fetch(`${api}${path}`, {
     method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {})
   });
-  const chrome = process.env.COURT_BROWSER_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-  browser = await chromium.launch({ headless: true, ...(existsSync(chrome) ? { executablePath: chrome } : {}) });
+  const chrome = process.env.COURT_BROWSER_EXECUTABLE_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
+  browser = await chromium.launch({ headless: true, ...(chrome && existsSync(chrome) ? { executablePath: chrome } : {}) });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, reducedMotion: 'no-preference' });
   await context.addInitScript(token => localStorage.setItem('zawana_access_token', token), data.token);
   const page = await context.newPage();
@@ -84,7 +85,7 @@ try {
   await page.screenshot({ path: join(artifacts, 'court-sessions-desktop.png'), fullPage: true });
   assert.equal(await page.locator('#booking-summary').getByText('3 sessions', { exact: true }).count(), 1);
   const response = page.waitForResponse(r => r.url().endsWith('/bookings') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Confirm all bookings', exact: true }).click();
+  await page.getByRole('button', { name: 'Book & record payment', exact: true }).click();
   const confirmed = await response;
   assert.equal(confirmed.status(), 201, await confirmed.text());
   const payload = confirmed.request().postDataJSON();
@@ -94,6 +95,8 @@ try {
   await page.getByRole('heading', { name: 'Your court time is secured' }).waitFor();
   const bookings = await (await request('/bookings?page=1&limit=20', { token: data.token })).json();
   assert.equal(bookings.data.length, 3);
+  assert.ok(bookings.data.every(booking => booking.paymentStatus === 'paid'));
+  assert.equal(await page.getByRole('button', { name: 'Confirm manual payment', exact: true }).count(), 0);
   console.log('PASS Animated two-step flow → two dates and three times → unchanged booking API → persisted sessions');
   await page.getByRole('button', { name: 'Book more court time', exact: true }).click();
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -114,5 +117,6 @@ try {
 } finally {
   await browser?.close();
   for (const child of children) child.kill('SIGTERM');
-  rmSync(temp, { recursive: true, force: true });
+  if (!temp.startsWith(join(tmpdir(), 'zawana-court-browser-'))) throw new Error('Unexpected QA cleanup path');
+  // Keep the isolated database/screenshots for review; Windows may still be releasing server file handles.
 }

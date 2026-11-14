@@ -49,7 +49,7 @@ export function AuthShell({ title, children }: { title: string; children: ReactN
         <section className="auth-form-panel flex min-h-screen items-center justify-center px-5 py-8 sm:px-8 md:py-10">
           <div className="w-full max-w-md">
             <div className="mb-8 flex items-center justify-between gap-3 lg:hidden">
-              <Logo />
+              <Logo variant="brand" />
               <span className="text-xs font-medium text-zawana-500">Member access</span>
             </div>
             <div className="mb-4 flex justify-end">

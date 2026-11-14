@@ -37,6 +37,7 @@ const burmese: Record<string, string> = {
   'Member access': 'အဖွဲ့ဝင်ဝင်ရောက်ရန်',
   'Member space': 'အဖွဲ့ဝင်ဧရိယာ',
   'MEMBER SPACE': 'အဖွဲ့ဝင်ဧရိယာ',
+  'Member Portal': 'အဖွဲ့ဝင် ပေါ်တယ်',
   'Team member': 'အဖွဲ့ဝင်',
   'Expand sidebar': 'ဘေးဘားချဲ့ရန်',
   'Collapse sidebar': 'ဘေးဘားခေါက်ရန်',

@@ -59,9 +59,7 @@ const AdminTable = lazy(() =>
 const GymCheckIn = lazy(() =>
   import('./pages/GymCheckIn').then(module => ({ default: module.GymCheckIn }))
 );
-const ReviveClinicFO = lazy(() =>
-  import('./pages/ReviveClinicFO').then(module => ({ default: module.ReviveClinicFO }))
-);
+
 const OperationsPage = lazy(() => import('./pages/Operations'));
 const AdminManagement = lazy(() =>
   import('./pages/AdminManagement').then(module => ({ default: module.AdminManagement }))
@@ -572,7 +570,7 @@ export default function App() {
         path="/legacy/front-office/revive-clinic"
         element={
           <Guard role="clinic_fo">
-            <ReviveClinicFO />
+            <Navigate to="/clinic-fo/appointments" replace />
           </Guard>
         }
       />

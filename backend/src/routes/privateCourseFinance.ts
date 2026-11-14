@@ -28,7 +28,7 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
   });
   r.get("/bookings", asyncRoute(async (req: AuthRequest, res) => {
     await expire();
-    res.json(await db.booking.findMany({ where: bookingScope(req.user!), include: bookingIncludes,
+    res.json(await db.booking.findMany({ where: { ...bookingScope(req.user!), ...(req.query.date ? { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(req.query.date) } : {}) }, include: bookingIncludes,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 300 }));
   }));
   r.get("/bookings/:id", asyncRoute(async (req: AuthRequest, res) => {
@@ -457,7 +457,7 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
                   ? "UNPAID"
                   : "LEGACY_UNKNOWN"),
             method: p?.paymentMethod || verified?.provider || null,
-            verificationStatus: p?.verifiedAt
+            verificationStatus: p?.paymentSource === "SIMULATED" ? "SIMULATED" : p?.verifiedAt
               ? "VERIFIED"
               : verified
                 ? "VERIFIED_PROVIDER"

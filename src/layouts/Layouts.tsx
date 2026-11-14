@@ -312,8 +312,11 @@ export function AppLayout({
             >
               <Menu size={20} />
             </button>
-            <div className="lg:hidden">
-              <Logo compact />
+            <div className="min-w-0 lg:hidden">
+              {role === 'member' ? <>
+                <p className="truncate text-[10px] font-bold uppercase tracking-[.16em] text-zawana-accent">{t('MEMBER SPACE')}</p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-zawana-950">{t('Member Portal')}</p>
+              </> : <Logo compact />}
             </div>
             <div className="hidden text-xs font-semibold text-zawana-500 lg:block">
               {t(
@@ -331,7 +334,7 @@ export function AppLayout({
               <NavLink
                 to="/profile"
                 aria-label={t('Open profile')}
-                className="grid h-9 w-9 place-items-center rounded-xl border border-zawana-border bg-white text-xs font-bold text-zawana-accent transition hover:bg-zawana-gold-soft"
+                className="hidden h-9 w-9 place-items-center rounded-xl border border-zawana-border bg-white text-xs font-bold text-zawana-accent transition hover:bg-zawana-gold-soft sm:grid"
               >
                 {initials(user?.name)}
               </NavLink>
