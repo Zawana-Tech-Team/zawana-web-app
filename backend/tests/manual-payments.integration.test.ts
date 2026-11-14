@@ -144,6 +144,34 @@ test('manual confirmations across services commit one linked receipt and never c
     const cashKey = randomUUID(); const cash = await request('/cafe/orders', { ...cafeInput, paymentMethod: 'CASH', confirmed: true }, cashier.id, 201, cashKey);
     assert.equal(cash.order.paymentStatus, 'paid'); assert.equal((await request('/cafe/orders', { ...cafeInput, paymentMethod: 'CASH', confirmed: true }, cashier.id, 201, cashKey)).order.id, cash.order.id);
   });
+  await t.test('Badminton FO ledger filters all categories, preserves legacy methods and scopes records', async () => {
+    const fo = await user('badminton_fo');
+    const weekly = await db.booking.create({ data: { userId: member.id, code: randomUUID(), kind: 'class', title: 'QA Weekly', date, time: '3:00 PM — 4:00 PM', price: 12000, location: 'Arena', status: 'CONFIRMED' } });
+    await confirm('booking', weekly.id, fo.id);
+    const weeklyReceipt = await db.transaction.findUniqueOrThrow({ where: { resourceType_resourceId: { resourceType: 'booking', resourceId: weekly.id } } });
+    const legacy = await db.transaction.create({ data: { customer: 'QA historical online', date, business: 'Badminton', item: 'Package · QA historical', amount: 3000, discount: 0, tax: 0, finalAmount: 3000, paymentMethod: 'KPay', staff: 'Historical cashier', status: 'refunded' } });
+    await db.transaction.create({ data: { customer: 'QA failed', date, business: 'Badminton', item: 'Package · QA failed', amount: 1000, discount: 0, tax: 0, finalAmount: 1000, paymentMethod: 'Cash', staff: 'QA', status: 'failed' } });
+    for (const category of ['Court Rental', 'Private Course', 'Badminton Package', 'Weekly Class']) {
+      const result = await request(`/transactions?business=Badminton&page=1&category=${encodeURIComponent(category)}`, undefined, fo.id);
+      assert.ok(result.data.length > 0, category);
+      assert.ok(result.data.every((row: { category: string }) => row.category === category));
+      if (category === 'Weekly Class') assert.ok(result.data.some((row: { id: string }) => row.id === weeklyReceipt.id));
+    }
+    const history = await request(`/transactions?page=1&paymentMethod=Online%20Payment&status=refunded&from=${date}&to=${date}&q=historical`, undefined, fo.id);
+    assert.equal(history.data.length, 1); assert.equal(history.data[0].id, legacy.id); assert.equal(history.data[0].paymentMethod, 'KPay');
+    const failed = await request('/transactions?page=1&status=failed&paymentMethod=Cash', undefined, fo.id);
+    assert.equal(failed.data.length, 1); assert.equal(failed.data[0].customer, 'QA failed');
+    for (const sort of ['amount_asc', 'amount_desc']) {
+      const result = await request(`/transactions?page=1&sort=${sort}`, undefined, fo.id);
+      const amounts = result.data.map((row: { finalAmount: number }) => row.finalAmount);
+      assert.deepEqual(amounts, [...amounts].sort((a, b) => sort === 'amount_asc' ? a - b : b - a));
+      assert.ok(result.data.every((row: { business: string }) => row.business === 'Badminton'));
+    }
+    await request('/transactions?page=1&business=Gym', undefined, fo.id, 403);
+    await request('/transactions?page=1&category=unknown', undefined, fo.id, 400);
+    await request('/transactions?page=1&from=2027-02-01&to=2026-01-01', undefined, fo.id, 400);
+    assert.equal((await db.transaction.findUniqueOrThrow({ where: { id: legacy.id } })).paymentMethod, 'KPay');
+  });
   await t.test('gateway retired, histories and session re-login retain confirmed payments', async () => {
     await request('/payments/kpay/webhook', { status: 'PAID' }, member.id, 410);
     assert.equal(await db.paymentAttempt.count(), 0);

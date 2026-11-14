@@ -649,8 +649,8 @@ export default function StaffPrivateCourses() {
                   </label>
                   <label>
                     Payment method
-                    <input
-                      placeholder="Cash, Manual (simulated)…"
+                    <Select
+                      aria-label="Course payment method"
                       value={filters.paymentMethod}
                       onChange={(e) =>
                         setFilters({
@@ -658,7 +658,7 @@ export default function StaffPrivateCourses() {
                           paymentMethod: e.target.value,
                         })
                       }
-                    />
+                    ><option value="">All payment methods</option><option value="Cash">Cash</option><option value="Online Payment">Online Payment</option></Select>
                   </label>
                 </div>
                 <button

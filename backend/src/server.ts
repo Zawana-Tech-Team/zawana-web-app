@@ -1,3 +1,4 @@
+import { badmintonCategories, categoryWhere, presentTransactions, transactionOrder, onlinePaymentMethods } from './services/transactionPresentation.js';
 import { paymentOperation, operationMetadata } from "./middleware/paymentOperation.js";
 import { requestContextMiddleware } from "./utils/requestContext.js";
 import { createCourtDeskRouter } from './routes/courtDesk.js';
@@ -3451,6 +3452,21 @@ app.get(
         return res.status(400).json({ message: "Choose a valid business filter." });
       where.business = String(req.query.business);
     }
+    const scope = ({ badminton_fo: 'Badminton', gym_fo: 'Gym', clinic_fo: 'Clinic', store_fo: 'Store', cafe_fo: 'Cafe' } as Record<string, string>)[req.user!.role];
+    if (scope) {
+      if (where.business && where.business !== scope) return res.status(403).json({ message: 'This business is outside your workspace.' });
+      where.business = scope;
+    }
+    const category = String(req.query.category || '');
+    if (category && !badmintonCategories.includes(category as typeof badmintonCategories[number])) return res.status(400).json({ message: 'Choose a valid transaction category.' });
+    if (category) {
+      where.AND = [...(where.AND || []), { business: 'Badminton' }, await categoryWhere(prisma, category)];
+    }
+    const sort = String(req.query.sort || 'newest');
+    if (!['newest', 'oldest', 'amount_asc', 'amount_desc'].includes(sort)) return res.status(400).json({ message: 'Choose a valid transaction sort.' });
+    const orderBy = transactionOrder(sort);
+    for (const key of ['from', 'to']) if (req.query[key] && !/^\d{4}-\d{2}-\d{2}$/.test(String(req.query[key]))) return res.status(400).json({ message: 'Use YYYY-MM-DD dates.' });
+    if (req.query.from && req.query.to && String(req.query.from) > String(req.query.to)) return res.status(400).json({ message: 'Start date must be before end date.' });
     if (req.query.from || req.query.to)
       where.date = {
         ...(req.query.from ? { gte: String(req.query.from) } : {}),
@@ -3458,7 +3474,12 @@ app.get(
       };
     if (req.query.date) where.date = String(req.query.date);
     if (req.query.status) where.status = String(req.query.status);
-    if (req.query.paymentMethod) where.paymentMethod = String(req.query.paymentMethod);
+    if (req.query.paymentMethod) {
+      const method = String(req.query.paymentMethod);
+      // Presentation aliases only. Original methods remain intact on every receipt.
+      where.paymentMethod = method === 'Cash' ? { in: ['Cash', 'CASH'] }
+        : method === 'Online Payment' ? { in: onlinePaymentMethods } : method;
+    }
     if (req.query.item) where.item = { contains: String(req.query.item).trim() };
     const q = String(req.query.q || "").trim();
     if (q)
@@ -3470,13 +3491,13 @@ app.get(
       ];
     if (!hasPage)
       return res.json(
-        await prisma.transaction.findMany({ where, orderBy: { createdAt: "desc" }, take: 100 })
+        await presentTransactions(prisma, await prisma.transaction.findMany({ where, orderBy, take: 100 }))
       );
     const [total, data, summary] = await Promise.all([
       prisma.transaction.count({ where }),
       prisma.transaction.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit
       }),
@@ -3487,7 +3508,7 @@ app.get(
     ]);
     const totalPages = Math.ceil(total / limit);
     res.json({
-      data,
+      data: await presentTransactions(prisma, data),
       pagination: {
         page,
         limit,

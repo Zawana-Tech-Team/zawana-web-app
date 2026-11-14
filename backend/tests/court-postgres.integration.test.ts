@@ -53,8 +53,8 @@ test(
       port = 19000 + Math.floor(Math.random() * 1000),
       origin = `http://127.0.0.1:${port}`;
     const child = spawn(
-      new URL("../node_modules/.bin/tsx", import.meta.url).pathname,
-      ["src/server.ts"],
+      process.execPath,
+      ["--import", "tsx", "src/server.ts"],
       {
         cwd: new URL("..", import.meta.url),
         env: {
@@ -179,16 +179,21 @@ test(
         assert.equal((await book("7:00 PM — 8:00 PM")).status, 201);
         const cancelled = await book("8:00 AM — 9:00 AM");
         assert.equal(cancelled.status, 201);
-        assert.equal(
-          (
-            await request(
-              `/bookings/${cancelled.value.booking.id}/status`,
-              "PATCH",
-              { status: "cancelled" },
-            )
-          ).status,
-          200,
-        );
+        const bookingId = cancelled.value.booking.id;
+        assert.equal(cancelled.value.booking.paymentStatus, "paid");
+        const receipt = await db.transaction.findUniqueOrThrow({ where: { resourceType_resourceId: { resourceType: "booking", resourceId: bookingId } } });
+        // Paid cancellations require staff review and must retain their original receipt.
+        assert.equal((await request(`/bookings/${bookingId}/status`, "PATCH", { status: "cancelled" })).status, 409);
+        const cancellation = await request(`/court-booking/bookings/${bookingId}/cancellation-requests`, "POST", { reason: "Customer requested cancellation" });
+        assert.equal(cancellation.status, 201, JSON.stringify(cancellation.value));
+        assert.equal(cancellation.value.status, "requested");
+        assert.equal((await book("8:00 AM \u2014 9:00 AM")).status, 409);
+        const approved = await request(`/court-booking/bookings/${bookingId}/cancellation-requests/${cancellation.value.id}/review`, "POST", { approve: true, reason: "Staff confirmed cancellation" }, staffToken);
+        assert.equal(approved.status, 200, JSON.stringify(approved.value));
+        const stored = await db.booking.findUniqueOrThrow({ where: { id: bookingId } });
+        assert.equal(stored.status, "cancelled"); assert.equal(stored.paymentStatus, "paid");
+        assert.deepEqual(await db.transaction.findUniqueOrThrow({ where: { id: receipt.id } }), receipt);
+        assert.equal((await db.bookingCancellationRequest.findUniqueOrThrow({ where: { id: cancellation.value.id } })).refundStatus, "manual_review");
         assert.equal((await book("8:00 AM — 9:00 AM")).status, 201);
       },
     );

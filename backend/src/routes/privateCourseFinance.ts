@@ -1,3 +1,4 @@
+import { paymentMethodMatches } from '../services/transactionPresentation.js';
 import { Router } from "express";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -477,7 +478,7 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
         .filter(
           (b) =>
             (!f.paymentSource || b.source === f.paymentSource) &&
-            (!f.paymentMethod || b.method === f.paymentMethod),
+            (!f.paymentMethod || paymentMethodMatches(b.method, f.paymentMethod)),
         );
       const sum = (predicate: (b: (typeof rows)[number]) => boolean) =>
         rows.filter(predicate).reduce((s, b) => s + b.price, 0);

@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
@@ -31,8 +32,8 @@ test('Yangon rescheduling policy includes exactly 24 hours and confirmed status 
 test('court changes and attendance corrections persist atomically in an isolated migrated database', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'zawana-sop-')), file = join(dir, 'test.db');
   const sqlite = new DatabaseSync(file);
-  const schema = execFileSync(new URL('../node_modules/.bin/prisma', import.meta.url).pathname,
-    ['migrate', 'diff', '--from-empty', '--to-schema-datamodel', new URL('../prisma/schema.prisma', import.meta.url).pathname, '--script'], { encoding: 'utf8' });
+  const schema = execFileSync(process.execPath,
+    [fileURLToPath(new URL('../node_modules/prisma/build/index.js', import.meta.url)), 'migrate', 'diff', '--from-empty', '--to-schema-datamodel', fileURLToPath(new URL('../prisma/schema.prisma', import.meta.url)), '--script'], { encoding: 'utf8' });
   sqlite.exec(schema);
   // Exercise the forward migration against the previous table shapes, preserving existing data.
   sqlite.exec(`DROP TABLE BookingChangeHistory; DROP TABLE BookingCancellationRequest; DROP TABLE AttendanceModification;
@@ -62,7 +63,9 @@ test('court changes and attendance corrections persist atomically in an isolated
     const slot = (hour: number, courtId = courts[0].id, date = day) => ({ courtId, date, time: formatRange(hour * 60, (hour + 1) * 60) });
     const result = await createCourtBooking(db, member, { bookings: [slot(8), slot(9, courts[1].id, nextDay)] });
     const [booking, sibling] = result.bookings;
-    await db.booking.update({ where: { id: booking.id }, data: { paymentStatus: 'paid' } });
+    assert.equal(booking.paymentStatus, 'paid');
+    const originalReceipt = await db.transaction.findUniqueOrThrow({ where: { resourceType_resourceId: { resourceType: 'booking', resourceId: booking.id } } });
+    const rescheduleHistory = { bookingId: booking.id, action: 'rescheduled' };
     await t.test('staff court feed is role-restricted, court-only and omits user secrets', async () => {
       await db.booking.create({ data: { code: 'NON-COURT-FEED', kind: 'class', title: 'Excluded class', userId: member.id, date: day, time: formatRange(12 * 60, 13 * 60), location: 'ZAWANA', price: 10000 } });
       for (const denied of [member, other, coach, clinic]) assert.equal((await request(denied, '')).status, 403);
@@ -82,7 +85,8 @@ test('court changes and attendance corrections persist atomically in an isolated
       assert.equal(moved.status, 200, JSON.stringify(moved.value)); assert.equal(moved.value.paymentStatus, 'paid'); assert.equal(moved.value.code, booking.code);
       assert.deepEqual(await db.booking.findUniqueOrThrow({ where: { id: sibling.id } }), sibling, 'Multi-court/multi-day sibling is untouched');
       const calendar = await courtAvailability(db, day); assert.equal(calendar.slots.find(s => s.courtId === courts[0].id && s.startMinute === 480)!.available, true);
-      assert.equal(await db.bookingChangeHistory.count({ where: { bookingId: booking.id } }), 1);
+      assert.equal(await db.bookingChangeHistory.count({ where: rescheduleHistory }), 1);
+      assert.deepEqual(await db.transaction.findUniqueOrThrow({ where: { id: originalReceipt.id } }), originalReceipt, 'Rescheduling must preserve the original payment receipt');
       assert.equal((await request(member, `/${booking.id}/reschedule`, { ...slot(11), revision: quote.value.revision, reason: 'Stale confirmation' })).value.code, 'CONCURRENT_BOOKING_MODIFICATION');
     });
     await t.test('unavailable destinations, holidays, blocks, maintenance and price adjustments preserve the original', async () => {
@@ -91,7 +95,7 @@ test('court changes and attendance corrections persist atomically in an isolated
         const detail = await courtChangeDetail(db, booking.id, member);
         await assert.rejects(rescheduleCourt(db, booking.id, member, target, detail.revision, 'Try alternative slot'), (e: any) => e.code === code);
         assert.deepEqual(await db.booking.findUniqueOrThrow({ where: { id: booking.id } }), original);
-        assert.equal(await db.bookingChangeHistory.count({ where: { bookingId: booking.id } }), 1);
+        assert.equal(await db.bookingChangeHistory.count({ where: rescheduleHistory }), 1);
       };
       await createCourtBooking(db, other, { bookings: [slot(11)] }); await assertFailure(slot(11), 'COURT_UNAVAILABLE');
       await db.courtBlock.create({ data: { courtId: courts[0].id, date: day, start: '12:00', end: '13:00', title: 'Class' } }); await assertFailure(slot(12), 'COURT_UNAVAILABLE');
@@ -142,6 +146,7 @@ test('court changes and attendance corrections persist atomically in an isolated
     });
     await t.test('cancellation request, rejection, approval, repeat review and payment separation', async () => {
       const paid = await db.booking.create({ data: { ...slot(8, courts[0].id, nextDay), code: 'CANCEL-PAID', title: 'Paid', kind: 'court', userId: member.id, location: 'Arena', price: 20000, status: 'CONFIRMED', paymentStatus: 'paid' } });
+      const receiptsBefore = await db.transaction.findMany({ orderBy: { id: 'asc' } });
       const first = await requestCourtCancellation(db, paid.id, member, 'Cannot attend');
       assert.equal(first.status, 'requested'); assert.equal((await db.booking.findUniqueOrThrow({ where: { id: paid.id } })).status, 'CONFIRMED');
       assert.equal((await requestCourtCancellation(db, paid.id, member, 'Retry request')).id, first.id);
@@ -151,9 +156,10 @@ test('court changes and attendance corrections persist atomically in an isolated
       const second = await requestCourtCancellation(db, paid.id, member, 'Confirmed cancellation request');
       await reviewCourtCancellation(db, paid.id, second.id, admin, true, 'Customer confirmed cancellation');
       const changed = await db.booking.findUniqueOrThrow({ where: { id: paid.id } }); assert.equal(changed.status, 'cancelled'); assert.equal(changed.paymentStatus, 'paid');
-      assert.equal(await db.transaction.count(), 0); assert.equal((await db.bookingCancellationRequest.findUniqueOrThrow({ where: { id: second.id } })).refundStatus, 'manual_review');
+      assert.deepEqual(await db.transaction.findMany({ orderBy: { id: 'asc' } }), receiptsBefore, 'Cancellation must not create, refund or alter payment transactions'); assert.equal((await db.bookingCancellationRequest.findUniqueOrThrow({ where: { id: second.id } })).refundStatus, 'manual_review');
       await assert.rejects(quoteCourtChange(db, paid.id, member, slot(8)), (e: any) => e.code === 'BOOKING_NOT_ELIGIBLE');
-      const unpaid = await requestCourtCancellation(db, sibling.id, member, 'Cancel other segment'); assert.equal(unpaid.status, 'completed'); assert.equal(unpaid.refundStatus, 'not_applicable');
+      const unpaid = await db.booking.create({ data: { ...slot(10, courts[1].id, nextDay), code: 'CANCEL-LEGACY-UNPAID', title: 'Legacy unpaid', kind: 'court', userId: member.id, location: 'Arena', price: 20000, status: 'CONFIRMED', paymentStatus: 'pending' } });
+      const cancelledUnpaid = await requestCourtCancellation(db, unpaid.id, member, 'Cancel older unpaid segment'); assert.equal(cancelledUnpaid.status, 'completed'); assert.equal(cancelledUnpaid.refundStatus, 'not_applicable');
     });
     await t.test('package debit, concurrent final session, correction restoration and expiry history', async () => {
       const pkg = await db.badmintonEnrollment.create({ data: { studentId: member.id, userId: member.id, studentName: member.name, phone: '', categoryCode: 'FOUNDATION', packageId: 'test-original-package', packageName: 'Original visits', startDate: today(), expiryDate: nextDay, sessionsTotal: 1, sessionsRemaining: 1 } });

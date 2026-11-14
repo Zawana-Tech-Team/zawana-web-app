@@ -101,7 +101,6 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     label: "Badminton Front Office",
     eyebrow: "Court Operations",
     items: [
-      { to: "/badminton-fo/course-finance", label: "Course Bookings & Finance", icon: CalendarDays },
       { to: "/badminton-fo", label: "Dashboard", icon: LayoutDashboard },
       { to: "/badminton-fo/attendance", label: "Attendance", icon: CalendarDays },
       {
@@ -112,11 +111,6 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
       {
         to: "/badminton-fo/courts",
         label: "Court Rental Desk",
-        icon: CalendarDays,
-      },
-      {
-        to: "/badminton-fo/bookings",
-        label: "Court Bookings",
         icon: CalendarDays,
       },
       {

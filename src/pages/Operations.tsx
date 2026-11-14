@@ -1,3 +1,4 @@
+import BadmintonTransactions from '../components/badminton/BadmintonTransactions';
 import { usePaymentRevision } from '../hooks/usePaymentRevision';
 import { startPayment } from '../services/paymentFlow';
 import { BadmintonCategoryField, BadmintonCategorySettings, categoryLabel } from '../components/BadmintonCategoryField';
@@ -542,7 +543,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   if (isBad && view === 'transactions')
     return <Page title={title} eyebrow="Badminton FO">
-      <Transactions business="Badminton" />
+      <BadmintonTransactions />
     </Page>;
 
   if (isBad && view === 'active-packages')
@@ -1013,7 +1014,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-bold">Payment method
               <Select className="mt-1 w-full rounded-xl border p-3" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                <option value="Cash">Cash</option><option value="Manual (simulated)">Manual (simulated)</option>
+                <option value="Cash">Cash</option><option value="Manual (simulated)">Online Payment</option>
               </Select>
             </label>
             <label className="text-sm font-bold">Discount (%)
@@ -1123,7 +1124,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
       <Card className="overflow-hidden lg:sticky lg:top-6">
         <div className="border-b border-zawana-border p-5 sm:p-6"><p className="text-xs font-medium uppercase tracking-[.14em] text-zawana-500">Payment summary</p><h3 className="mt-3 text-lg font-semibold">{salePackage?.title || 'Select a package'}</h3><p className="mt-1 truncate text-xs text-zawana-500">{customerType === 'member' ? selectedStudent?.name || 'Select a customer to continue' : walkIn.name || 'Walk-in customer'}</p></div>
         <div className="space-y-6 p-5 sm:p-6">
-          <fieldset disabled={busy}><legend className="mb-2 text-xs font-medium text-zawana-500">Payment method</legend><div className="grid grid-cols-2 gap-2">{['Cash', 'Manual (simulated)'].map(method => <button key={method} type="button" aria-pressed={paymentMethod === method} onClick={() => setPaymentMethod(method)} className={`min-h-11 rounded-xl border text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${paymentMethod === method ? 'border-zawana-950 bg-zawana-950 text-white' : 'border-zawana-border text-zawana-500 hover:border-zawana-500'}`}>{method}</button>)}</div></fieldset>
+          <fieldset disabled={busy}><legend className="mb-2 text-xs font-medium text-zawana-500">Payment method</legend><div className="grid grid-cols-2 gap-2">{['Cash', 'Manual (simulated)'].map(method => <button key={method} type="button" aria-pressed={paymentMethod === method} onClick={() => setPaymentMethod(method)} className={`min-h-11 rounded-xl border text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${paymentMethod === method ? 'border-zawana-950 bg-zawana-950 text-white' : 'border-zawana-border text-zawana-500 hover:border-zawana-500'}`}>{method === 'Cash' ? 'Cash' : 'Online Payment'}</button>)}</div></fieldset>
           <label className="block text-xs font-medium text-zawana-500">Discount (%)<div className="relative mt-2"><input disabled={busy} type="number" min="0" max="100" step="0.01" className="w-full rounded-xl border !pr-10 text-sm text-zawana-950" value={discountPercent} onChange={e => setDiscountPercent(e.target.value)} aria-invalid={!validDiscount} aria-describedby={!validDiscount ? 'activation-discount-error' : undefined} /><span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-zawana-500">%</span></div></label>
           {!validDiscount && <p id="activation-discount-error" role="alert" className="text-xs text-red-700">Enter a discount from 0 to 100%.</p>}
           <dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt className="text-zawana-500">Package price</dt><dd>{money(salePackage?.price || 0)}</dd></div><div className="flex justify-between gap-3"><dt className="text-zawana-500">Discount{validDiscount && percent > 0 ? ` (${percent}%)` : ''}</dt><dd className={discountAmount > 0 ? 'text-emerald-700' : ''}>−{money(discountAmount)}</dd></div></dl>
