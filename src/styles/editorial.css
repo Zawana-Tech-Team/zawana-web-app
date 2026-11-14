@@ -17,10 +17,13 @@
 .editorial-section-heading h2 { margin: 10px 0 0; font-size: clamp(29px, 3.3vw, 48px); line-height: 1.15; letter-spacing: -.045em; font-weight: 650; }
 .editorial-section-note { color: #686962; font-size: 12px; }
 .editorial-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; padding-block: 24px; border-top: 1px solid #16181924; border-bottom: 1px solid #16181924; margin-bottom: 28px; }
-.editorial-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.editorial-filters button { border: 1px solid transparent; padding: 11px 16px; background: transparent; color: #55574f; cursor: pointer; font-size: 11px; border-radius: 2px; }
-.editorial-filters button:hover { border-color: #16181933; }
-.editorial-filters button[aria-pressed='true'] { background: #161819; color: #f3f1ea; }
+.editorial-filters { display: flex; max-width: 100%; overflow-x: auto; gap: 8px; scrollbar-width: thin; }
+.editorial-filters button { position: relative; flex-shrink: 0; min-height: 44px; border: 0; padding: 11px 16px; background: transparent; color: #55574f; cursor: pointer; font-size: 11px; border-radius: 0; white-space: nowrap; transition: color 160ms ease; }
+.editorial-filters button::after { content: ''; position: absolute; inset-inline: 16px; bottom: 0; height: 2px; background: var(--public-gold); transform: scaleX(0); transition: transform 160ms ease; }
+.editorial-filters button:hover { color: #161819; }
+.editorial-filters button[aria-pressed='true'] { color: #161819; font-weight: 600; }
+.editorial-filters button[aria-pressed='true']::after { transform: scaleX(1); }
+.editorial-filters button:focus-visible { outline: 2px solid #8a782a; outline-offset: -2px; }
 .editorial-search { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #76766c; padding: 12px 0; min-width: 230px; }
 .editorial-search input { font: inherit; font-size: 12px; background: transparent; border: 0; outline: 0; color: #161819; width: 100%; min-width: 0; }
 .editorial-search:focus-within { outline: 2px solid #8a782a; outline-offset: 4px; }

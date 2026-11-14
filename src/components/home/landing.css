@@ -1493,3 +1493,32 @@
   .public-brand__logo { width: 68px; height: 90px; }
   .public-brand .public-brand__logo img { width: 112px; height: 112px; left: -22px; top: -11px; }
 }
+
+/* The home header's proportions belong to every public destination. */
+.zawana-public > .public-header--premium { min-height: 104px; padding-block: 8px; }
+.public-header--premium .public-brand__logo { width: 66px; height: 88px; }
+.public-header--premium .public-brand__logo img { width: 110px; height: 110px; left: -22px; top: -11px; }
+.public-header--premium .public-brand > span { font-size: 8px; }
+.public-header--premium .public-header__book { background: var(--public-gold); border-radius: 2px; }
+.public-header--premium .public-header__actions > a,
+.public-header--premium .public-desktop-nav a { font-size: 10px; }
+.public-header--premium .public-desktop-nav a { position: relative; display: inline-flex; min-height: 44px; align-items: center; }
+.public-header--premium .public-desktop-nav a::after { content: ''; position: absolute; inset-inline: 0; bottom: 6px; height: 1px; background: var(--public-gold); transform: scaleX(0); transform-origin: left; transition: transform 180ms ease; }
+.public-header--premium .public-desktop-nav a[aria-current='page']::after { transform: scaleX(1); }
+.public-header--premium .public-desktop-nav a:focus-visible,
+.public-mobile-menu nav a:focus-visible { outline: 2px solid var(--public-gold); outline-offset: 4px; }
+.public-mobile-menu nav a[aria-current='page'] { color: var(--public-gold); }
+.public-mobile-menu nav a[aria-current='page'] svg { opacity: 1; }
+@media (max-width: 767px) {
+  .zawana-public > .public-header--premium { min-height: 88px; padding: 4px 20px; }
+  .public-header--premium .public-brand__logo { width: 60px; height: 80px; }
+  .public-header--premium .public-brand__logo img { width: 100px; height: 100px; left: -20px; top: -10px; }
+}
+@media (max-height: 700px) and (min-width: 600px) {
+  .zawana-public > .public-header--premium { min-height: 73px; padding: 4px 24px; }
+  .public-header--premium .public-brand__logo { width: 48px; height: 64px; }
+  .public-header--premium .public-brand__logo img { width: 80px; height: 80px; left: -16px; top: -8px; }
+  .public-header--premium .public-brand > span { display: none; }
+  .public-header--premium .public-header__actions { gap: 16px; }
+  .public-header--premium .public-header__book { display: inline-flex !important; }
+}

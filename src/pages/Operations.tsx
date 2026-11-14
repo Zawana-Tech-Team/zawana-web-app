@@ -1,4 +1,5 @@
 import BadmintonTransactions from '../components/badminton/BadmintonTransactions';
+import BadmintonNotifications from '../components/badminton/BadmintonNotifications';
 import { usePaymentRevision } from '../hooks/usePaymentRevision';
 import { startPayment } from '../services/paymentFlow';
 import { BadmintonCategoryField, BadmintonCategorySettings, categoryLabel } from '../components/BadmintonCategoryField';
@@ -405,7 +406,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   if (view === 'notifications')
     return <Page title={title} eyebrow={role.replace('_', ' ')}>
-      <NotificationCenter role={role} />
+      {role === 'badminton_fo' ? <BadmintonNotifications /> : <NotificationCenter role={role} />}
     </Page>;
 
   if ((isAdmin || role === 'owner') && view === 'dashboard')

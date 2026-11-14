@@ -51,6 +51,7 @@ export function PublicNavigation() {
   useEffect(() => {
     if (!menuPresent || !dialog.current) return;
     const element = dialog.current;
+    const menuTrigger = trigger.current;
     const scrollY = window.scrollY;
     const openedOnPath = currentPath.current;
     const bodyStyle = {
@@ -94,7 +95,7 @@ export function PublicNavigation() {
       element.close();
       Object.assign(document.body.style, bodyStyle);
       window.scrollTo({ top: openedOnPath === currentPath.current ? scrollY : 0, behavior: 'instant' });
-      trigger.current?.focus({ preventScroll: true });
+      menuTrigger?.focus({ preventScroll: true });
     };
   }, [menuPresent]);
   const followAnchor = (event: MouseEvent<HTMLAnchorElement>, hash: string) => {
@@ -116,7 +117,7 @@ export function PublicNavigation() {
   };
   return (
     <LocalizedTree>
-      <header className="public-header">
+      <header className="public-header public-header--premium">
         <PublicBrand />
         <nav className="public-desktop-nav" aria-label="Main navigation">
           {links.map(([href, label]) => (

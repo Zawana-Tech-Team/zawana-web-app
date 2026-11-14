@@ -16,13 +16,8 @@
 .campaign-home :is(main, section)[id] { scroll-margin-top: calc(var(--campaign-header-height) + 16px); }
 .campaign-home :is(.campaign-arena__heading, .campaign-services__layout, .campaign-section-heading) > * { min-width: 0; }
 .campaign-home > .public-header {
-  position: fixed; min-height: 104px; padding-block: 8px; background: linear-gradient(#08110ff2, #08110f80); backdrop-filter: blur(14px); border-bottom: 1px solid #eae8d91a; z-index: 50;
+  position: fixed; background: linear-gradient(#08110ff2, #08110f80); backdrop-filter: blur(14px); border-bottom: 1px solid #eae8d91a; z-index: 50;
 }
-.campaign-home > .public-header .public-brand__logo { width: 66px; height: 88px; }
-.campaign-home > .public-header .public-brand__logo img { width: 110px; height: 110px; left: -22px; top: -11px; }
-.campaign-home > .public-header .public-brand > span { font-size: 8px; }
-.campaign-home .public-header__book { background: #c6a34a; border-radius: 2px; }
-.campaign-home .public-header__actions > a, .campaign-home .public-desktop-nav a { font-size: 10px; }
 .cinematic-journey { position: relative; height: 560svh; background: #08110f; }
 .journey-pin { position: sticky; top: 0; height: 100svh; isolation: isolate; overflow: hidden; background: #08110f; }
 .journey-world { z-index: -3; opacity: 0; transition: opacity 700ms ease; }
@@ -165,9 +160,6 @@
 }
 @media (max-width: 767px) {
   .campaign-home { --campaign-header-height: 89px; }
-  .campaign-home > .public-header { min-height: 88px; padding: 4px 20px; }
-  .campaign-home > .public-header .public-brand__logo { width: 60px; height: 80px; }
-  .campaign-home > .public-header .public-brand__logo img { width: 100px; height: 100px; left: -20px; top: -10px; }
   .cinematic-journey { height: 430svh; }
   .journey-chapter { align-items: start; padding: 180px 24px 142px; }
   .journey-eyebrow { font-size: 7px; letter-spacing: .13em; gap: 10px; }
@@ -242,12 +234,6 @@
 }
 @media (max-height: 700px) and (min-width: 600px) {
   .campaign-home { --campaign-header-height: 73px; }
-  .campaign-home > .public-header { min-height: 73px; padding: 4px 24px; }
-  .campaign-home > .public-header .public-brand__logo { width: 48px; height: 64px; }
-  .campaign-home > .public-header .public-brand__logo img { width: 80px; height: 80px; left: -16px; top: -8px; }
-  .campaign-home > .public-header .public-brand > span { display: none; }
-  .campaign-home > .public-header .public-header__actions { gap: 16px; }
-  .campaign-home > .public-header .public-header__book { display: inline-flex !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .campaign-home .campaign-service-panel__image > img { animation: none; }
