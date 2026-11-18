@@ -78,7 +78,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (typeof window !== 'undefined' && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && !path.startsWith('/notifications')) {
     window.dispatchEvent(new Event('zawana-notifications-refresh'));
   }
-  if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:payments|staff\/court-desk|store\/orders|cafe\/orders|gym\/enrollments|badminton\/enrollments|member\/(?:badminton-packages|private-courses))/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
+  if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:holidays|rescheduling|payments|staff\/court-desk|store\/orders|cafe\/orders|gym\/enrollments|badminton\/enrollments|member\/(?:badminton-packages|private-courses))/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
+  if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:bookings|court-booking|courts|court-blocks)/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
   if (paymentRetrySlot) sessionStorage.removeItem(paymentRetrySlot);
   return data as T;
 }

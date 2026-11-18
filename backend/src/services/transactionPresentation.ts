@@ -1,5 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
+export const recognizedLedgerRevenue: Prisma.TransactionWhereInput = {OR:[{status:'paid'},{resourceType:'booking_refund',status:'refunded'}]};
+
 export const badmintonCategories = ['Court Rental', 'Private Course', 'Badminton Package', 'Weekly Class'] as const;
 export const onlinePaymentMethods = ['Online Payment', 'Online payment', 'ONLINE', 'Online', 'Pay Online', 'KPay', 'KPAY', 'Manual (simulated)'];
 export function paymentMethodMatches(stored: string | null, filter: string) {
@@ -26,7 +28,7 @@ export async function categoryWhere(db: PrismaClient, category: string): Promise
     const bookings = await db.booking.findMany({ where: { kind }, select: { id: true } });
     const prefix = category === 'Court Rental' ? 'Court rental' : category === 'Private Course' ? 'Private course' : 'Weekly class';
     return { OR: [
-      { resourceType: 'booking', resourceId: { in: bookings.map(b => b.id) } },
+      { resourceType: {in:['booking','booking_refund']}, resourceId: { in: bookings.map(b => b.id) } },
       ...(kind === 'private_course' ? [{ privateCoursePayment: { is: {} } }] : []),
       { resourceType: null, item: { startsWith: `${prefix} ·` } },
     ] };
@@ -39,12 +41,12 @@ export async function categoryWhere(db: PrismaClient, category: string): Promise
 }
 
 export async function presentTransactions<T extends { id: string; resourceType: string | null; resourceId: string | null; item: string; business: string }>(db: PrismaClient, rows: T[]) {
-  const ids = rows.filter(r => r.resourceType === 'booking' && r.resourceId).map(r => r.resourceId!);
+  const ids = rows.filter(r => ['booking','booking_refund'].includes(r.resourceType||'') && r.resourceId).map(r => r.resourceId!);
   const bookings = ids.length ? await db.booking.findMany({ where: { id: { in: ids } }, select: { id: true, kind: true } }) : [];
   const kinds = new Map(bookings.map(b => [b.id, b.kind]));
   const privatePayments = rows.length ? await db.privateCoursePayment.findMany({ where: { transactionId: { in: rows.map(row => row.id) } }, select: { transactionId: true, bookingId: true } }) : [];
   const privateIds = new Map(privatePayments.map(row => [row.transactionId, row.bookingId]));
-  return rows.map(row => ({ ...row, category: row.business === 'Badminton' ? transactionCategory(row, privateIds.has(row.id) ? 'private_course' : kinds.get(row.resourceId || '')) : null }));
+  return rows.map(row => ({ ...row, entryType:row.resourceType==='booking_refund'?'REFUND':'PAYMENT', category: row.business === 'Badminton' ? transactionCategory(row, privateIds.has(row.id) ? 'private_course' : kinds.get(row.resourceId || '')) : null }));
 }
 
 export function transactionOrder(sort: string): Prisma.TransactionOrderByWithRelationInput[] {

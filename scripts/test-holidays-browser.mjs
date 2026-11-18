@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { createServer } from 'node:net';
+
+const require = createRequire(new URL('../tooling/gym/package.json', import.meta.url));
+const { chromium } = require('playwright');
+const root = fileURLToPath(new URL('..', import.meta.url));
+const temp = mkdtempSync(join(tmpdir(), 'zawana-court-desk-'));
+const artifacts = process.env.COURT_DESK_ARTIFACTS || join(temp, 'artifacts');
+mkdirSync(artifacts, { recursive: true });
+const freePort = async () => { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const port = s.address().port; await new Promise(r => s.close(r)); return port; };
+const apiPort = await freePort(), uiPort = await freePort();
+const ui = `http://127.0.0.1:${uiPort}`, api = `http://127.0.0.1:${apiPort}/api`;
+const fixture = join(temp, 'fixture.json'), database = join(temp, 'qa.db');
+writeFileSync(database, '');
+const env = { ...process.env, DATABASE_URL: `file:${database.replaceAll('\\', '/')}`, NODE_ENV: 'test', AUTH_MODE: 'database', JWT_SECRET: 'court-desk-isolated-test-secret-more-than-thirty-two-characters', PORT: String(apiPort), CLIENT_URL: ui, PUBLIC_API_URL: `http://127.0.0.1:${apiPort}`, VITE_AUTH_MODE: 'database', VITE_API_URL: api, COURT_DESK_FIXTURE: fixture };
+const children = [], errors = [];
+let browser;
+const start = (args, cwd) => { const child = spawn(process.execPath, args, { cwd, env, stdio: 'ignore' }); children.push(child); };
+const ready = async url => { for (let i = 0; i < 160; i++) { if (children.some(c => c.exitCode !== null)) throw new Error('A QA server exited'); if (await fetch(url).then(r => r.ok).catch(() => false)) return; await new Promise(r => setTimeout(r, 125)); } throw new Error('QA server did not start'); };
+try {
+  execFileSync(process.execPath, ['node_modules/prisma/build/index.js', 'migrate', 'deploy'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  execFileSync(process.execPath, ['--import', 'tsx', 'tests/court-desk-browser-fixture.ts'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  const data = JSON.parse(readFileSync(fixture, 'utf8'));
+  start(['--import', 'tsx', 'src/server.ts'], join(root, 'backend'));
+  start(['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(uiPort), '--strictPort'], root);
+  await Promise.all([ready(`${api}/health`), ready(ui)]);
+  const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
+  browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1100 }, reducedMotion: 'reduce' });
+  await context.addInitScript(({ token, origin }) => { if (location.origin === origin) { localStorage.setItem('zawana_access_token', token); localStorage.setItem('zawana_language', 'en'); } }, { token: data.token, origin: ui });
+  const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
+
+
+  page.setDefaultTimeout(15000);
+  await page.goto(`${ui}/admin/court-rentals`);
+  await page.getByLabel('Operating day',{exact:true}).fill(data.date);
+  await page.waitForFunction(()=>document.querySelector('.court-timetable')?.getAttribute('aria-busy')==='false');
+  assert.equal(await page.getByText('Special opening hours',{exact:true}).count(),0);
+  await page.getByRole('button',{name:'Holiday',exact:true}).click();
+  const manager=page.getByRole('region',{name:'Holiday Management',exact:true});await manager.waitFor();
+  await manager.getByRole('button',{name:`Holiday date ${data.date}`,exact:true}).click();
+  await manager.getByRole('button',{name:'Override as Holiday',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Confirm holiday overrides',exact:true});
+  await dialog.getByText(/weekly class sessions across 1 dates/).waitFor();
+  await dialog.getByRole('button',{name:'Confirm holiday overrides',exact:true}).click();await dialog.waitFor({state:'hidden'});
+  await manager.getByRole('status').filter({hasText:'Holidays saved'}).waitFor();
+  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(artifacts,'holiday-management-mobile.png'),fullPage:true});
+  await manager.getByRole('button',{name:'Back to Court Rental',exact:true}).click();
+  await page.getByText('Holiday / Overridden · 1 weekly classes',{exact:true}).waitFor();
+  await page.getByRole('button',{name:`Court 1, ${data.date}, 1:00 PM — 2:00 PM, Available`,exact:true}).waitFor();
+  await page.reload();await page.getByLabel('Operating day',{exact:true}).fill(data.date);await page.getByRole('button',{name:`Court 1, ${data.date}, 1:00 PM — 2:00 PM, Available`,exact:true}).waitFor();
+  await page.getByRole('button',{name:'Holiday',exact:true}).click();await page.getByRole('button',{name:`Holiday date ${data.date} configured`,exact:true}).waitFor();
+  await page.getByRole('button',{name:'Remove holiday',exact:true}).click();await page.getByRole('status').filter({hasText:'Weekly classes restored'}).waitFor();
+  await page.getByRole('button',{name:'Back to Court Rental',exact:true}).click();await page.locator('.court-timetable__event').filter({hasText:'Junior Academy'}).waitFor();
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({ok:true,checks:['dedicated holiday view','confirmation and suspension count','weekly occupancy released','reload persistence','restoration','mobile layout'],artifacts},null,2));
+}finally{await browser?.close();children.forEach(child=>child.kill());}

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
 import { get, post } from '../../api';
-import { DialogSurface } from '../Interactions';
+import { DeskDialog, DeskSteps } from './DeskDialog';
 import { Button } from '../UI';
 import { Select } from '../Select';
 import { DeskPaymentFields, deskPaymentReady, emptyDeskPayment } from './DeskPaymentFields';
@@ -50,22 +49,21 @@ export function DeskPrivateCourseDialog({ court, date, initialTime, onClose, onC
     catch (error) { setError(error instanceof Error ? error.message : 'Could not record this booking.'); }
     finally { setSaving(false); }
   };
-  return <DialogSurface title="Desk private course" onClose={() => { if (!saving) onClose(); }} className="desk-reservation-dialog desk-private-dialog">
-    <header className="desk-reservation-dialog__header"><div><p className="text-xs text-zawana-500">Private course</p><h2 className="mt-1 text-xl font-semibold">Coach booking</h2></div><button className="desk-close" disabled={saving} aria-label="Close dialog" onClick={onClose}><X size={18} /></button></header>
-    <div className="desk-reservation-dialog__body">
+  return <DeskDialog title="Desk private course" heading="Coach booking" eyebrow="Private course" size="compact" onClose={onClose} busy={saving}
+    steps={<DeskSteps labels={['Choose session','Member & payment']} current={course&&time?1:0}/>}
+    summary={<><p>Package total</p><strong>{course?`${course.price.toLocaleString()} MMK`:'Choose a package'}</strong></>}
+    actions={<Button loading={saving} disabled={saving||loading||!member||!time||!deskPaymentReady(payment)} onClick={()=>void submit()}>Record & request coach</Button>} bodyClassName="space-y-4">
       <div className="desk-selection"><span><small>Court</small><strong>{court.name}</strong></span><span><small>Date</small><strong>{date}</strong></span><span><small>Time</small><strong>{time || initialTime || 'Choose below'}</strong></span></div>
       {error && <p className="desk-load-error" role="alert">{error}</p>}
       <fieldset disabled={saving} className="desk-private-fields">
         <label>Coach<Select value={coachId} onChange={event => { setCoachId(event.target.value); setCourseId(''); resetAvailability(); }}><option value="">Choose coach</option>{coaches.map(coach => <option key={coach.id} value={coach.id}>{coach.name}</option>)}</Select></label>
         <label>Package<Select value={courseId} disabled={!coachId} onChange={event => { setCourseId(event.target.value); resetAvailability(); }}><option value="">Choose package</option>{courses.filter(course => course.coaches.some(coach => coach.id === coachId)).map(course => <option key={course.id} value={course.id}>{course.title} · {course.duration} min · {course.price.toLocaleString()} MMK</option>)}</Select></label>
         {course && <label>Session time<Select value={time} disabled={loading} onChange={event => { setTime(event.target.value); setPayment(emptyDeskPayment()); }}><option value="">{loading ? 'Checking availability…' : 'Choose available time'}</option>{slots.map(slot => <option key={slot.time} value={slot.time} disabled={!slot.available}>{slot.time}{!slot.available ? ` · ${slot.reason}` : ''}</option>)}</Select></label>}
-        <label>Member name<input value={query} maxLength={100} placeholder="Search existing member (2+ characters)" onChange={event => { setQuery(event.target.value); setMember(null); setMembers([]); setPayment(emptyDeskPayment()); }} /></label>
+        {course&&time&&<div className="space-y-4"><p className="desk-section-label">Member & payment</p><label>Member name<input value={query} maxLength={100} placeholder="Search existing member (2+ characters)" onChange={event => { setQuery(event.target.value); setMember(null); setMembers([]); setPayment(emptyDeskPayment()); }} /></label>
         {!member && members.length > 0 && <div className="desk-member-results" aria-label="Matching members">{members.map(result => <button type="button" key={result.id} onClick={() => { setPayment(emptyDeskPayment()); setMember(result); setQuery(result.name); setMembers([]); }}><strong>{result.name}</strong><small>{result.phone || result.email}</small></button>)}</div>}
         {member && <p className="text-xs text-zawana-500">Selected member: {member.name}</p>}
-        <DeskPaymentFields value={payment} onChange={setPayment} disabled={saving} />
+        <DeskPaymentFields value={payment} onChange={setPayment} disabled={saving} /></div>}
       </fieldset>
       <p className="desk-recurrence">Payment is recorded now. The assigned coach must confirm before the session is approved.</p>
-    </div>
-    <footer className="desk-reservation-dialog__footer"><div><p>Package total</p><strong>{course ? `${course.price.toLocaleString()} MMK` : 'Choose a package'}</strong></div><Button loading={saving} disabled={saving || loading || !member || !time || !deskPaymentReady(payment)} onClick={() => void submit()}>Record & request coach</Button></footer>
-  </DialogSurface>;
+  </DeskDialog>;
 }

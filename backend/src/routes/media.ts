@@ -9,7 +9,7 @@ const router = Router();
 router.post(
   "/images",
   auth,
-  roles("admin", "store_fo", "cafe_fo"),
+  roles("admin", "store_fo", "cafe_fo", "badminton_fo"),
   asyncRoute(async (req, res) => {
     const { image } = z
       .object({

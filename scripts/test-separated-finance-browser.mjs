@@ -1,0 +1,105 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { createServer } from 'node:net';
+
+const require = createRequire(new URL('../tooling/gym/package.json', import.meta.url));
+const { chromium } = require('playwright');
+const root = fileURLToPath(new URL('..', import.meta.url));
+const temp = mkdtempSync(join(tmpdir(), 'zawana-court-desk-'));
+const artifacts = process.env.COURT_DESK_ARTIFACTS || join(temp, 'artifacts');
+mkdirSync(artifacts, { recursive: true });
+const freePort = async () => { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const port = s.address().port; await new Promise(r => s.close(r)); return port; };
+const apiPort = await freePort(), uiPort = await freePort();
+const ui = `http://127.0.0.1:${uiPort}`, api = `http://127.0.0.1:${apiPort}/api`;
+const fixture = join(temp, 'fixture.json'), database = join(temp, 'qa.db');
+writeFileSync(database, '');
+const env = { ...process.env, DATABASE_URL: `file:${database.replaceAll('\\', '/')}`, NODE_ENV: 'test', AUTH_MODE: 'database', JWT_SECRET: 'court-desk-isolated-test-secret-more-than-thirty-two-characters', PORT: String(apiPort), CLIENT_URL: ui, PUBLIC_API_URL: `http://127.0.0.1:${apiPort}`, VITE_AUTH_MODE: 'database', VITE_API_URL: api, COURT_DESK_FIXTURE: fixture };
+const children = [], errors = [];
+let browser;
+const start = (args, cwd) => { const child = spawn(process.execPath, args, { cwd, env, stdio: 'ignore' }); children.push(child); };
+const ready = async url => { for (let i = 0; i < 160; i++) { if (children.some(c => c.exitCode !== null)) throw new Error('A QA server exited'); if (await fetch(url).then(r => r.ok).catch(() => false)) return; await new Promise(r => setTimeout(r, 125)); } throw new Error('QA server did not start'); };
+try {
+  execFileSync(process.execPath, ['node_modules/prisma/build/index.js', 'migrate', 'deploy'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  execFileSync(process.execPath, ['--import', 'tsx', 'tests/court-desk-browser-fixture.ts'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  const data = JSON.parse(readFileSync(fixture, 'utf8'));
+  start(['--import', 'tsx', 'src/server.ts'], join(root, 'backend'));
+  start(['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(uiPort), '--strictPort'], root);
+  await Promise.all([ready(`${api}/health`), ready(ui)]);
+  const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
+  browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1100 }, reducedMotion: 'reduce' });
+  await context.addInitScript(({ token, origin }) => { if (location.origin === origin) { localStorage.setItem('zawana_access_token', token); localStorage.setItem('zawana_language', 'en'); } }, { token: data.token, origin: ui });
+  const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
+  const backendRequire = createRequire(new URL('../backend/package.json', import.meta.url));
+  const { PrismaClient } = backendRequire('@prisma/client');
+  const db = new PrismaClient({ datasources:{db:{url:env.DATABASE_URL}} });
+  try {
+    const record = (overrides={}) => ({userId:data.memberId,business:'Badminton',date:data.date,customer:'Paying customer',item:'Historical receipt',amount:1000,discount:0,tax:0,finalAmount:1000,status:'paid',paymentMethod:'Cash',staff:'Desk Preview',...overrides});
+    for(let i=0;i<22;i++){
+      await db.transaction.create({data:record({customer:`Paying customer ${i}`})});
+      await db.transaction.create({data:record({customer:`Returned customer ${i}`,resourceType:'booking_refund',resourceId:randomUUID(),amount:-1000,finalAmount:-1000,status:'refunded',item:'Refund · historical receipt'})});
+    }
+    await db.transaction.create({data:record({customer:'Court customer',resourceType:'booking',resourceId:data.bookingId,amount:20000,finalAmount:20000})});
+    await db.transaction.create({data:record({customer:'Legacy returned customer',status:'REFUNDED',amount:-500,finalAmount:-500})});
+    await db.transaction.create({data:record({business:'Gym',customer:'Other business customer'})});
+    const headers={Authorization:`Bearer ${data.foToken}`};
+    const ledger=async(kind,extra='')=>{const r=await context.request.get(`${api}/transactions?business=Badminton&ledger=${kind}&page=1&limit=7${extra}`,{headers});assert.equal(r.status(),200,await r.text());return r.json();};
+    const payments=await ledger('payments'),refunds=await ledger('refunds');
+    assert.equal(payments.pagination.total,23);assert.equal(payments.pagination.totalPages,4);assert.equal(payments.data.length,7);assert.equal(payments.summary.net,42000);
+    assert.ok(payments.data.every(row=>row.resourceType!=='booking_refund' && row.status.toLowerCase()!=='refunded'));
+    assert.equal(refunds.pagination.total,23);assert.equal(refunds.data.length,7);assert.equal(refunds.summary.net,-22500);
+    assert.ok(refunds.data.every(row=>row.resourceType==='booking_refund' || row.status.toLowerCase()==='refunded'));
+    assert.equal((await ledger('payments','&category=Court%20Rental')).pagination.total,1);
+    assert.equal((await ledger('refunds','&q=Legacy%20returned')).pagination.total,1);
+    assert.equal((await context.request.get(`${api}/transactions?ledger=invalid`,{headers})).status(),400);
+    assert.equal((await context.request.get(`${api}/transactions?business=Gym&ledger=payments`,{headers})).status(),403);
+    const foContext=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+    await foContext.addInitScript(({token,origin})=>{if(location.origin===origin){localStorage.setItem('zawana_access_token',token);localStorage.setItem('zawana_language','en');}},{token:data.foToken,origin:ui});
+    const finance=await foContext.newPage();finance.setDefaultTimeout(15000);finance.on('pageerror',e=>errors.push(e.message));
+    await finance.goto(`${ui}/badminton-fo/transactions`);
+    const tabs=finance.getByRole('group',{name:'Finance records',exact:true});
+    const paymentTable=finance.getByRole('table',{name:'Payment records',exact:true});await paymentTable.waitFor();
+    assert.equal(await paymentTable.getByText('refunded',{exact:false}).count(),0);
+    await finance.getByText('Payments total · 42,000 MMK',{exact:true}).waitFor();
+    await finance.getByRole('button',{name:/^View payment for /}).first().click();
+    let dialog=finance.getByRole('dialog',{name:'Transaction details',exact:true});await dialog.getByText('Original payment method',{exact:true}).waitFor();await finance.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+    await finance.getByRole('button',{name:'Next',exact:true}).click();
+    await finance.getByText('23 payments',{exact:true}).waitFor();
+    const refundResponse=finance.waitForResponse(r=>r.url().includes('/transactions?')&&new URL(r.url()).searchParams.get('ledger')==='refunds');
+    await tabs.getByRole('button',{name:'Refunds',exact:true}).click();assert.equal((await refundResponse).status(),200);
+    const refundTable=finance.getByRole('table',{name:'Refund records',exact:true});await refundTable.waitFor();
+    assert.equal(await refundTable.getByRole('row').count(),21,'Refunds reset to first page, with 20 records');
+    await finance.getByText('Refunded · 22,500 MMK',{exact:true}).waitFor();
+    await finance.getByRole('button',{name:/^View refund for Returned customer /}).first().click();
+    dialog=finance.getByRole('dialog',{name:'Transaction details',exact:true});await dialog.getByText('Recorded refund method',{exact:true}).waitFor();await finance.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+    await finance.getByText('More filters',{exact:true}).click();
+    assert.equal(await finance.locator('select[aria-label="Payment status"] option[value="paid"]').count(),0);
+    await finance.getByRole('button',{name:'Reset filters',exact:true}).click();
+    await finance.locator('summary').filter({hasText:'More filters'}).click();
+    await finance.evaluate(()=>scrollTo(0,0));
+    await finance.screenshot({path:join(artifacts,'fo-refunds-desktop.png')});
+    for(const [width,height] of [[768,1024],[390,844],[320,640]]){
+      await finance.setViewportSize({width,height});await finance.waitForFunction(expected=>innerWidth===expected,width);
+      assert.ok(await finance.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'FO Finance fits viewport');
+      await finance.getByRole('button',{name:/^View refund for /}).first().click();
+      dialog=finance.getByRole('dialog',{name:'Transaction details',exact:true});
+      await finance.waitForFunction(()=>{const el=document.querySelector('[role=dialog]');if(!el)return false;const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;});
+      assert.ok(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await finance.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+      await finance.evaluate(()=>scrollTo(0,0));
+      await finance.getByRole('heading',{name:'Finance',exact:true}).click();
+      await finance.screenshot({path:join(artifacts,`fo-refunds-${width}.png`)});
+    }
+    await tabs.getByRole('button',{name:'Payments',exact:true}).click();
+    await finance.getByText('Payments total · 42,000 MMK',{exact:true}).waitFor();
+    await finance.getByText('More filters',{exact:true}).click();
+    assert.equal(await finance.locator('select[aria-label="Payment status"] option[value="refunded"]').count(),0);
+    assert.deepEqual(errors,[]);await foContext.close();
+    console.log(JSON.stringify({ok:true,checks:['server-side payment/refund separation before pagination','correct per-view totals and page counts','null-resource historical payments and legacy refunded records','category/search filters and FO business permissions','payments default, refund view, pagination reset and separate status options','receipt/refund details, mobile dialogs and no overflow'],artifacts},null,2));
+  } finally {await db.$disconnect();}
+} finally {await browser?.close();for(const child of children)child.kill('SIGTERM');}

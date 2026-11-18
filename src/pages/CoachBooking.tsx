@@ -1,3 +1,5 @@
+import { DeskDialog } from '../components/court-desk/DeskDialog';
+import { BookingActionBar } from '../components/member-booking/BookingActionBar';
 import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
 import { useEffect, useState } from "react";
@@ -25,6 +27,9 @@ const slots = [
 
 export function CoachBooking() {
   const now = useBookingClock();
+  const [step, setStep] = useState(1);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [date, setDate] = useState(fmt(days[0]));
   const [coaches, setCoaches] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
@@ -47,11 +52,13 @@ export function CoachBooking() {
   }, [coaches]);
   const available = (c: any, t: string) => !bookingHasStarted(date, t, now) && !busy.some(b => b.coachId === c.id && b.time === t);
   const confirm = async () => {
-    if (!selected) return;
+    if (!selected || submitting) return;
     if (bookingHasStarted(date, time) || !available(selected, time)) {
       setError("Choose an available session that has not started yet.");
       return;
     }
+    setSubmitting(true);
+    setError('');
     try {
       const result = await post<any>("/bookings", {
         kind: "pt",
@@ -65,6 +72,8 @@ export function CoachBooking() {
       setDone(result.booking)
     } catch (e: any) {
       setError(e.message)
+    } finally {
+      setSubmitting(false);
     }
   };
   if (done)
@@ -90,14 +99,17 @@ export function CoachBooking() {
       </Card>
     </Page>;
   return <Page title="Book with a Coach" eyebrow="Personal Training">
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <div className="mx-auto max-w-4xl">
       <div className="space-y-6">
-        <Card className="p-6">
-          <h3 className="text-lg font-black">1. Select date</h3>
+        <nav aria-label="Personal training steps" className="flex flex-wrap gap-3 border-b pb-4">{['Date','Coach','Time'].map((label,index) => <button type="button" key={label} aria-current={step === index+1 ? 'step' : undefined} className={`min-h-11 px-3 text-sm ${step === index+1 ? 'font-bold underline underline-offset-8' : 'text-zawana-500'}`} onClick={() => setStep(index+1)}>{index+1}. {label}</button>)}</nav>
+        {step === 1 && <Card className="p-6">
+          <h3 className="text-lg font-black">Select date</h3>
           <div className="mt-4 grid grid-cols-4 gap-2 md:grid-cols-7">
             {days.map(d =>
               <button
                 key={fmt(d)}
+                aria-label={fmt(d)}
+                aria-pressed={date === fmt(d)}
                 onClick={() => setDate(fmt(d))}
                 className={`rounded-xl border p-3 text-left ${date === fmt(d) ? "border-zawana-accent bg-zawana-accent/10" : "border-zawana-950/8"}`}
               >
@@ -108,13 +120,15 @@ export function CoachBooking() {
               </button>
             )}
           </div>
-        </Card>
-        <Card className="p-6">
-          <h3 className="text-lg font-black">2. Select coach</h3>
+        </Card>}
+        {step === 2 && <Card className="p-6">
+          <h3 className="text-lg font-black">Select coach</h3>
           <div className="mt-4 grid gap-3">
+            {!coaches.length && <p className="text-sm text-zawana-500">No personal trainers are available. Please check back later.</p>}
             {coaches.map(c =>
               <button
                 key={c.id}
+                aria-pressed={selected?.id === c.id}
                 onClick={() => setSelected(c)}
                 className={`rounded-xl border p-4 text-left ${selected?.id === c.id ? "border-zawana-accent bg-zawana-accent/10" : "border-zawana-950/8"}`}
               >
@@ -138,13 +152,14 @@ export function CoachBooking() {
               </button>
             )}
           </div>
-        </Card>
-        <Card className="p-6">
-          <h3 className="text-lg font-black">3. Select time</h3>
+        </Card>}
+        {step === 3 && <Card className="p-6">
+          <h3 className="text-lg font-black">Select time</h3>
           <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
             {slots.map(t =>
               <button
                 key={t}
+                aria-pressed={time === t}
                 disabled={bookingHasStarted(date, t, now) || !!selected && !available(selected, t)}
                 onClick={() => setTime(t)}
                 className={`rounded-xl border p-3 text-sm font-bold disabled:opacity-40 ${time === t ? "border-zawana-accent bg-zawana-accent/10" : "border-zawana-950/8"}`}
@@ -153,28 +168,12 @@ export function CoachBooking() {
               </button>
             )}
           </div>
-        </Card>
+        </Card>}
+        {step < 3 && <div className="flex justify-between gap-3"><Button variant="secondary" disabled={step === 1} onClick={() => setStep(step-1)}>Back</Button><Button disabled={step === 2 && !selected} onClick={() => setStep(step+1)}>Continue</Button></div>}
         {error && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-600">{error}</p>}
       </div>
-      <Card className="h-fit p-6 lg:sticky lg:top-24">
-        <p className="text-xs font-bold tracking-widest text-zawana-accent">SUMMARY</p>
-        <h2 className="mt-3 text-2xl font-black">{selected?.name || "Select a coach"}</h2>
-        <div className="mt-5 space-y-3 border-y border-zawana-950/8 py-5 text-sm">
-          <div className="flex justify-between">
-            <span className="text-zawana-500">Date</span>
-            <b>{date}</b>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-zawana-500">Time</span>
-            <b>{time}</b>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-zawana-500">Session</span>
-            <b>30,000 MMK</b>
-          </div>
-        </div>
-        <Button disabled={!selected || !available(selected, time)} onClick={confirm} className="mt-5 w-full">Confirm booking</Button>
-      </Card>
+      {step === 3 && <BookingActionBar hidden={reviewOpen} action={<Button disabled={!selected || !available(selected,time)} onClick={() => setReviewOpen(true)}>Review booking</Button>}><span>Personal training</span><strong>30,000 MMK</strong></BookingActionBar>}
+      {reviewOpen && <DeskDialog title="Review personal training" busy={submitting} onClose={() => setReviewOpen(false)} cancelLabel="Back to selection" summary={<strong>30,000 MMK</strong>} actions={<Button loading={submitting} disabled={!selected || !available(selected,time) || submitting} onClick={confirm}>Confirm booking</Button>}><p className="font-semibold">{selected?.name}</p><p className="mt-3 text-sm">{date} · {time}</p><p className="mt-3 text-sm text-zawana-500">High Performance Gym</p>{error && <p role="alert" className="mt-4 text-red-700">{error}</p>}</DeskDialog>}
     </div>
   </Page>
 }

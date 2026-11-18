@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import express from 'express';
+import { DatabaseSync } from 'node:sqlite';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { PrismaClient } from '@prisma/client';
+import { createHolidayRouter } from '../src/routes/holidays.js';
+import { courtAvailability } from '../src/services/courtAvailability.js';
+import { createCourtBooking } from '../src/services/courtBooking.js';
+import { today } from '../src/services/courtPolicy.js';
+import { addDateKeyDays } from '../src/utils/dateKeys.js';
+test('holidays suspend classes only, bulk changes are atomic, removal retains conflicting suspensions',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'holidays-')),file=join(dir,'db');const sql=new DatabaseSync(file),root=new URL('../prisma/migrations/',import.meta.url);
+ for(const n of readdirSync(root).filter(n=>/^\d/.test(n)).sort())sql.exec(readFileSync(new URL(`${n}/migration.sql`,root),'utf8'));sql.close();
+ const db=new PrismaClient({datasources:{db:{url:`file:${file}`}}});let server:ReturnType<express.Express['listen']>|undefined;
+ try{
+ const actor=await db.user.create({data:{name:'FO',email:'holidays@test.local',role:'badminton_fo'}});const courts=await Promise.all([1,2,3].map(i=>db.court.create({data:{name:`Court ${i}`,type:'Standard',surface:'',price:20000,features:[]}})));
+ const date=addDateKeyDays(today(),3),later=addDateKeyDays(date,7),dow=new Date(`${date}T12:00:00Z`).getUTCDay();
+ for(const c of courts)await db.courtBlock.create({data:{courtId:c.id,date:'',dayOfWeek:dow,start:'09:00',end:'10:00',title:'Class',type:'class'}});
+ await db.courtBlock.create({data:{courtId:courts[2].id,date:'',dayOfWeek:dow,start:'11:00',end:'12:00',title:'Maintenance',type:'maintenance'}});
+ const rental=await db.booking.create({data:{code:'HOLIDAY-RENTAL',userId:actor.id,courtId:courts[0].id,date,time:'9:00 AM — 10:00 AM',kind:'court',title:'Existing rental',location:'Arena',price:20000,paymentStatus:'paid',status:'CONFIRMED'}});
+ const privateCourse=await db.booking.create({data:{code:'HOLIDAY-PRIVATE',userId:actor.id,courtId:courts[1].id,date,time:'12:00 PM — 1:00 PM',kind:'private_course',title:'Existing private',location:'Arena',price:65000,paymentStatus:'paid',status:'CONFIRMED'}});
+ const app=express();app.use(express.json());app.use('/holidays',createHolidayRouter(db,((req:any,_res:any,next:any)=>{req.user={...actor,role:req.headers['x-role']||actor.role};next();}) as any));app.use((e:any,_req:any,res:any,_next:any)=>res.status(e.statusCode||400).json({message:e.message}));server=app.listen(0);await new Promise<void>(r=>server!.on('listening',r));const url=`http://127.0.0.1:${(server.address() as any).port}/holidays`;
+ const call=async(path:string,method='GET',body?:unknown,role='badminton_fo')=>{const r=await fetch(url+path,{method,headers:{'Content-Type':'application/json','x-role':role},body:body?JSON.stringify(body):undefined});return {status:r.status,body:await r.json()};};
+ assert.equal((await call('','GET',undefined,'member')).status,403);
+ const preview=await call('/preview','POST',{dates:[date,later]});assert.equal(preview.body.count,6);
+ assert.equal((await call('','POST',{dates:[date,later],revision:preview.body.revision})).status,201);assert.equal(await db.courtDateOverride.count(),2);
+ const slots=(await courtAvailability(db,date)).slots;assert.equal(slots.find(s=>s.courtId===courts[1].id&&s.startMinute===540)!.available,true);assert.equal(slots.find(s=>s.courtId===courts[0].id&&s.startMinute===540)!.available,false);assert.equal(slots.find(s=>s.courtId===courts[1].id&&s.startMinute===720)!.available,false);assert.equal(slots.find(s=>s.courtId===courts[2].id&&s.startMinute===660)!.available,false);
+ assert.deepEqual(await db.booking.findUnique({where:{id:rental.id}}),rental);assert.deepEqual(await db.booking.findUnique({where:{id:privateCourse.id}}),privateCourse);assert.equal(await db.transaction.count(),0);
+ assert.equal((await call(`/${date}/classes`)).body.length,3);
+ const remove=await call(`/${date}`,'DELETE');assert.equal(remove.body.conflicts.length,1);
+ const restored=(await courtAvailability(db,date)).slots;assert.equal(restored.find(s=>s.courtId===courts[1].id&&s.startMinute===540)!.available,false);assert.equal((await call(`/${date}/classes`)).body.length,1);
+ await db.booking.update({where:{id:rental.id},data:{status:'cancelled'}});assert.equal((await call(`/${date}`,'DELETE')).body.conflicts.length,0);
+ assert.equal((await courtAvailability(db,date)).slots.find(s=>s.courtId===courts[0].id&&s.startMinute===540)!.available,false);
+ await createCourtBooking(db,actor,{courtId:courts[1].id,date:later,time:'9:00 AM — 10:00 AM'});
+ const closed=addDateKeyDays(later,1);await db.courtDateOverride.create({data:{date:closed,type:'closed'}});assert.equal((await call('/preview','POST',{dates:[date,closed]})).status,409);
+ assert.equal((await call('','POST',{dates:[date],revision:'stale'})).status,409);assert.equal((await db.courtDateOverride.findUniqueOrThrow({where:{date}})).holidayActive,false);
+ }finally{await new Promise<void>(r=>server?server.close(()=>r()):r());await db.$disconnect();rmSync(dir,{recursive:true,force:true});}
+});

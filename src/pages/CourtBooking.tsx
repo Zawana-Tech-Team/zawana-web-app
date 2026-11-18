@@ -1,3 +1,5 @@
+import { SegmentedControl } from '../components/Interactions';
+import { courtBlockOccurs } from '../utils/bookingTime';
 import { CourtBookingSteps } from '../components/CourtBookingSteps';
 import { CourtRescheduleSummary } from '../components/CourtRescheduleSummary';
 import type { CourtChangeDetail } from '../types/courtChanges';
@@ -7,7 +9,9 @@ import {
   normalizeBookingTime,
 } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
-import { DialogSurface } from "../components/Interactions";
+import { courtFloor } from '../components/court-desk/timetable';
+import { DeskDialog } from '../components/court-desk/DeskDialog';
+import { BookingActionBar } from '../components/member-booking/BookingActionBar';
 import { AnimatePresence, useReducedMotion } from "framer-motion";
 import { motionTokens } from "../design/motion";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +22,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   MapPin,
   ShoppingCart,
   ChevronDown,
@@ -237,6 +240,7 @@ type RescheduleOptions = {
 };
 
 export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } = {}) {
+  const [visibleFloor, setVisibleFloor] = useState('all');
   const isRescheduling = !!reschedule;
   const { locale } = useLanguage();
   const dateFormatter = useMemo(
@@ -334,10 +338,10 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
     (x: any) => x.date === date,
   );
   const dayBlocks = (monthData?.blocks || []).filter(
-    (x: any) => x.date === date || x.dayOfWeek === pickedDate.getDay(),
+    (x: any) => courtBlockOccurs(x, date, dateOverride),
   );
   const blocksForDate =
-    dateOverride?.type === "open"
+    dateOverride?.type === "open" && !dateOverride.weeklyOnly
       ? dayBlocks.filter((x: any) => x.date === date)
       : dayBlocks;
   const courtOf = (id: string) => courts.find((c: any) => c.id === id);
@@ -422,10 +426,10 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
         const isPast = value < now.date,
           closed = override?.type === "closed";
         const blocks = (monthData?.blocks || []).filter(
-          (x: any) => x.date === value || x.dayOfWeek === d.getDay(),
+          (x: any) => courtBlockOccurs(x, value, override),
         );
         const effectiveBlocks =
-          override?.type === "open"
+          override?.type === "open" && !override.weeklyOnly
             ? blocks.filter((x: any) => x.date === value)
             : blocks;
         const bookings = (monthData?.bookings || []).filter(
@@ -582,19 +586,19 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
     return (
       <Page title="Court booking confirmed" eyebrow="Zawana Badminton Arena">
         <Card className="mx-auto max-w-3xl overflow-hidden p-0">
-          <div className="bg-zawana-950 p-7 text-white md:p-9">
+          <div className="border-b border-zawana-border p-5 sm:p-6">
             <div className="flex items-center gap-3">
               <span className="grid h-12 w-12 place-items-center rounded-2xl bg-zawana-gold text-zawana-950">
                 <Check />
               </span>
               <div>
-                <p className="eyebrow text-zawana-gold">CONFIRMED</p>
+                <p className="text-xs font-semibold text-zawana-500">CONFIRMED</p>
                 <h2 className="text-2xl font-black">
                   Your court time is secured
                 </h2>
               </div>
             </div>
-            <p className="mt-5 text-sm text-white/65">
+            <p className="mt-3 text-sm text-zawana-500">
               {done.length} session{done.length === 1 ? "" : "s"} across{" "}
               {[...new Set(done.map((b: any) => b.date))].length} date
               {new Set(done.map((b: any) => b.date)).size === 1 ? "" : "s"}
@@ -646,7 +650,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
               >
                 Book more court time
               </Button>
-              <Link to="/bookings">
+              <Link to="/bookings?kind=court">
                 <Button variant="secondary">
                   My bookings <ChevronRight size={15} />
                 </Button>
@@ -664,27 +668,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
     <Page
       title={isRescheduling ? "Reschedule your court" : "Book a court"}
       eyebrow="Zawana Badminton Arena"
-      actions={
-        <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-2 rounded-full bg-zawana-900 px-4 py-2 text-xs font-black sm:flex">
-            <CalendarDays size={14} /> Live availability
-          </div>
-          {!isRescheduling && <button
-            type="button"
-            onClick={() => setCheckoutOpen(true)}
-            aria-label={`Review booking, ${selected.length} selected sessions`}
-            className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-zawana-950 text-white shadow-lg transition hover:bg-zawana-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zawana-gold"
-          >
-            <ShoppingCart size={19} />
-            {selected.length > 0 && (
-              <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-zawana-gold px-1 text-[10px] font-black text-zawana-950">
-                {selected.length}
-              </span>
-            )}
-          </button>}
-          {reschedule && <Link className="text-xs text-zawana-500 underline underline-offset-4" to={reschedule.backTo}>Back to bookings</Link>}
-        </div>
-      }
+      actions={<Link className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" to={reschedule ? reschedule.backTo : "/bookings?kind=court"}>{reschedule ? "Back to bookings" : "Booking history"}</Link>}
     >
       {hasElapsedSelection && (
         <p role="alert" className="mb-4 text-sm text-red-700">
@@ -692,7 +676,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
           summary to continue.
         </p>
       )}
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_370px]">
+      <div className={reschedule ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_370px]" : "mx-auto max-w-4xl"}>
         <div className="space-y-5">
           {error && (
             <div
@@ -747,20 +731,8 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                   singleDate={isRescheduling}
                 />
                 <Card className="p-5 sm:p-6">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-semibold">
-                        When would you like to play?
-                      </h2>
-                      <p className="mt-1 text-sm text-zawana-500">
-                        {isRescheduling ? "Choose an hourly time, or leave open to see every time." : "Choose multiple hourly times, or leave open to see every time."}
-                      </p>
-                    </div>
-                    <Clock3
-                      size={18}
-                      className="mt-1 shrink-0 text-zawana-500"
-                    />
-                  </div>
+                  <details>
+                  <summary className="member-booking-disclosure">Preferred times (optional){preferredTimes.length ? ` · ${preferredTimes.length} selected` : ''}</summary>
                   <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-5">
                     {times.map((time) => (
                       <button
@@ -781,10 +753,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                       </button>
                     ))}
                   </div>
-                  <p className="mt-3 text-xs text-zawana-500">
-                    Each session is one hour. Availability is shown when you
-                    choose a court.
-                  </p>
+                  </details>
                 </Card>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-zawana-500">
@@ -845,13 +814,14 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                     </button>
                   ))}
                 </div>
+                <SegmentedControl className="member-booking-floors" label="Court floor" value={visibleFloor} onChange={setVisibleFloor} options={[{value:'all',label:'All floors'}, ...Array.from(new Set<string>(courts.map((court: any) => courtFloor(court)))).map(label => ({value:label,label}))]} />
                 {holiday?.active && (
                   <p className="text-xs text-zawana-500">
                     Holiday rate ·{" "}
                     {Number(holiday.price).toLocaleString(locale)} MMK / session
                   </p>
                 )}
-                {dateOverride?.type === "open" && (
+                {dateOverride?.type === "open" && !dateOverride.weeklyOnly && (
                   <p className="text-xs text-emerald-700">
                     {dateOverride.title} · Special opening hours
                   </p>
@@ -878,37 +848,31 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                   </Card>
                 ) : courts.length ? (
                   <>
-                    <p className="text-xs text-zawana-500">
-                      Green and red identify floors. Each time shows its
-                      availability.
-                    </p>
+
                     {[
                       {
                         label: "2nd floor",
                         color: "green",
                         courts: courts.filter((c: any) => {
-                          const n = Number(c.name.match(/(\d+)\D*$/)?.[1]);
-                          return n >= 1 && n <= 4;
+                          return courtFloor(c) === "2nd floor";
                         }),
                       },
                       {
                         label: "6th floor",
                         color: "red",
                         courts: courts.filter((c: any) => {
-                          const n = Number(c.name.match(/(\d+)\D*$/)?.[1]);
-                          return n >= 5 && n <= 8;
+                          return courtFloor(c) === "6th floor";
                         }),
                       },
                       {
                         label: "Other courts",
                         color: "neutral",
                         courts: courts.filter((c: any) => {
-                          const n = Number(c.name.match(/(\d+)\D*$/)?.[1]);
-                          return !(n >= 1 && n <= 8);
+                          return courtFloor(c) === "Other courts";
                         }),
                       },
                     ]
-                      .filter((floor) => floor.courts.length)
+                      .filter((floor) => floor.courts.length && (visibleFloor === 'all' || floor.label === visibleFloor))
                       .map((floor) => (
                         <section
                           key={floor.label}
@@ -967,7 +931,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                                       onClick={() =>
                                         setOpenCourt(expanded ? "" : court.id)
                                       }
-                                      className="flex min-h-24 w-full items-center gap-4 p-4 text-left transition hover:bg-zawana-950/[.015] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zawana-gold sm:p-5"
+                                      className="flex min-h-16 w-full items-center gap-3 p-3 text-left transition hover:bg-zawana-950/[.015] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zawana-gold sm:p-5"
                                     >
                                       <span
                                         aria-hidden="true"
@@ -982,7 +946,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                                           {court.name}
                                         </span>
                                         <span className="mt-1 block text-xs text-zawana-500">
-                                          {court.surface} ·{" "}
+                                          {courtFloor(court)} ·{" "}
                                           {open
                                             ? `${open} times available`
                                             : court.status === "available"
@@ -1128,103 +1092,10 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
           </motion.div>
         </div>
 
-        {reschedule ? <aside id="reschedule-summary" aria-label="Rescheduling summary"><CourtRescheduleSummary detail={reschedule.detail} selection={selected[0]} backTo={reschedule.backTo} busy={busy} disabled={rescheduleDisabled} exceptionReason={reschedule.exceptionReason} onExceptionReason={reschedule.onExceptionReason} onReview={() => void reviewSelection()} /></aside> : <>
-        <div id="booking-summary">
-          <Card className="h-fit overflow-hidden p-0 xl:sticky xl:top-24">
-            <div className="bg-zawana-950 p-5 text-white">
-              <p className="eyebrow text-zawana-gold">BOOKING SUMMARY</p>
-              <h2 className="mt-1 text-xl font-black">Review your sessions</h2>
-            </div>
-            <div className="p-5">
-              {selected.length ? (
-                <>
-                  <div className="my-4 space-y-4">
-                    {grouped.map((day) => (
-                      <div
-                        key={day.date}
-                        className="rounded-xl bg-zawana-900 p-3"
-                      >
-                        <div className="mb-3 flex items-center gap-2 text-sm font-black">
-                          <MapPin size={14} className="text-zawana-gold" />
-                          {dateLabel(day.date)}
-                        </div>
-                        {day.courts.map(([courtName, picks]) => (
-                          <div
-                            key={courtName}
-                            className="mb-2 border-t border-zawana-950/8 pt-2 last:mb-0"
-                          >
-                            <div className="mb-1 text-xs font-black">
-                              {courtName}
-                            </div>
-                            {picks.map((p) => (
-                              <div
-                                key={pickKey(p)}
-                                className="flex items-center justify-between gap-2 py-1 text-xs"
-                              >
-                                <span>{p.time}</span>
-                                <span className="flex items-center gap-2">
-                                  <b>{p.price.toLocaleString(locale)} MMK</b>
-                                  <button
-                                    aria-label={`Remove ${courtName} ${p.time} on ${p.date}`}
-                                    onClick={() =>
-                                      setSelected((prev) =>
-                                        prev.filter(
-                                          (x) => pickKey(x) !== pickKey(p),
-                                        ),
-                                      )
-                                    }
-                                    className="rounded p-1 hover:bg-red-50 hover:text-red-600"
-                                  >
-                                    <X size={13} />
-                                  </button>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-between border-t pt-4 text-sm">
-                    <span>
-                      {selected.length} session
-                      {selected.length === 1 ? "" : "s"}
-                    </span>
-                    <b>{total.toLocaleString(locale)} MMK</b>
-                  </div>
-                  <Button
-                    disabled={busy || loadingMonth || hasElapsedSelection}
-                    onClick={confirm}
-                    className="mt-5 w-full"
-                  >
-                    {busy ? "Confirming bookings…" : "Book & record payment"}{" "}
-                    <ChevronRight size={16} />
-                  </Button>
-                  <p className="mt-3 text-center text-[11px] leading-5 text-zawana-500">
-                    Your selected sessions and payment will be saved together.
-                  </p>
-                </>
-              ) : (
-                <div className="py-7 text-center">
-                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-zawana-900">
-                    <CalendarDays className="text-zawana-500" size={19} />
-                  </div>
-                  <p className="mt-3 text-sm font-bold">No sessions selected</p>
-                  <p className="mt-1 text-xs leading-5 text-zawana-500">
-                    Choose your dates, then add available court sessions.
-                  </p>
-                </div>
-              )}
-              <Link
-                to="/bookings"
-                className="mt-5 block border-t pt-4 text-center text-xs font-bold text-zawana-500"
-              >
-                View booking history{" "}
-                <ChevronRight className="inline" size={13} />
-              </Link>
-            </div>
-          </Card>
-        </div></>}
+        {reschedule && <aside id="reschedule-summary" aria-label="Rescheduling summary"><CourtRescheduleSummary detail={reschedule.detail} selection={selected[0]} backTo={reschedule.backTo} busy={busy} disabled={rescheduleDisabled} exceptionReason={reschedule.exceptionReason} onExceptionReason={reschedule.onExceptionReason} onReview={() => void reviewSelection()} /></aside>}
+        {!reschedule && step === 2 && <BookingActionBar hidden={checkoutOpen} action={<Button disabled={!selected.length || busy || loadingMonth || hasElapsedSelection} onClick={() => setCheckoutOpen(true)}>Review booking <ChevronRight size={16} /></Button>}>
+          <span>{selected.length} session{selected.length === 1 ? '' : 's'}</span><strong>{total.toLocaleString(locale)} MMK</strong>
+        </BookingActionBar>}
 
       </div>
       {reschedule && step === 2 && selected.length === 1 && <>
@@ -1236,36 +1107,11 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
       </>}
       <AnimatePresence>
         {!isRescheduling && checkoutOpen && (
-          <DialogSurface
-            title="Review booking"
-            labelledBy="mobile-checkout-title"
-            drawer
-            onClose={() => setCheckoutOpen(false)}
-            className="flex h-full w-full max-w-md flex-col bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl"
-          >
-            <header className="flex items-center justify-between border-b p-5">
-              <div>
-                <p className="eyebrow text-zawana-accent">COURT RENTAL</p>
-                <h2
-                  id="mobile-checkout-title"
-                  className="mt-1 text-xl font-black"
-                >
-                  Review booking
-                </h2>
-                <p className="mt-1 text-xs text-zawana-500">
-                  {selected.length} selected session
-                  {selected.length === 1 ? "" : "s"}
-                </p>
-              </div>
-              <button
-                onClick={() => setCheckoutOpen(false)}
-                aria-label="Close checkout"
-                className="grid h-11 w-11 place-items-center rounded-full bg-zawana-950/5"
-              >
-                <X size={19} />
-              </button>
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <DeskDialog title="Review booking" eyebrow="Court rental" description={`${selected.length} selected sessions. Your sessions and payment will be saved together.`} onClose={() => setCheckoutOpen(false)} closeLabel="Close checkout" cancelLabel="Back to selection" busy={busy}
+            summary={<span>Total <strong>{total.toLocaleString(locale)} MMK</strong></span>}
+            actions={<Button disabled={!selected.length || busy || loadingMonth || hasElapsedSelection} onClick={confirm}>{busy ? "Confirming bookings…" : "Book & record payment"}</Button>}>
+            <div>
+
               {selected.length ? (
                 grouped.map((day) => (
                   <div key={day.date} className="mb-4 rounded-2xl border p-4">
@@ -1338,29 +1184,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                 </div>
               )}
             </div>
-            <footer className="border-t bg-white p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <span className="text-sm text-zawana-500">Total</span>
-                <b className="text-xl">{total.toLocaleString(locale)} MMK</b>
-              </div>
-              <Button
-                disabled={
-                  !selected.length ||
-                  busy ||
-                  loadingMonth ||
-                  hasElapsedSelection
-                }
-                onClick={confirm}
-                className="w-full"
-              >
-                {busy ? "Confirming bookings…" : "Book & record payment"}
-                <ChevronRight size={16} />
-              </Button>
-              <p className="mt-3 text-center text-[11px] leading-5 text-zawana-500">
-                Your selected sessions and payment will be saved together.
-              </p>
-            </footer>
-          </DialogSurface>
+          </DeskDialog>
         )}
       </AnimatePresence>
       <AnimatePresence>

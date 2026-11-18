@@ -1,3 +1,14 @@
+import { DeskDialog } from '../components/court-desk/DeskDialog';
+import { RefundDialog, RefundInbox } from '../components/RefundWorkflow';
+import { RemoveWeeklyClassDialog } from '../components/court-desk/RemoveWeeklyClassDialog';
+import { canCombineRentals, type RentalCustomer } from '../components/court-desk/rentalSelection';
+import { CourtActionMenu } from '../components/court-desk/CourtActionMenu';
+import { BookingContextSummary, StaffRescheduleRequestDialog, BookingRequestInbox } from '../components/BookingRequestWorkflow';
+import { HolidayManagement } from '../components/court-desk/HolidayManagement';
+import { PrivateRescheduleInbox } from '../components/PrivateRescheduling';
+import { DeskMoveDialog, type MoveSource } from '../components/court-desk/DeskMoveDialog';
+import { DeskBatchBookingDialog, deskSelectionKey, type DeskSelection } from '../components/court-desk/DeskBatchBookingDialog';
+import { BadmintonAvailableDays, badmintonDaysLabel } from '../components/BadmintonAvailableDays';
 import BadmintonTransactions from '../components/badminton/BadmintonTransactions';
 import BadmintonNotifications from '../components/badminton/BadmintonNotifications';
 import { usePaymentRevision } from '../hooks/usePaymentRevision';
@@ -11,9 +22,9 @@ import { emptyDeskPayment } from '../components/court-desk/DeskPaymentFields';
 import { DeskPrivateCourseDialog } from '../components/court-desk/DeskPrivateCourseDialog';
 import { shiftDateKey } from '../utils/bookingDates';
 import { QrDesk } from '../components/QrDesk';
-import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
+import { bookingClock, bookingHasStarted, courtBlockOccurs } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
-import { DialogSurface, SegmentedControl, useDialog } from '../components/Interactions';
+import { SegmentedControl, useDialog } from '../components/Interactions';
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { motionTokens } from '../design/motion';
 import { Select } from '../components/Select';
@@ -157,9 +168,9 @@ function OpsModal({
       initial={reduced ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
       transition={{ duration: reduced ? 0 : motionTokens.dialog, ease: motionTokens.ease }}
-      className={`premium-dialog-panel premium-dialog-panel--control w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} overflow-hidden rounded-[30px] border border-white/60 bg-white shadow-[0_40px_120px_rgba(29,27,71,.28)]`}
+      className={`premium-dialog-panel premium-dialog-panel--control flex max-h-[calc(100dvh-2rem)] flex-col w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} overflow-hidden rounded-[30px] border border-white/60 bg-white shadow-[0_40px_120px_rgba(29,27,71,.28)]`}
     >
-      <div className="relative overflow-hidden bg-zawana-950 px-6 py-5 text-white">
+      <div className="relative shrink-0 overflow-hidden bg-zawana-950 px-6 py-5 text-white">
         <div className="absolute -right-10 -top-14 h-40 w-40 rounded-full border border-zawana-gold/25" />
 
         <div className="relative flex items-start justify-between gap-5">
@@ -178,7 +189,7 @@ function OpsModal({
         </div>
       </div>
 
-      <div className="max-h-[78vh] overflow-y-auto p-6">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">{children}</div>
     </motion.div>
   </motion.div>
 }
@@ -516,7 +527,8 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     return <Page title="Court Rental Desk" eyebrow="Badminton FO">
       <>
         {commonTop()}
-        <CourtDesk notify={notify} />
+        <div className="mb-6"><SegmentedControl label="Court rental view" value={rentalTab} onChange={setRentalTab} options={[{ value: 'availability', label: 'Availability & times' }, { value: 'bookings', label: 'Booking history' }]} /></div>
+        {rentalTab === 'availability' ? <CourtDesk notify={notify} /> : <BookingQueue notify={notify} />}
       </>
     </Page>;
 
@@ -543,7 +555,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     </Page>;
 
   if (isBad && view === 'transactions')
-    return <Page title={title} eyebrow="Badminton FO">
+    return <Page title="Finance" eyebrow="Badminton FO">
       <BadmintonTransactions />
     </Page>;
 
@@ -1684,12 +1696,16 @@ function courtBookingRow(b: any) {
   } catch {}
   return {
     ...b,
-    customer: b.user?.name || customerName || 'Walk-in',
+    customer: customerName || b.user?.name || 'Walk-in',
     court: b.court?.name || b.location
   }
 }
 
 function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'error' | 'info') => void }) {
+  const revision = usePaymentRevision();
+  const [historyKind, setHistoryKind] = useState('court');
+  const [historyDetail, setHistoryDetail] = useState<any>(null);
+  const showHistory = (row: any) => row.kind === 'court' ? setChangeBooking(row.id) : setHistoryDetail(row);
   const [changeBooking, setChangeBooking] = useState<string | null>(null);
   const { user } = useAuth();
   const o = useOperations();
@@ -1709,24 +1725,37 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
     timeTo: ''
   });
   useEffect(() => {
+    let live = true;
     const timer = window.setTimeout(
       () => {
-        const params = new URLSearchParams({ page: String(page), limit: '20', kind: 'court' });
+        const params = new URLSearchParams({ page: String(page), limit: '20', kind: historyKind });
         for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
-        get<any>(`/bookings?${params}`)
-          .then(r => {
+        const request = historyKind === 'weekly' ? get<any[]>('/court-blocks').then(blocks => {
+          const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          const filtered = blocks.map(block => ({ ...block, scheduleActive: block.active && (!block.effectiveUntil || block.effectiveUntil >= bookingClock().date) })).filter(block => block.type === 'class' && (block.dayOfWeek != null || !!block.date) && (!filters.courtId || filters.courtId === block.courtId) && (!filters.q || `${block.title} ${block.courtName}`.toLowerCase().includes(filters.q.toLowerCase())) && (!filters.status || (filters.status.toLowerCase() === 'cancelled' ? !block.scheduleActive : filters.status === 'active' && block.scheduleActive)) && !filters.paymentStatus && (!filters.timeFrom || block.start >= filters.timeFrom) && (!filters.timeTo || block.start <= filters.timeTo)).filter(block => {
+            if (!filters.from && !filters.to) return true;
+            if (block.date) return (!filters.from || block.date >= filters.from) && (!filters.to || block.date <= filters.to);
+            const lower = [filters.from, block.effectiveFrom].filter(Boolean).sort().at(-1) || shiftDateKey(filters.to, -7);
+            const upper = [filters.to, block.effectiveUntil].filter(Boolean).sort()[0] || shiftDateKey(lower, 7 * ((block.excludedDates?.length || 0) + 1));
+            for (let day = lower; day <= upper; day = shiftDateKey(day, 1)) if (courtBlockOccurs(block, day)) return true;
+            return false;
+          }).map(block => ({ ...block, kind: 'weekly', code: block.id, customer: block.title, date: block.date || `Every ${weekdays[block.dayOfWeek]}`, time: `${block.start} — ${block.end}`, price: 0, paymentStatus: '—', status: block.scheduleActive ? 'active' : 'cancelled', court: block.courtName || o.managedCourts.find(c => c.id === block.courtId)?.name }));
+          return { data: filtered.slice((page - 1) * 20, page * 20), pagination: { total: filtered.length, totalPages: Math.ceil(filtered.length / 20) } };
+        }) : get<any>(`/bookings?${params}`);
+        request.then(r => {
+            if (!live) return;
             setRows(
-              (r.data || []).map(courtBookingRow)
+              (r.data || []).map((row: any) => historyKind === 'weekly' ? row : courtBookingRow(row))
             );
             setPageInfo(r.pagination || { total: 0, totalPages: 0 });
             setError('')
           })
-          .catch((e: any) => setError(e.message || 'Could not load court bookings.'))
+          .catch((e: any) => { if (live) setError(e.message || 'Could not load court bookings.'); })
       },
       filters.q ? 250 : 0
     );
-    return () => window.clearTimeout(timer)
-  }, [page, filters]);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [page, filters, historyKind, revision]);
   const setFilter = (key: string, value: string) => {
     setPage(1);
     setFilters(f => ({ ...f, [key]: value }))
@@ -1737,7 +1766,7 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
     try {
       await o.updateCourtBooking(b.id, status);
       notify(`Booking ${status}.`);
-      const params = new URLSearchParams({ page: String(page), limit: '20', kind: 'court' });
+      const params = new URLSearchParams({ page: String(page), limit: '20', kind: historyKind });
       for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
       const r = await get<any>(`/bookings?${params}`);
       setRows((r.data || []).map(courtBookingRow));
@@ -1750,10 +1779,15 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
       setBusy('')
     }
   };
-  return <div>
+  return <div className="desk-history">
+    <RefundInbox />
+    <BookingRequestInbox staff />
     {changeBooking && <CourtChangeDialog bookingId={changeBooking} onClose={() => setChangeBooking(null)} onChanged={() => { setFilters(f => ({ ...f })); notify('Booking updated.'); }} />}
 
-    <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+    {historyDetail && <DeskDialog title="Booking history details" heading={historyDetail.title} size="compact" onClose={()=>setHistoryDetail(null)} cancelLabel="Close" closeLabel="Close history details" bodyClassName="space-y-4"><p className="text-sm font-medium">{historyDetail.customer}</p><dl className="desk-history-facts"><div><dt>Court</dt><dd>{historyDetail.court}</dd></div><div><dt>Schedule</dt><dd>{historyDetail.date} · {historyDetail.time}</dd></div><div><dt>Status</dt><dd>{historyDetail.status}</dd></div>{historyKind!=='weekly'&&<div><dt>Payment</dt><dd>{historyDetail.paymentStatus} · {money(historyDetail.price)}</dd></div>}</dl>{historyKind==='weekly'&&<p className="desk-note">Recurring schedule record. Weekly classes do not create individual rental or payment history records.</p>}</DeskDialog>}
+
+    <div className="mb-4"><SegmentedControl label="Booking history type" value={historyKind} onChange={value => { setRows([]); setPage(1); setFilters(f => ({ ...f, status: '', paymentStatus: '' })); setHistoryKind(value); }} options={[{ value: 'court', label: 'Court Rentals' }, { value: 'private_course', label: 'Private Courses' }, { value: 'weekly', label: 'Weekly Classes' }]} /></div>
+    <div className="desk-history-filters mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <input
         aria-label="Search bookings"
         className="rounded-xl border p-3"
@@ -1768,13 +1802,13 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
         onChange={e => setFilter('status', e.target.value)}
       >
         <option value="">All statuses</option>
-        {[
+        {(historyKind === 'weekly' ? ['active', 'CANCELLED'] : [
           'CONFIRMED',
           'COMPLETED',
           'CANCELLED',
           'PENDING_COACH_CONFIRMATION',
           'AWAITING_PAYMENT'
-        ].map(s =>
+        ]).map(s =>
           <option key={s} value={s}>
             {s.replaceAll('_', ' ')}
           </option>
@@ -1782,6 +1816,7 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
       </Select>
       <Select
         aria-label="Payment status"
+        disabled={historyKind === 'weekly'}
         className="rounded-xl border p-3"
         value={filters.paymentStatus}
         onChange={e => setFilter('paymentStatus', e.target.value)}
@@ -1870,16 +1905,16 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
             </Cell>
             <Cell>
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => setChangeBooking(b.id)}>Details & history</Button>
-                {String(b.status).toLowerCase() === 'confirmed' && <Link to={courtReschedulePath(b.id, user?.role)}><Button variant="secondary">Reschedule</Button></Link>}
-                {!['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
+                <Button variant="secondary" onClick={() => showHistory(b)}>Details & history</Button>
+                {b.kind === 'court' && String(b.status).toLowerCase() === 'confirmed' && <Link to={courtReschedulePath(b.id, user?.role)}><Button variant="secondary">Reschedule</Button></Link>}
+                {b.kind === 'court' && !['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
                   <Button
                     variant="danger"
                     className="px-3 py-2"
                     disabled={busy === b.id}
                     onClick={() => setChangeBooking(b.id)}
                   >Cancel</Button>}
-                {String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
+                {b.kind === 'court' && String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
                   <Button
                     variant="secondary"
                     className="px-3 py-2"
@@ -1909,16 +1944,16 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
             {b.date} · {money(b.price)} · {b.paymentStatus}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setChangeBooking(b.id)}>Details & history</Button>
-                {String(b.status).toLowerCase() === 'confirmed' && <Link to={courtReschedulePath(b.id, user?.role)}><Button variant="secondary">Reschedule</Button></Link>}
-            {!['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
+            <Button variant="secondary" onClick={() => showHistory(b)}>Details & history</Button>
+                {b.kind === 'court' && String(b.status).toLowerCase() === 'confirmed' && <Link to={courtReschedulePath(b.id, user?.role)}><Button variant="secondary">Reschedule</Button></Link>}
+            {b.kind === 'court' && !['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
               <Button
                 variant="danger"
                 className="min-h-11 px-4"
                 disabled={busy === b.id}
                 onClick={() => setChangeBooking(b.id)}
               >Cancel</Button>}
-            {String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
+            {b.kind === 'court' && String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
               <Button
                 variant="secondary"
                 className="min-h-11 px-4"
@@ -1989,7 +2024,7 @@ function BadmintonPackages() {
 
     <div className="grid gap-3 sm:grid-cols-3">{[['Packages', o.badmintonPackages.length], ['Active', o.badmintonPackages.filter(p => p.status === 'active').length], ['Coming soon', o.badmintonPackages.filter(p => p.status === 'coming_soon').length]].map(([label, value]) => <Card key={label} className="p-5"><p className="text-xs text-zawana-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p></Card>)}</div>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3 rounded-xl border bg-white px-4 sm:w-80"><Search size={16} className="shrink-0 text-zawana-500" /><input aria-label="Search packages" placeholder="Search packages" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 w-full !border-0 !bg-transparent !px-0 !shadow-none !outline-none !ring-0" /></div><Select aria-label="Package catalog status" className="min-w-40 text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="active">Active</option><option value="coming_soon">Coming soon</option><option value="inactive">Inactive</option></Select></div>
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((p: any) => <Card key={p.id} className="flex flex-col overflow-hidden p-0"><div className="flex-1 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zawana-gold/10 text-zawana-950"><PackagePlus size={18} /></span><Badge good={p.status === 'active'}>{p.status === 'coming_soon' ? 'Coming soon' : p.status}</Badge></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{p.title}</h3><p className="mt-1 text-xs text-zawana-500">{p.category?.name || 'Category needs review'}{p.category?.code ? ` · ${p.category.code}` : ''}</p><p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zawana-500">{p.description || 'Badminton session package'}</p><p className="mt-5 text-2xl font-semibold tracking-tight">{money(p.price)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zawana-500"><span>{p.sessions} sessions</span><span>{p.validity} days validity</span></div><p className="mt-4 border-t border-zawana-border pt-4 text-xs leading-relaxed text-zawana-500">{p.availableFrom && p.availableUntil ? `${p.availableFrom}–${p.availableUntil} · ` : ''}{p.scheduleNotes || 'Flexible schedule'}{p.courtRules ? ` · ${p.courtRules}` : ''}</p></div><div className="flex items-center justify-between border-t border-zawana-border bg-zawana-950/[.015] px-5 py-3"><span className="text-xs text-zawana-500">Manage package</span><div className="flex gap-2"><PackageEdit item={p} kind="badminton" /><PackageDelete id={p.id} name={p.title} kind="badminton" /></div></div></Card>)}</div>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((p: any) => <Card key={p.id} className="flex flex-col overflow-hidden p-0"><div className="flex-1 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zawana-gold/10 text-zawana-950"><PackagePlus size={18} /></span><Badge good={p.status === 'active'}>{p.status === 'coming_soon' ? 'Coming soon' : p.status}</Badge></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{p.title}</h3><p className="mt-1 text-xs text-zawana-500">{p.category?.name || 'Category needs review'}{p.category?.code ? ` · ${p.category.code}` : ''}</p><p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zawana-500">{p.description || 'Badminton session package'}</p><p className="mt-5 text-2xl font-semibold tracking-tight">{money(p.price)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zawana-500"><span>{p.sessions} sessions</span><span>{p.validity} days validity</span></div><p className="mt-3 text-xs leading-relaxed text-zawana-500"><span className="font-semibold">Available days:</span> {badmintonDaysLabel(p.availableDays)}</p><p className="mt-4 border-t border-zawana-border pt-4 text-xs leading-relaxed text-zawana-500">{p.availableFrom && p.availableUntil ? `${p.availableFrom}–${p.availableUntil} · ` : ''}{p.scheduleNotes || 'Flexible schedule'}{p.courtRules ? ` · ${p.courtRules}` : ''}</p></div><div className="flex items-center justify-between border-t border-zawana-border bg-zawana-950/[.015] px-5 py-3"><span className="text-xs text-zawana-500">Manage package</span><div className="flex gap-2"><PackageEdit item={p} kind="badminton" /><PackageDelete id={p.id} name={p.title} kind="badminton" /></div></div></Card>)}</div>
     {!shown.length && <Empty title="No matching packages" body="Try another search or create a new package." />}
   </div>
 }
@@ -1997,6 +2032,7 @@ function BadmintonPackages() {
 function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
   const o = useOperations();
   const { user } = useAuth();
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [classifyLegacy, setClassifyLegacy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -2006,6 +2042,8 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
     benefits: Array.isArray(item.benefits) ? item.benefits.join(', ') : item.benefits || ''
   });
   const save = async () => {
+    if (saving || uploadBusy) return;
+    if (kind === 'badminton' && (![+form.sessions, +form.validity].every(value => Number.isInteger(value) && value > 0))) { setSaveError('Sessions and validity must be positive whole numbers.'); return; }
     setSaving(true); setSaveError('');
     try {
       if (kind === 'badminton')
@@ -2016,7 +2054,9 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
           validity: +form.validity,
           description: form.description,
           status: form.status,
-          categoryId: form.categoryId
+          categoryId: form.categoryId,
+          availableDays: form.availableDays || [],
+          imageUrl: form.imageUrl || null
         });
       else
         await o.updateGymPackage(item.id, {
@@ -2049,7 +2089,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
     {/* eslint-disable-next-line */}
     <button
       className="rounded-xl p-2 hover:bg-zawana-900"
-      onClick={() => setOpen(true)}
+      onClick={() => { setForm({ ...item, benefits: Array.isArray(item.benefits) ? item.benefits.join(', ') : item.benefits || '' }); setSaveError(''); setClassifyLegacy(false); setOpen(true); }}
       title="Edit"
       aria-label={`Edit ${item.title}`}
     >
@@ -2059,9 +2099,9 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
       <OpsModal
         title={`Edit ${kind} package`}
         subtitle="Update pricing, sessions, validity and status."
-        onClose={() => setOpen(false)}
+        onClose={() => { if (!saving && !uploadBusy) setOpen(false); }}
       >
-        {kind === 'badminton' && <div className="mb-5 space-y-3"><BadmintonCategoryField value={form.categoryId} onChange={categoryId => setForm({ ...form, categoryId })} />{user?.role === 'admin' && <label className="flex items-start gap-3 text-xs leading-relaxed"><input type="checkbox" checked={classifyLegacy} onChange={e => setClassifyLegacy(e.target.checked)} /><span>I reviewed this package’s legacy records. Apply this category to its unclassified enrollments and matching attendance history. Existing classified categories and session balances stay unchanged.</span></label>}</div>}{saveError && <p role="alert" className="mb-4 text-sm text-red-700">{saveError}</p>}<div className="grid gap-4 md:grid-cols-2">
+        {kind === 'badminton' && <div className="mb-5 space-y-3"><BadmintonCategoryField value={form.categoryId} onChange={categoryId => setForm({ ...form, categoryId })} />{user?.role === 'admin' && <label className="flex items-start gap-3 text-xs leading-relaxed"><input type="checkbox" checked={classifyLegacy} onChange={e => setClassifyLegacy(e.target.checked)} /><span>I reviewed this package’s legacy records. Apply this category to its unclassified enrollments and matching attendance history. Existing classified categories and session balances stay unchanged.</span></label>}</div>}{saveError && <p role="alert" className="mb-4 text-sm text-red-700">{saveError}</p>}<h4 className="mb-3 font-bold">Package Information</h4><div className="grid gap-4 md:grid-cols-2">
           <label>Title<input
               value={form.title || ''}
               onChange={e => setForm({ ...form, title: e.target.value })}
@@ -2075,7 +2115,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
           </label>
           {kind === 'badminton' ?
             <>
-              <label>Sessions<input
+              <h4 className="md:col-span-2 font-bold">Package Configuration</h4><label>Sessions<input
                   type="number"
                   value={form.sessions ?? ''}
                   onChange={e => setForm({ ...form, sessions: e.target.value })}
@@ -2087,6 +2127,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
                   onChange={e => setForm({ ...form, validity: e.target.value })}
                 />
               </label>
+              <div className="md:col-span-2"><BadmintonAvailableDays value={form.availableDays} onChange={availableDays => setForm({ ...form, availableDays })} disabled={saving} /></div>
             </> :
             <>
               <label>Duration days<input
@@ -2108,6 +2149,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
                 />
               </label>
             </>}
+          {kind === "badminton" && <div className="md:col-span-2"><ImageUpload label="Package image" value={form.imageUrl} onChange={imageUrl => setForm({ ...form, imageUrl })} onBusyChange={setUploadBusy} /></div>}
           <label className="md:col-span-2">Description<textarea
               value={form.description || ''}
               onChange={e => setForm({ ...form, description: e.target.value })}
@@ -2123,9 +2165,9 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
             </Select>
           </label>
         </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button disabled={saving} onClick={save}>
+        <div className="sticky -bottom-4 z-10 -mx-4 mt-6 flex justify-end gap-2 border-t bg-white px-4 py-4 sm:-bottom-6 sm:-mx-6 sm:px-6">
+          <Button variant="secondary" disabled={saving || uploadBusy} onClick={() => setOpen(false)}>Cancel</Button>
+          <Button disabled={saving || uploadBusy} onClick={save}>
             <Check size={15} /> Save changes</Button>
         </div>
       </OpsModal>}</AnimatePresence>
@@ -2186,6 +2228,8 @@ function PackageManager({
   notify: (s: string) => void
 }) {
   const o = useOperations();
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [packageSaving, setPackageSaving] = useState(false);
   const [categoryId, setCategoryId] = useState('');
   const [name, setName] = useState(''),
     [price, setPrice] = useState(''),
@@ -2202,9 +2246,11 @@ function PackageManager({
     [imageUrl, setImageUrl] = useState('');
 
   const save = async () => {
-    if (!name.trim() || !price || (kind === 'badminton' && !categoryId)) {
+    if (packageSaving || uploadBusy) return;
+    if (!name.trim() || !price || (kind === 'badminton' && (!categoryId || !Number.isInteger(+number) || +number < 1 || !Number.isInteger(+validity) || +validity < 1))) {
       notify('Please enter a package title, category and price.');
       return }
+    setPackageSaving(true);
     try {
       if (kind === 'badminton')
         await o.addBadmintonPackage({
@@ -2242,11 +2288,13 @@ function PackageManager({
       setValidity('60');
       setDescription('');
       setBenefits('Gym access');
+      setImageUrl('');
+      setAvailableDays([]);
       setShowForm(false);
       notify(`${kind === 'badminton' ? 'Badminton' : 'Gym'} package created.`)
     } catch (e: any) {
       notify(e.message || 'Could not save package.')
-    }
+    } finally { setPackageSaving(false); }
   };
 
   return <div>
@@ -2259,9 +2307,9 @@ function PackageManager({
       <OpsModal
         title={`Create ${kind} package`}
         subtitle="Set session access, pricing and availability for your members."
-        onClose={() => setShowForm(false)}
+        onClose={() => { if (!uploadBusy && !packageSaving) setShowForm(false); }}
       >
-        <div className="grid gap-4 md:grid-cols-2">
+        <h4 className="mb-3 font-bold">Package Information</h4><div className="grid gap-4 md:grid-cols-2">
           <input
             placeholder="Package title"
             value={name}
@@ -2273,42 +2321,18 @@ function PackageManager({
             value={price}
             onChange={e => setPrice(e.target.value)}
           />
+          <textarea
+            className="md:col-span-2"
+            placeholder="Description"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+          />
           {kind === 'badminton' ?
             <><BadmintonCategoryField value={categoryId} onChange={setCategoryId} />
-              <input
-                type="number"
-                placeholder="Sessions"
-                value={number}
-                onChange={e => setNumber(e.target.value)}
-              />
-              <input
-                type="number"
-                placeholder="Validity days"
-                value={validity}
-                onChange={e => setValidity(e.target.value)}
-              />
+<h4 className="md:col-span-2 font-bold">Package Configuration</h4><label className="block space-y-2 text-sm">Sessions<input className="w-full" type="number" min={1} step={1} value={number} onChange={e => setNumber(e.target.value)} /></label>
+<label className="block space-y-2 text-sm">Validity days<input className="w-full" type="number" min={1} step={1} value={validity} onChange={e => setValidity(e.target.value)} /></label>
               <div className="md:col-span-2">
-                <p className="mb-2 text-xs font-bold text-zawana-500">Available days</p>
-                <div className="flex flex-wrap gap-2">
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d =>
-                    <label
-                      key={d}
-                      className="flex items-center gap-1 rounded-lg border px-3 py-2 text-xs"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={availableDays.includes(d)}
-                        onChange={e =>
-                          setAvailableDays(
-                            e.target.checked
-                              ? [...availableDays, d]
-                              : availableDays.filter(x => x !== d)
-                          )
-                        }
-                      />
-                      {d}
-                    </label>)}
-                </div>
+                <BadmintonAvailableDays value={availableDays} onChange={setAvailableDays} disabled={packageSaving} />
               </div>
               <input
                 type="time"
@@ -2332,11 +2356,7 @@ function PackageManager({
                 value={courtRules}
                 onChange={e => setCourtRules(e.target.value)}
               />
-              <input
-                placeholder="Image URL (optional)"
-                value={imageUrl}
-                onChange={e => setImageUrl(e.target.value)}
-              />
+              <div className="md:col-span-2"><h4 className="mb-3 font-bold">Package Image</h4><ImageUpload label="Package image" value={imageUrl} onChange={value => setImageUrl(value || '')} onBusyChange={setUploadBusy} /></div>
             </> :
             <>
               <input
@@ -2358,15 +2378,10 @@ function PackageManager({
                 onChange={e => setBenefits(e.target.value)}
               />
             </>}
-          <textarea
-            className="md:col-span-2"
-            placeholder="Description"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-          />
+
         </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={save}>
+        <div className="sticky -bottom-4 z-10 -mx-4 mt-6 flex justify-end gap-2 border-t bg-white px-4 py-4 sm:-bottom-6 sm:-mx-6 sm:px-6">
+          <Button variant="secondary" disabled={uploadBusy || packageSaving} loading={packageSaving} onClick={save}>
             <Plus size={15} /> Create</Button>
         </div>
       </OpsModal>}</AnimatePresence>
@@ -2891,17 +2906,22 @@ function CourtManager() {
   const [form, setForm] = useState({
     name: '',
     type: 'Premium' as 'Premium' | 'Standard',
-    surface: 'Yonex Tournament',
+    surface: '',
+    floor: '2nd Floor',
     price: '18000',
     features: 'Air conditioned, LED lighting'
   });
 
-  const save = () => {
+  const [savingCourt, setSavingCourt] = useState(false);
+  const [courtError, setCourtError] = useState('');
+  const save = async () => {
+    if (savingCourt) return;
     if (!form.name || !form.price) return;
     const data = {
       name: form.name,
       type: form.type,
       surface: form.surface,
+      floor: form.floor as "2nd Floor" | "6th Floor",
       price: +form.price,
       status: 'available' as const,
       features: form.features
@@ -2909,17 +2929,21 @@ function CourtManager() {
         .map(x => x.trim())
         .filter(Boolean)
     };
-    if (editing) o.updateCourt(editing, data);
-    else o.addCourt(data);
+    setSavingCourt(true); setCourtError('');
+    try {
+    if (editing) await o.updateCourt(editing, data);
+    else await o.addCourt(data);
     setOpen(false);
     setEditing(null);
     setForm({
       name: '',
       type: 'Premium',
-      surface: 'Yonex Tournament',
+      surface: '',
+    floor: '2nd Floor',
       price: '18000',
       features: 'Air conditioned, LED lighting'
-    })
+    });
+    } catch (error: any) { setCourtError(error.message || 'Could not save court.'); } finally { setSavingCourt(false); }
   };
 
   const edit = (id: string) => {
@@ -2929,6 +2953,7 @@ function CourtManager() {
       name: c.name,
       type: c.type,
       surface: c.surface,
+      floor: c.floor || (courtFloor(c) === "6th floor" ? "6th Floor" : "2nd Floor"),
       price: String(c.price),
       features: c.features.join(', ')
     });
@@ -3007,11 +3032,7 @@ function CourtManager() {
             <option>Premium</option>
             <option>Standard</option>
           </Select>
-          <input
-            placeholder="Surface"
-            value={form.surface}
-            onChange={e => setForm({ ...form, surface: e.target.value })}
-          />
+          <label>Floor<Select required value={form.floor} onChange={e => setForm({ ...form, floor: e.target.value })}><option>2nd Floor</option><option>6th Floor</option></Select></label>
           <input
             type="number"
             placeholder="Price / 60 min"
@@ -3026,7 +3047,7 @@ function CourtManager() {
           />
         </div>
         <div className="mt-5 flex gap-2">
-          <Button onClick={save}>{editing ? 'Save changes' : 'Create court'}</Button>
+          {courtError && <p role="alert" className="text-red-700">{courtError}</p>}<Button disabled={savingCourt} loading={savingCourt} onClick={save}>{editing ? 'Save changes' : 'Create court'}</Button>
           <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
         </div>
       </Card>}
@@ -3060,7 +3081,7 @@ function CourtManager() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-black">{c.name}</h3>
-                <p className="mt-1 text-xs text-zawana-500">{c.surface}</p>
+                <p className="mt-1 text-xs text-zawana-500">{courtFloor(c)}</p>
               </div>
               <Badge good={c.status === 'available'}>{c.status}</Badge>
             </div>
@@ -3332,7 +3353,7 @@ function Finance() {
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<any[]>([]);
   const [pageInfo, setPageInfo] = useState<any>({ total: 0, totalPages: 0 });
-  const [summary, setSummary] = useState<any>({ gross: 0, discounts: 0, net: 0 });
+  const [summary, setSummary] = useState<any>({ gross: 0, discounts: 0, net: 0, refunds: 0 });
   const [error, setError] = useState('');
   const [filters, setFilters] = useState({
     from: '',
@@ -3351,7 +3372,7 @@ function Finance() {
           .then(r => {
             setRows(r.data || []);
             setPageInfo(r.pagination || { total: 0, totalPages: 0 });
-            setSummary(r.summary || { gross: 0, discounts: 0, net: 0 });
+            setSummary(r.summary || { gross: 0, discounts: 0, net: 0, refunds:0 });
             setError('')
           })
           .catch((e: any) => setError(e.message || 'Could not load finance transactions.'))
@@ -3365,6 +3386,7 @@ function Finance() {
     setFilters(f => ({ ...f, [key]: value }))
   };
   return <div>
+    <RefundInbox />
     <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
       <input
         aria-label="Search transactions"
@@ -3417,9 +3439,10 @@ function Finance() {
       <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
         {error}
       </p>}
-    <div className="mb-6 grid gap-4 sm:grid-cols-3">
+    <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Stat label="Gross · filtered total" value={money(summary.gross)} />
       <Stat label="Discounts · filtered total" value={money(summary.discounts)} />
+      <Stat label="Refunds · filtered total" value={money(summary.refunds || 0)} />
       <Stat label="Net · filtered total" value={money(summary.net)} />
     </div>
     <div className="hidden md:block">
@@ -5386,14 +5409,26 @@ function POS({
 
 function CourtDesk({ notify }: { notify: (s: string) => void }) {
   const o = useOperations();
-  const navigate = useNavigate();
-  const deskLocation = useLocation();
+  const [holidayView, setHolidayView] = useState(false);
+  const [suspendedClasses, setSuspendedClasses] = useState<{ id: string; title: string; start: string; end: string }[]>([]);
+  const [selections, setSelections] = useState<DeskSelection[]>([]);
+  type SelectedRecord = RentalCustomer & { id: string; courtId: string; title: string; kind: string; time: string; date: string };
+  const [selectedRecords, setSelectedRecords] = useState<SelectedRecord[]>([]);
+  const record = selectedRecords[0];
+  const [form, setForm] = useState<'rental' | 'weekly' | 'private' | null>(null);
+  const [moveSources, setMoveSources] = useState<MoveSource[]>([]);
+  const [inviteIds, setInviteIds] = useState<string[]>([]);
+  const [refundId, setRefundId] = useState('');
+  const [removeClasses, setRemoveClasses] = useState<SelectedRecord[]>([]);
+  const [invalidSelections, setInvalidSelections] = useState<string[]>([]);
+  const [checkingSelections, setCheckingSelections] = useState(false);
+  const [selectedTime, setSelectedTime] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+
+
   const [courtQuery, setCourtQuery] = useState('');
   const [floorFilter, setFloorFilter] = useState('all');
-  const [reservationType, setReservationType] = useState('rental');
   const [statusFilter, setStatusFilter] = useState<DeskStatus>('all');
-  const [changeBooking, setChangeBooking] = useState<string | null>(null);
-  const [inspectedBlock, setInspectedBlock] = useState<DeskBlock | null>(null);
   const [calendarDate, setCalendarDate] = useState('');
   const [calendarError, setCalendarError] = useState('');
   const availabilityRequest = useRef(0);
@@ -5401,27 +5436,15 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
 
   const [date, setDate] = useState(() => bookingClock().date);
 
-  const [court, setCourt] = useState<any>(null);
-  const [slot, setSlot] = useState('');
-  const [walkInName, setWalkInName] = useState('');
-  const [deskPayment, setDeskPayment] = useState(emptyDeskPayment);
-  const rentalRetry = useRef({ payload: '', key: '' });
   const [courseBookings, setCourseBookings] = useState<any[]>([]);
+  const [availabilityBookings, setAvailabilityBookings] = useState<{ id: string; courtId: string; time: string }[]>([]);
 
   const [saving, setSaving] = useState(false);
   const [blocks, setBlocks] = useState<any[]>([]);
   const [holiday, setHoliday] = useState<any>(null);
   const [dateOverride, setDateOverride] = useState<any>(null);
-  const [overrideType, setOverrideType] = useState<'open' | 'closed'>('open');
-  const [overrideTitle, setOverrideTitle] = useState('Holiday');
-  const [overrideReason, setOverrideReason] = useState('');
-  const [classTitle, setClassTitle] = useState('Badminton Class');
 
   const bookings = o.courtBookings.filter(b => b.date === date);
-
-  const dayName = new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' });
-
-  const dayOfWeek = new Date(`${date}T00:00:00`).getDay();
 
   const to24 = (value: string) => {
     const r = rangeOf(value);
@@ -5435,11 +5458,12 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     const request = ++availabilityRequest.current;
     setCalendarError('');
     try {
-      const [availability, weekly, privateBookings] = await Promise.all([
+      const [availability, weekly, privateBookings, suspended] = await Promise.all([
         get<any>(`/bookings/availability?date=${date}`),
 
         get<any[]>(`/court-blocks?date=${date}&courtId=`),
         get<any[]>(`/staff/private-courses/bookings?date=${date}`),
+        get<typeof suspendedClasses>(`/holidays/${date}/classes`),
       ]);
 
       const merged = [...(weekly || []), ...(availability.blocks || [])];
@@ -5448,53 +5472,19 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       if (request !== availabilityRequest.current) return;
 
       setBlocks(unique);
+      setSuspendedClasses(suspended);
+      setAvailabilityBookings(availability.bookings || []);
       setCourseBookings(privateBookings.filter(b => b.date === date && ['PENDING_COACH_CONFIRMATION', 'AWAITING_PAYMENT', 'CONFIRMED', 'confirmed'].includes(b.status)));
       setHoliday(availability.holiday || null);
       setDateOverride(availability.dateOverride || null);
-      setOverrideType(availability.dateOverride?.type || 'open');
-      setOverrideTitle(availability.dateOverride?.title || 'Holiday');
-      setOverrideReason(availability.dateOverride?.reason || '');
       setCalendarDate(date);
-    } catch {
+    } catch (error) {
       if (request !== availabilityRequest.current) return;
       setCalendarDate('');
-      setCalendarError('Availability could not be loaded. Refresh before making a reservation.');
+      const detail = error instanceof Error ? error.message : '';
+      setCalendarError(`Availability could not be loaded. ${detail ? `${detail} ` : ''}Refresh before making a reservation.`);
     }
   }, [date]);
-
-  const saveDateOverride = async () => {
-    setSaving(true);
-    try {
-      const result = await put<any>(`/badminton/date-overrides/${date}`, {
-        type: overrideType,
-        title: overrideTitle.trim() || 'Holiday',
-        reason: overrideReason.trim() || undefined
-      });
-      setDateOverride(result);
-      await refreshBlocks();
-      notify(
-        `One-day ${result.type === 'open' ? 'open availability' : 'closure'} saved for ${date}. Weekly schedules are unchanged.`
-      )
-    } catch (e: any) {
-      notify(e.message || 'Could not save the date override.')
-    } finally {
-      setSaving(false)
-    }
-  };
-
-  const removeDateOverride = async () => {
-    setSaving(true);
-    try {
-      await del(`/badminton/date-overrides/${date}`);
-      setDateOverride(null);
-      await refreshBlocks();
-      notify('Date override removed. The normal weekly schedule applies again.')
-    } catch (e: any) {
-      notify(e.message || 'Could not remove the date override.')
-    } finally {
-      setSaving(false)
-    }
-  };
 
   useEffect(() => {
     void refreshBlocks();
@@ -5506,10 +5496,12 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     );
 
   const isBusy = (c: any, t: string) =>
+    dateOverride?.type === 'closed' ||
     bookingHasStarted(date, t, now) ||
     c.status !== 'available' ||
+    availabilityBookings.some(b => b.courtId === c.id && slotOverlaps(b.time, t)) ||
     bookings.some(
-      b => b.court === c.name && slotOverlaps(b.time, t) && !['cancelled'].includes(b.status)
+      b => (b.courtId ? b.courtId === c.id : b.court === c.name) && slotOverlaps(b.time, t) && ['pending', 'confirmed'].includes(b.status.toLowerCase())
     ) ||
     courseBookings.some(b => b.courtId === c.id && slotOverlaps(b.time, t)) ||
     isBlocked(c, t);
@@ -5530,100 +5522,60 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       ? Number(holiday.price)
       : Number(c.price) + (courtSlots.indexOf(t) >= 9 ? 5000 : 0);
 
-  const reserveClass = async () => {
-    if (!court || !slot || bookingHasStarted(date, slot) || isBusy(court, slot)) {
-      notify('Select an open court slot first.');
-      return }
-
-    const range = to24(slot);
-    if (!range) {
-      notify('Invalid court slot.');
-      return }
-
-    setSaving(true);
-
-    try {
-      await post('/court-blocks', {
-        courtId: court.id,
-        dayOfWeek,
-        start: range.start,
-        end: range.end,
-        title: classTitle || 'Badminton Class',
-        type: 'class',
-        active: true
-      });
-
-      await refreshBlocks();
-      setSlot('');
-      notify(`${court.name} reserved every ${dayName} · ${slot}.`);
-    } catch (e: any) {
-      notify(e.message || 'Could not reserve class time.');
-
-      await refreshBlocks();
-    } finally {
-      setSaving(false)
-    }
-  };
-
-  const unreserve = async (block: any) => {
-    if (
-      !confirm(
-        `Unreserve ${block.title || 'this class'} every ${dayName} at ${block.start}–${block.end}?`
-      )
-    )
-      return;
-
-    setSaving(true);
-
-    try {
-      await del(`/court-blocks/${block.id}`);
-      await refreshBlocks();
-      notify(`${block.title || 'Class'} has been unreserved.`)
-    } catch (e: any) {
-      notify(e.message || 'Could not unreserve class.')
-    } finally {
-      setSaving(false)
-    }
-  };
-
-  const bookWalkIn = async () => {
-    if (!court || !slot || bookingHasStarted(date, slot) || isBusy(court, slot)) {
-      notify('That court slot is no longer available.');
-      return }
-    setSaving(true);
-    try {
-      if (!walkInName.trim() || !deskPayment.method) { notify('Enter the customer and choose a payment method.'); return; }
-      const payload = { courtId: court.id, date, time: slot, customer: walkInName.trim(), expectedPrice: slotPrice(court, slot), payment: { method: deskPayment.method } };
-      const serialized = JSON.stringify(payload);
-      if (rentalRetry.current.payload !== serialized) rentalRetry.current = { payload: serialized, key: crypto.randomUUID() };
-      await post('/staff/court-desk/rentals', { ...payload, requestKey: rentalRetry.current.key });
-      await o.refresh();
-      notify(`${court.name} reserved for ${walkInName || 'Walk-in Customer'} · ${slot}.`);
-      setCourt(null);
-      setSlot('')
-    } catch (e: any) {
-      notify(e.message || 'Walk-in booking failed.');
-      await o.refresh()
-    } finally {
-      setSaving(false)
-    }
-  };
-
-  const activeClassBlocks = blocks.filter(
-    b => calendarDate === date && b.courtId === court?.id && b.type === 'class' && b.active !== false
-  );
-
   const floors = [...new Set(o.managedCourts.map(courtFloor))];
   const visibleCourts = o.managedCourts.filter(c => c.name.toLowerCase().includes(courtQuery.trim().toLowerCase()) && (floorFilter === 'all' || courtFloor(c) === floorFilter))
     .sort((a, b) => courtFloor(a).localeCompare(courtFloor(b)) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-  const changeDate = (value: string) => { if (value) { setDate(value); setCourt(null); setSlot(''); setInspectedBlock(null); } };
-  const openCourt = (selected: typeof o.managedCourts[number], time = '', block: DeskBlock | null = null) => {
-    setCourt(selected); setSlot(time); setInspectedBlock(block); setDeskPayment(emptyDeskPayment());
-  };
+  const clearSelection = () => { setSelections([]); setSelectedRecords([]); setMenuOpen(false); };
   const calendarLoading = calendarDate !== date || !!calendarError;
+  const selectionSignature = selections.map(deskSelectionKey).join(';');
+  useEffect(() => {
+    let live = true;
+    if (!selections.length) { setInvalidSelections([]); setCheckingSelections(false); return; }
+    setCheckingSelections(true);
+    void Promise.all([...new Set(selections.map(s => s.date))].map(date => get<{ date: string; slots: { courtId: string; time: string; available: boolean; price: number }[] }>(`/court-booking/availability?date=${date}`))).then(calendars => {
+      if (!live) return;
+      const unavailable = selections.filter(s => !calendars.find(c => c.date === s.date)?.slots.some(slot => slot.courtId === s.courtId && slot.time === s.time && slot.available)).map(deskSelectionKey);
+      setInvalidSelections(unavailable);
+      setSelections(previous => previous.map(s => { const price = calendars.find(c => c.date === s.date)?.slots.find(slot => slot.courtId === s.courtId && slot.time === s.time)?.price; return price == null || price === s.price ? s : { ...s, price }; }));
+    }).catch(() => { if (live) setInvalidSelections(selections.map(deskSelectionKey)); }).finally(() => { if (live) setCheckingSelections(false); });
+    return () => { live = false; };
+  }, [selectionSignature, o.courtBookings, blocks, courseBookings, now.date, now.minute]);
+  const changeDate = (value: string) => { if (value && !saving) { setDate(value); setMenuOpen(false); } };
+  const selectCourt = (selected: typeof o.managedCourts[number], time = selectedTime) => {
+    if (saving || calendarLoading) return;
+    if (!time) { notify('Choose a session time or select an available timetable slot first.'); return; }
+    if (isBusy(selected, time)) { notify('This session is unavailable. Select its booking for actions.'); return; }
+    const selection = { courtId: selected.id, courtName: selected.name, date, time, price: slotPrice(selected, time) };
+    const key = deskSelectionKey(selection);
+    setSelectedRecords([]); setMenuOpen(false); setSelectedTime(time);
+    setSelections(rows => rows.some(row => deskSelectionKey(row) === key) ? rows.filter(row => deskSelectionKey(row) !== key) : rows.length >= 30 ? rows : [...rows, selection]);
+  };
+  const selectRecord = (next: Omit<SelectedRecord, 'date'>) => {
+    if (saving) return;
+    setSelections([]); setMenuOpen(false);
+    const item = { ...next, date };
+    setSelectedRecords(rows => {
+      if (rows.some(row => row.id === item.id && row.date === item.date))
+        return rows.filter(row => row.id !== item.id || row.date !== item.date);
+      if (next.kind === 'private' || rows.some(row => row.kind !== next.kind)) return [item];
+      if (next.kind === 'rental' && !canCombineRentals(rows, item)) return [item];
+      return [...rows, item];
+    });
+  };
+  const openAction = (kind: string) => {
+    if (!selections.length || checkingSelections || invalidSelections.length) return;
+    if (kind === 'private' && selections.length !== 1) { notify('Private courses support one court per session.'); return; }
+    setForm(kind as typeof form); setMenuOpen(false);
+  };
+  const openMoves = () => {
+    if (!selectedRecords.length || !['rental', 'weekly'].includes(record.kind)) return;
+    setMoveSources(selectedRecords.map(row => ({ ...row, kind: row.kind === 'rental' ? 'court' : 'weekly' }))); setMenuOpen(false);
+  };
+  const refreshed = async () => { await o.refresh(); await refreshBlocks(); clearSelection(); setForm(null); setMoveSources([]); notify('Reservations and history updated.'); };
+  const selectedCourtIds = selections.filter(s => s.date === date).map(s => s.courtId);
 
+  if (holidayView) return <HolidayManagement onBack={() => { setHolidayView(false); void o.refresh(); void refreshBlocks(); }} onChanged={async () => { await o.refresh(); await refreshBlocks(); }} />;
   return <div className="court-desk">
-    {changeBooking && <CourtChangeDialog bookingId={changeBooking} onClose={() => setChangeBooking(null)} onChanged={() => { void o.refresh(); void refreshBlocks(); }} />}
     <div className="desk-toolbar">
       <div className="desk-toolbar__date">
         <Button variant="secondary" aria-label="Previous Day" onClick={() => changeDate(shiftDateKey(date, -1))}><ChevronLeft size={16} /></Button>
@@ -5631,68 +5583,47 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
         <Button variant="secondary" aria-label="Next Day" onClick={() => changeDate(shiftDateKey(date, 1))}><ChevronRight size={16} /></Button>
         <Button variant="secondary" onClick={() => changeDate(bookingClock().date)}>Today</Button>
       </div>
-      <SegmentedControl label="Reservation type" value={reservationType} onChange={setReservationType} options={[{ value: 'rental', label: 'Court Rental' }, { value: 'weekly', label: 'Weekly Class' }, { value: 'private', label: 'Private Course' }]} />
+      <div className="desk-toolbar__tools"><Button variant="secondary" onClick={() => { clearSelection(); setHolidayView(true); }}>Holiday</Button><label className="text-xs text-zawana-500">Session time<Select aria-label="Selection time" value={selectedTime} disabled={saving} onChange={event => { setMenuOpen(false); setSelectedTime(event.target.value); }}><option value="">Choose time</option>{courtSlots.map(time => <option key={time}>{time}</option>)}</Select></label></div>
     </div>
+
     <div className="desk-filters">
       <label className="desk-search"><Search size={16} aria-hidden="true" /><input aria-label="Search courts" placeholder="Search courts" value={courtQuery} onChange={e => setCourtQuery(e.target.value)} /></label>
       <label><span>Floor</span><Select aria-label="Court floor" value={floorFilter} onChange={event => setFloorFilter(event.target.value)}><option value="all">All courts</option>{floors.map(floor => <option key={floor} value={floor}>{floor}</option>)}</Select></label>
       <label><span>Status</span><Select aria-label="Timetable status" value={statusFilter} onChange={event => setStatusFilter(event.target.value as DeskStatus)}>
         <option value="all">All statuses</option><option value="open">Available</option><option value="booked">Booked rentals</option><option value="pending">Pending bookings</option><option value="weekly">Weekly classes</option><option value="private">Private courses</option><option value="blocked">Blocked periods</option><option value="maintenance">Maintenance</option>
       </Select></label>
-      <Button variant="secondary" onClick={() => void refreshBlocks()}>Refresh availability</Button>
+      <Button variant="secondary" disabled={saving} onClick={() => { void o.refresh(); void refreshBlocks(); }}>Refresh availability</Button>
     </div>
     <div className="desk-legend" aria-label="Timetable legend"><span data-kind="open">Available</span><span data-kind="booked">Court rental</span><span data-kind="weekly">Weekly class</span><span data-kind="pending">Pending booking</span><span data-kind="blocked">Blocked / unavailable</span></div>
+    {!!suspendedClasses.length && <details className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><summary className="cursor-pointer text-sm font-semibold">Holiday / Overridden · {suspendedClasses.length} weekly classes</summary><ul className="mt-3 text-xs">{suspendedClasses.map(c => <li className="py-1" key={c.id}>{c.title} · {c.start}–{c.end} · Holiday / Overridden</li>)}</ul></details>}
     {calendarError && <div className="desk-load-error" role="alert">{calendarError}</div>}
     {visibleCourts.length > 0 && <CourtTimetable courts={visibleCourts} bookings={bookings} blocks={calendarDate === date ? [...blocks, ...courseBookings.flatMap(b => { const range = to24(b.time); return range ? [{ id: b.id, courtId: b.courtId, ...range, type: 'private', status: b.status, paymentStatus: b.paymentStatus, title: `${b.user?.name || 'Member'} · ${b.title}`, coach: b.coach, note: `Booking: ${b.status.replaceAll('_', ' ')} · Payment: ${b.paymentStatus}` }] : []; })] : []} slots={courtSlots} date={date}
       statusFilter={statusFilter} parseRange={rangeOf} slotStatus={status} loading={calendarLoading}
-      onSelectCourt={selected => openCourt(selected)} onSelectSlot={(selected, time) => openCourt(selected, time)}
-      onSelectBooking={booking => setChangeBooking(booking.id)}
-      onSelectBlock={(selected, block) => { if (block.type === 'private') { navigate(`${deskLocation.pathname.startsWith('/admin') ? '/admin' : '/badminton-fo'}/course-finance?booking=${encodeURIComponent(block.id)}`); return; } setReservationType(block.type === 'class' ? 'weekly' : 'rental'); openCourt(selected, `${block.start} — ${block.end}`, block); }}
+      selectedCourtIds={selectedCourtIds} selectedTime={selectedTime} selectedCells={selections.map(deskSelectionKey)} selectedRecordIds={selectedRecords.map(r => `${r.id}|${r.date}`)}
+      onSelectCourt={selected => selectCourt(selected)} onSelectSlot={(selected, time) => selectCourt(selected, time)}
+      onSelectBooking={booking => selectRecord({ id: booking.id, courtId: booking.courtId || o.managedCourts.find(c => c.name === booking.court)?.id || '', title: booking.customer, customerAccountId: booking.customerAccountId, customerName: booking.customerName, time: booking.time, kind: 'rental' })}
+      onSelectBlock={(selected, block) => selectRecord({ id: block.id, courtId: selected.id, title: block.title || 'Reserved', kind: block.type === 'private' ? 'private' : block.type === 'class' ? 'weekly' : 'blocked', time: `${block.start} — ${block.end}` })}
     />}
+    <div className="desk-selection-actions" aria-label="Court selection actions">
+      {selectedRecords.length > 0 && ['rental','private'].includes(record.kind) && <BookingContextSummary key={record.id} bookingId={record.id} />}
+      {record?.kind === 'rental' && <p className="w-full text-xs text-zawana-500">Select more rentals with the same customer name or account to reschedule together.</p>}
+      {!(selectedRecords.length === 1 && ['rental','private'].includes(record.kind)) && <div className="w-full" aria-live="polite"><strong>{selectedRecords.length ? `${selectedRecords.length} ${record.kind === 'private' ? 'private course' : record.kind === 'weekly' ? 'weekly class' : 'rental'} sessions selected` : `${selections.length} sessions selected`}</strong>
+      <ul className="mt-3 flex flex-wrap gap-2" aria-label="Selection tray">{selections.map(s => <li key={deskSelectionKey(s)} className="desk-selection-chip"><b>{s.courtName}</b><p className="mt-1">{s.date} · {s.time}</p>{invalidSelections.includes(deskSelectionKey(s)) && <p className="mt-1 text-red-700">Unavailable — remove or choose another session</p>}<button className="mt-2 underline" onClick={() => setSelections(rows => rows.filter(row => deskSelectionKey(row) !== deskSelectionKey(s)))} aria-label={`Remove ${s.courtName} ${s.date} ${s.time}`}>Remove</button></li>)}{selectedRecords.filter(r => r.kind !== 'private').map(r => <li key={`${r.id}|${r.date}`} className="desk-selection-chip"><b>{o.managedCourts.find(c => c.id === r.courtId)?.name} · {r.title}</b><p className="mt-1">{r.date} · {r.time}</p><button className="mt-2 underline" onClick={() => setSelectedRecords(rows => rows.filter(row => row.id !== r.id || row.date !== r.date))}>Remove session</button></li>)}</ul>
+      {!selectedRecords.length && !selections.length && <p className="mt-2 text-xs text-zawana-500">Select individual court-and-time cells. Your selection stays in the tray while you change dates or floors.</p>}</div>}
+      <div className="flex flex-wrap items-center gap-2"><Button variant="ghost" disabled={saving || (!selectedRecords.length && !selections.length)} onClick={clearSelection}>Clear Selection</Button>
+      <CourtActionMenu open={menuOpen} onOpenChange={setMenuOpen} disabled={saving || (!selectedRecords.length && (!selections.length || checkingSelections || !!invalidSelections.length))}
+        label={selectedRecords.length ? record.kind === 'private' ? 'Private Course Actions' : record.kind === 'weekly' ? 'Weekly Class Actions' : 'Booking Actions' : `Actions (${selections.length} Sessions Selected)`}>
+        {selectedRecords.length ? record.kind === 'weekly' ? <>
+          <button type="button" role="menuitem" onClick={openMoves}>Reschedule</button>
+          <button type="button" role="menuitem" className="desk-context-menu__destructive" onClick={() => { setRemoveClasses([...selectedRecords]); setMenuOpen(false); }}>Remove Weekly Class</button>
+        </> : <>
+          {record.kind !== 'private' && record.kind !== 'blocked' && <button type="button" role="menuitem" onClick={openMoves}>{record.kind==='rental' && selectedRecords.length === 1 ? 'Reschedule':'Reschedule selected sessions'}</button>}
+          {['private','rental'].includes(record.kind) && <button type="button" role="menuitem" onClick={() => { setInviteIds(selectedRecords.map(row => row.id)); setMenuOpen(false); }}>Request Reschedule<small>{selectedRecords.length > 1 ? `Send requests for ${selectedRecords.length} selected rentals` : record.kind==='private'?'Customer chooses; coach approves':'Customer chooses a replacement, staff assistance or refund review'}</small></button>}
+          <button type="button" role="menuitem" disabled={selectedRecords.length!==1} onClick={() => { setRefundId(record.id); setMenuOpen(false); }}>Refund{selectedRecords.length!==1&&<small>Select one booking to process its refund</small>}</button>
+        </> : <>{[{ kind: 'rental', label: 'Court Rental' }, { kind: 'weekly', label: 'Weekly Class' }, { kind: 'private', label: 'Private Course' }].map(action => <button type="button" role="menuitem" key={action.kind} disabled={action.kind === 'private' && selections.length !== 1} onClick={() => openAction(action.kind)}>{action.label}{action.kind === 'private' && selections.length !== 1 && <small>Select exactly one session</small>}</button>)}</>}
+      </CourtActionMenu>{checkingSelections && <span role="status" className="self-center text-xs text-zawana-500">Checking selected sessions…</span>}</div>
+    </div>
     {!!o.managedCourts.length && !visibleCourts.length && <Empty title="No matching courts" body="Try a different court name or floor." />}
-
-    <details className="mb-5 rounded-2xl border border-zawana-border bg-white p-5" open={!!dateOverride}>
-      <summary className="cursor-pointer text-sm font-semibold">Special opening hours <span className="ml-2 text-xs font-normal text-zawana-500">One-day opening or closure</span></summary>
-      <div className="mt-5">
-      <div className="grid gap-4 md:grid-cols-[1fr_180px_1fr_auto] md:items-end">
-        <label className="text-xs font-bold">One-day availability override<input
-            className="mt-2 w-full"
-            type="date"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-          />
-        </label>
-        <label className="text-xs font-bold">Override type<Select
-            className="mt-2 w-full"
-            value={overrideType}
-            onChange={e => setOverrideType(e.target.value as 'open' | 'closed')}
-          >
-            <option value="open">Holiday · open</option>
-            <option value="closed">Closed all day</option>
-          </Select>
-        </label>
-        <label className="text-xs font-bold">Holiday / closure label<input
-            className="mt-2 w-full"
-            value={overrideTitle}
-            onChange={e => setOverrideTitle(e.target.value)}
-            placeholder="e.g. Public holiday"
-          />
-        </label>
-        <div className="flex gap-2">
-          <Button disabled={saving} onClick={saveDateOverride}>
-            {saving ? 'Saving…' : 'Apply to date'}
-          </Button>
-          {dateOverride &&
-            <Button variant="secondary" disabled={saving} onClick={removeDateOverride}>Remove</Button>}
-        </div>
-      </div>
-      <p className="mt-3 text-xs leading-5 text-zawana-500">This affects {date} only. Holiday · open makes courts bookable despite recurring weekday reservations; bookings, maintenance and date-specific court blocks still apply. Removing it restores the normal weekly schedule.</p>
-      {dateOverride &&
-        <p className="mt-2 text-xs font-bold text-zawana-accent">Active for this date: {dateOverride.title} · {dateOverride.type === 'open' ? 'weekly schedule bypassed' : 'courts closed'}
-          {dateOverride.reason ? ` · ${dateOverride.reason}` : ''}
-        </p>}
-      </div>
-    </details>
 
     {holiday?.active && calendarDate === date &&
       <div className="mb-5 rounded-2xl border border-zawana-gold/30 bg-zawana-gold/10 p-4 text-sm font-black">Public holiday · {holiday.title} · {Number(holiday.price).toLocaleString()} MMK / hour</div>}
@@ -5703,94 +5634,13 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
         body="Admin must create courts before the FO can accept rentals."
       />}
 
-    <AnimatePresence>{court && reservationType === 'private' && <DeskPrivateCourseDialog court={court} date={date} initialTime={slot} onClose={() => { setCourt(null); setSlot(''); }} onCreated={() => { setCourt(null); setSlot(''); void o.refresh(); void refreshBlocks(); notify('Payment recorded. Awaiting assigned coach confirmation.'); }} />}{court && reservationType !== 'private' &&
-      <DialogSurface title={`${court.name} · availability`} onClose={() => { if (!saving) { setCourt(null); setSlot(''); setInspectedBlock(null) } }} className="desk-reservation-dialog">
-        <header className="desk-reservation-dialog__header"><div><p className="text-[10px] font-medium uppercase tracking-[.16em] text-zawana-500">{inspectedBlock ? 'Reservation management' : reservationType === 'weekly' ? 'Weekly class reservation' : 'Court rental reservation'}</p><h2 className="mt-1 text-xl font-semibold tracking-tight">{court.name}</h2><p className="mt-1 text-xs text-zawana-500">{new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · One-hour sessions</p></div><button type="button" aria-label="Close dialog" disabled={saving} onClick={() => { setCourt(null); setSlot('') }} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-zawana-500 transition hover:bg-zawana-950/5 focus-visible:ring-2 focus-visible:ring-zawana-gold"><X size={18} /></button></header>
-        <div className="desk-reservation-dialog__body">
-        <div className="desk-selection" aria-label="Selected reservation"><span><small>Court</small><strong>{court.name}</strong></span><span><small>Date</small><strong>{date}</strong></span><span><small>Time</small><strong>{slot || 'Choose a time'}</strong></span></div>
-        {inspectedBlock && <div className="desk-inspected-block"><strong>{inspectedBlock.title || 'Blocked period'}</strong><p>{inspectedBlock.type === 'class' ? `Weekly class · Every ${dayName}` : 'Blocked period'} · {inspectedBlock.start}–{inspectedBlock.end}</p>{inspectedBlock.note && <p>{inspectedBlock.note}</p>}</div>}
-        {calendarError && <p className="desk-load-error" role="alert">{calendarError}</p>}
-        <div className="desk-reservation-dialog__layout">
-          <div>
-            <div className="mb-4 flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold">Choose a time</h3><p className="mt-1 text-xs text-zawana-500">{courtSlots[0].split(' — ')[0]} – {courtSlots.at(-1)?.split(' — ')[1]} · Select an available session</p></div><span className="mt-1 flex items-center gap-1.5 text-[10px] text-zawana-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Available</span></div>
-            <div className="desk-time-grid">
-              {courtSlots.map(t => {
-                const st = status(court, t);
-                const booking = bookings.find(
-                  b =>
-                    b.court === court.name && slotOverlaps(b.time, t) && b.status !== 'cancelled'
-                );
-                const block = blocks.find(
-                  b =>
-                    b.courtId === court.id &&
-                    b.active !== false &&
-                    slotOverlaps(`${b.start} — ${b.end}`, t)
-                );
-                const reserved = st === 'class';
-                return <button
-                  key={t}
-                  onClick={() => {
-                    if (st === 'open') { setSlot(t); setDeskPayment(emptyDeskPayment()); }
-                  }}
-                  disabled={st !== 'open' || calendarLoading}
-                  aria-label={`${t} ${reserved ? `reserved every ${dayName}` : st !== 'open' ? st : 'available'}`}
-                  aria-pressed={slot === t}
-                  className={`desk-time-slot ${slot === t ? 'desk-time-slot--selected' : ''}`}
-                >
-                  <span className="desk-time-slot__time">{t.replace(' — ', ' – ')}{slot === t && <Check size={12} aria-hidden="true" />}</span>
-                  <span className="desk-time-slot__status">{st === 'open' ? money(slotPrice(court, t)) : reserved ? block?.title || 'Weekly class' : st === 'elapsed' ? 'Time passed' : court.status !== 'available' ? 'Maintenance' : `Booked${booking?.customer ? ` · ${booking.customer}` : ''}`}</span>
-                </button>
-              })}
-            </div>
-
-            <details open={!!inspectedBlock} className="mt-5 rounded-xl border border-zawana-border p-4"><summary className="cursor-pointer text-xs font-semibold">Weekly reservations <span className="ml-1 font-normal text-zawana-500">({activeClassBlocks.length})</span></summary><div className="mt-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zawana-purple">Weekly reservations · {dayName}
-                  </p>
-                  <p className="mt-1 text-xs text-zawana-500">These repeat every {dayName} until you unreserve them.</p>
-                </div>
-              </div>
-              {activeClassBlocks.length ?
-                <div className="mt-3 space-y-2">
-                  {activeClassBlocks.map(b =>
-                    <div
-                      key={b.id}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-white p-3"
-                    >
-                      <div>
-                        <b className="text-sm">{b.title}</b>
-                        <p className="text-xs text-zawana-500">Every {dayName} · {b.start}–{b.end}
-                        </p>
-                      </div>
-                      <Button
-                        variant="danger"
-                        className="px-3 py-2"
-                        disabled={saving}
-                        onClick={() => unreserve(b)}
-                      >
-                        <RotateCcw size={14} /> Unreserve</Button>
-                    </div>
-                  )}
-                </div> :
-                <p className="mt-3 text-xs text-zawana-500">No weekly class reservation for this court/day.</p>}
-            </div></details>
-          </div>
-          <div className="desk-reservation-form">
-            <p className="text-[10px] font-medium uppercase tracking-[.14em] text-zawana-500">Reservation details</p>
-            <div className="my-3"><SegmentedControl label="Reservation type" value={reservationType} onChange={setReservationType} options={[{ value: 'rental', label: 'Rental' }, { value: 'weekly', label: 'Weekly' }, { value: 'private', label: 'Private' }]} /></div>
-            {reservationType === 'rental' ? <label className="block text-xs font-medium text-zawana-500">Customer name<input maxLength={100} disabled={saving} className="mt-2 w-full rounded-xl bg-white text-sm text-zawana-950" value={walkInName} onChange={e => { setWalkInName(e.target.value); setDeskPayment(emptyDeskPayment()); }} /></label> : <label className="block text-xs font-medium text-zawana-500">Weekly class / facility block<input disabled={saving} className="mt-2 w-full rounded-xl bg-white text-sm text-zawana-950" value={classTitle} onChange={e => setClassTitle(e.target.value)} /></label>}
-            {reservationType === 'weekly' && <p className="desk-recurrence"><CalendarDays size={15} aria-hidden="true" />Repeats every {dayName}</p>}
-            {reservationType === 'rental' && <fieldset disabled={saving} className="desk-payment-fields"><legend>Payment method</legend><SegmentedControl label="Rental payment method" value={deskPayment.method} onChange={method => setDeskPayment({ ...emptyDeskPayment(), method: method as 'CASH' | 'ONLINE' })} options={[{ value: 'CASH', label: 'Cash' }, { value: 'ONLINE', label: 'Online payment' }]} /><p className="mt-3 text-xs text-zawana-500">Booking records payment together. Online payments are simulated; no external charge.</p></fieldset>}
-            <p className="mt-3 text-xs leading-relaxed text-zawana-500">{reservationType === 'rental' ? 'Reserve this one-hour session for your customer.' : `Reserves this time every ${dayName} until you remove it.`}</p>
-          </div>
-        </div>
-        </div>
-        <footer className="desk-reservation-dialog__footer">
-          <div><p>{reservationType === 'rental' ? 'Total rental' : 'Weekly court reservation'}</p><strong>{reservationType === 'rental' ? slot ? money(slotPrice(court, slot)) : 'Choose a time' : 'Recurring class'}</strong></div>
-          <Button loading={saving} disabled={!slot || saving || calendarLoading || isBusy(court, slot) || (reservationType === 'rental' && (!walkInName.trim() || !deskPayment.method))} onClick={reservationType === 'rental' ? bookWalkIn : reserveClass}>{saving ? 'Reserving…' : reservationType === 'rental' ? 'Record rental & payment' : 'Reserve weekly class'}{!saving && <ArrowRight size={15} />}</Button>
-        </footer>
-      </DialogSurface>}</AnimatePresence>
+    <AnimatePresence>{form === 'private' && selections[0] && <DeskPrivateCourseDialog court={{ id: selections[0].courtId, name: selections[0].courtName }} date={selections[0].date} initialTime={selections[0].time} onClose={() => setForm(null)} onCreated={() => { void refreshed(); }} />}
+      {(form === 'rental' || form === 'weekly') && <DeskBatchBookingDialog kind={form} selections={selections} onClose={() => setForm(null)} onCreated={refreshed} />}
+      {!!moveSources.length && <DeskMoveDialog sources={moveSources} courts={o.managedCourts} onClose={() => setMoveSources([])} onChanged={refreshed} />}
+      {!!refundId && <RefundDialog bookingId={refundId} onClose={() => setRefundId('')} onCompleted={async () => { await o.refresh(); await refreshBlocks(); clearSelection(); notify('Refund recorded. The booking reservation was released.'); }} />}
+      {!!removeClasses.length && <RemoveWeeklyClassDialog sources={removeClasses} onClose={() => setRemoveClasses([])} onRemoved={async () => { await o.refresh(); await refreshBlocks(); clearSelection(); setRemoveClasses([]); notify('Weekly class removed from the recurring schedule.'); }} />}
+      {!!inviteIds.length && <StaffRescheduleRequestDialog bookingIds={inviteIds} onClose={() => setInviteIds([])} onSent={notify} />}
+    </AnimatePresence>
   </div>
 }
 
@@ -5940,6 +5790,7 @@ function CoachBookings({ notify }: { notify: (s: string) => void }) {
   };
 
   return <div>
+    <PrivateRescheduleInbox coach onChanged={() => { void load(); }} />
     {error && <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
     <div className="mb-4 rounded-2xl border border-zawana-accent/30 bg-zawana-accent/10 p-4">

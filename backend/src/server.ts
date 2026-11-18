@@ -1,4 +1,8 @@
-import { badmintonCategories, categoryWhere, presentTransactions, transactionOrder, onlinePaymentMethods } from './services/transactionPresentation.js';
+import { createHolidayRouter } from './routes/holidays.js';
+import { expirePrivateReschedules } from './services/privateRescheduling.js';
+import { createReschedulingRouter } from './routes/rescheduling.js';
+import { blockOccurs, blockExcludedDates } from './services/blockSchedule.js';
+import { badmintonCategories, categoryWhere, presentTransactions, transactionOrder, onlinePaymentMethods, recognizedLedgerRevenue } from './services/transactionPresentation.js';
 import { paymentOperation, operationMetadata } from "./middleware/paymentOperation.js";
 import { requestContextMiddleware } from "./utils/requestContext.js";
 import { createCourtDeskRouter } from './routes/courtDesk.js';
@@ -95,6 +99,8 @@ app.use(
   })
 );
 app.use("/api/staff/private-courses", createPrivateCourseFinanceRouter(prisma, expirePrivateCourseReservations));
+app.use('/api/holidays', createHolidayRouter(prisma));
+app.use('/api/rescheduling', createReschedulingRouter(prisma));
 app.use('/api/staff/court-desk', createCourtDeskRouter(prisma, expirePrivateCourseReservations));
 app.use("/uploads/coaches", express.static(coachUploadPath));
 app.use("/uploads/courses", express.static(courseUploadPath));
@@ -858,7 +864,7 @@ async function courtBlocks(date?: string, courtId?: string) {
     throw Object.assign(new Error("Choose a valid court-block date (YYYY-MM-DD)."), { statusCode: 400 });
   const dow = date ? new Date(`${date}T12:00:00Z`).getUTCDay() : undefined;
   const override = date ? await courtDateOverride(date) : null;
-  const recurring = date && override?.type !== "open";
+  const recurring = date && !(override?.type === "open" && !override.weeklyOnly);
   const where =
     date && courtId
       ? `WHERE (cb.date = ? AND cb.active = 1${recurring ? " OR (cb.dayOfWeek = ? AND cb.active = 1)" : ""}) AND cb.courtId = ?`
@@ -877,11 +883,13 @@ async function courtBlocks(date?: string, courtId?: string) {
           : [date]) : courtId
           ? [courtId]
           : [];
-  return rawQuery<any[]>(
+  const rows = await rawQuery<any[]>(
     prisma,
     `SELECT cb.*, c.name as courtName FROM "CourtBlock" cb JOIN "Court" c ON c.id = cb.courtId ${where} ORDER BY cb.start ASC`,
     ...params
   );
+  const normalized = rows.map(row => ({ ...row, excludedDates: blockExcludedDates(row) }));
+  return date ? normalized.filter(row => blockOccurs(row, date, override)) : normalized;
 }
 
 async function holidayRate(date: string) {
@@ -1414,7 +1422,8 @@ app.post(
       .object({
         name: z.string(),
         type: z.enum(["Premium", "Standard"]),
-        surface: z.string(),
+        surface: z.string().default(""),
+        floor: z.enum(["2nd Floor", "6th Floor"]).optional(),
         price: z.number().int().nonnegative(),
         status: z.nativeEnum(CourtStatus).optional(),
         features: z.array(z.string()).default([])
@@ -1439,6 +1448,7 @@ app.patch(
         name: z.string().optional(),
         type: z.enum(["Premium", "Standard"]).optional(),
         surface: z.string().optional(),
+        floor: z.enum(["2nd Floor", "6th Floor"]).optional(),
         price: z.number().int().nonnegative().optional(),
         status: z.nativeEnum(CourtStatus).optional(),
         features: z.array(z.string()).optional()
@@ -1875,6 +1885,7 @@ app.get(
         select: {
           date: true,
           dayOfWeek: true,
+          effectiveFrom: true, effectiveUntil: true, excludedDates: true, id: true, type: true,
           start: true,
           end: true,
           courtId: true,
@@ -2465,7 +2476,7 @@ app.get(
         prisma.badmintonCheckIn.count({ where: { date: day } }),
         prisma.court.count({ where: { status: "available" } }),
         prisma.transaction.aggregate({
-          where: { business: "Badminton", date: day, status: "paid" },
+          where: { business: "Badminton", date: day, ...recognizedLedgerRevenue },
           _sum: { finalAmount: true }
         })
       ]);
@@ -2504,13 +2515,13 @@ app.get(
           }
         }
       }),
-      prisma.transaction.aggregate({ where: { status: "paid" }, _sum: { finalAmount: true } }),
+      prisma.transaction.aggregate({ where: recognizedLedgerRevenue, _sum: { finalAmount: true } }),
       prisma.court.count({ where: { status: "available" } }),
       prisma.coach.count({ where: { status: "active" } }),
       prisma.user.count({ where: { active: true, role: { not: "member" } } }),
       prisma.product.count({ where: { stock: { lte: 5 }, status: "active" } }),
       prisma.transaction.aggregate({
-        where: { status: "paid", date: day },
+        where: { ...recognizedLedgerRevenue, date: day },
         _sum: { finalAmount: true }
       })
     ]);
@@ -3462,6 +3473,14 @@ app.get(
     if (category) {
       where.AND = [...(where.AND || []), { business: 'Badminton' }, await categoryWhere(prisma, category)];
     }
+    const ledger = String(req.query.ledger || '');
+    if (ledger && !['payments', 'refunds'].includes(ledger)) return res.status(400).json({ message: 'Choose payments or refunds.' });
+    if (ledger) {
+      const ledgerWhere = ledger === 'refunds'
+        ? { OR: [{ resourceType: 'booking_refund' }, { status: { in: ['refunded', 'REFUNDED'] } }] }
+        : { AND: [{ OR: [{ resourceType: null }, { resourceType: { not: 'booking_refund' } }] }, { status: { notIn: ['refunded', 'REFUNDED'] } }] };
+      where.AND = [...(where.AND || []), ledgerWhere];
+    }
     const sort = String(req.query.sort || 'newest');
     if (!['newest', 'oldest', 'amount_asc', 'amount_desc'].includes(sort)) return res.status(400).json({ message: 'Choose a valid transaction sort.' });
     const orderBy = transactionOrder(sort);
@@ -3493,7 +3512,7 @@ app.get(
       return res.json(
         await presentTransactions(prisma, await prisma.transaction.findMany({ where, orderBy, take: 100 }))
       );
-    const [total, data, summary] = await Promise.all([
+    const [total, data, summary, refundTotal] = await Promise.all([
       prisma.transaction.count({ where }),
       prisma.transaction.findMany({
         where,
@@ -3504,7 +3523,8 @@ app.get(
       prisma.transaction.aggregate({
         where,
         _sum: { amount: true, discount: true, finalAmount: true }
-      })
+      }),
+      prisma.transaction.aggregate({where:{AND:[where,{resourceType:'booking_refund',status:'refunded'}]},_sum:{finalAmount:true}})
     ]);
     const totalPages = Math.ceil(total / limit);
     res.json({
@@ -3518,7 +3538,8 @@ app.get(
         hasPreviousPage: page > 1 && total > 0
       },
       summary: {
-        gross: summary._sum.amount || 0,
+        gross: (summary._sum.amount || 0) - (refundTotal._sum.finalAmount || 0),
+        refunds: -(refundTotal._sum.finalAmount || 0),
         discounts: summary._sum.discount || 0,
         net: summary._sum.finalAmount || 0
       }
@@ -4093,7 +4114,7 @@ app.post(
         courtId: b.courtId,
         active: true,
         OR:
-          override?.type === "open"
+          override?.type === "open" && !override.weeklyOnly
             ? [{ date: b.date }]
             : [{ date: b.date }, { dayOfWeek: new Date(`${b.date}T00:00:00`).getDay() }]
       };
@@ -4114,7 +4135,7 @@ app.post(
         throw Object.assign(new Error("The selected court or coach has just become unavailable."), {
           statusCode: 409
         });
-      if (blocks.some(x => overlap(`${x.start} — ${x.end}`)))
+      if (blocks.filter(x => blockOccurs(x, b.date, override)).some(x => overlap(`${x.start} — ${x.end}`)))
         throw Object.assign(new Error("The selected court is reserved during this time."), {
           statusCode: 409
         });
@@ -4297,12 +4318,12 @@ app.post(
             courtId: booking.courtId,
             active: true,
             OR:
-              override?.type === "open"
+              override?.type === "open" && !override.weeklyOnly
                 ? [{ date: booking.date }]
                 : [{ date: booking.date }, { dayOfWeek: dow }]
           }
         });
-      if (blocks.some(x => overlap(`${x.start} — ${x.end}`)))
+      if (blocks.filter(x => blockOccurs(x, booking.date, override)).some(x => overlap(`${x.start} — ${x.end}`)))
         throw Object.assign(new Error("The court is blocked during this time."), {
           statusCode: 409
         });
@@ -4555,14 +4576,14 @@ app.get(
   asyncRoute(async (_req, res) => {
     const [members, revenue, bookings, appointments, lowStock] = await Promise.all([
       prisma.user.count({ where: { role: "member" } }),
-      prisma.transaction.aggregate({ where: { status: "paid" }, _sum: { finalAmount: true } }),
+      prisma.transaction.aggregate({ where: recognizedLedgerRevenue, _sum: { finalAmount: true } }),
       prisma.booking.count({ where: { status: { in: ["pending", "confirmed", "CONFIRMED"] } } }),
       prisma.appointment.count({ where: { date: today() } }),
       prisma.product.count({ where: { stock: { lte: 5 }, status: "active" } })
     ]);
     const transactions = await prisma.transaction.groupBy({
       by: ["date"],
-      where: { status: "paid" },
+      where: recognizedLedgerRevenue,
       _sum: { finalAmount: true },
       orderBy: { date: "asc" },
       take: 100
@@ -4661,6 +4682,8 @@ prepareLegacySqlite
         60_000
       );
       expirySweep.unref();
+      const rescheduleExpiry = setInterval(() => { void expirePrivateReschedules(prisma).catch(error => console.error('Reschedule request expiry failed', error)); }, 60_000);
+      rescheduleExpiry.unref();
       const notifyExpiry = () => void notifyExpiredBadmintonPackages(prisma).catch(() => console.error('Package expiry notifications failed'));
       notifyExpiry();
       const packageExpirySweep = setInterval(notifyExpiry, 60_000);

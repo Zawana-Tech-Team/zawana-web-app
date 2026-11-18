@@ -1,3 +1,4 @@
+import { reserveDeskWeekly, reserveWeeklySelections } from '../services/deskWeekly.js';
 import { recordCourtRentalPayment } from "../services/courtRentalPayment.js";
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
@@ -14,13 +15,22 @@ export function createCourtDeskRouter(db: PrismaClient, expire: () => Promise<vo
   router.use(auth, roles('admin', 'badminton_fo'));
   router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
   router.use(asyncRoute(async (_req, _res, next) => { await expire(); next(); }));
+  router.post('/weekly', asyncRoute(async (req: AuthRequest, res) => {
+    if (req.body.selections) {
+      const input = z.object({ selections: z.array(z.object({ courtId: z.string().min(1), date: z.string(), time: z.string() }).strict()).min(1).max(30), title: z.string().trim().min(1).max(120), requestKey: z.string().uuid() }).strict().parse(req.body);
+      res.status(201).json(await reserveWeeklySelections(db, req.user!.id, input)); return;
+    }
+    const input = z.object({ courtIds: z.array(z.string().min(1)).min(1).max(20), date: z.string(), time: z.string(), title: z.string().trim().min(1).max(120), requestKey: z.string().uuid() }).strict().parse(req.body);
+    res.status(201).json(await reserveDeskWeekly(db, req.user!.id, input));
+  }));
   router.post('/rentals', asyncRoute(async (req: AuthRequest, res) => {
-    const input = z.object({ courtId: z.string().min(1), date: z.string(), time: z.string(), customer: z.string().trim().min(1).max(100),
-      expectedPrice: z.number().int().nonnegative(), requestKey: z.string().uuid(), payment: z.object({ method: z.enum(['CASH', 'ONLINE']) }).strict() }).strict().parse(req.body);
+    const input = z.object({ courtId: z.string().min(1).optional(), courtIds: z.array(z.string().min(1)).min(1).max(20).optional(), selections: z.array(z.object({ courtId: z.string().min(1), date: z.string(), time: z.string() }).strict()).min(1).max(30).optional(), date: z.string().optional(), time: z.string().optional(), customer: z.string().trim().min(1).max(100),
+      expectedPrice: z.number().int().nonnegative(), requestKey: z.string().uuid(), payment: z.object({ method: z.enum(['CASH', 'ONLINE']) }).strict() }).strict().refine(input => input.selections ? !input.courtId && !input.courtIds : (!!input.courtId !== !!input.courtIds) && !!input.date && !!input.time, 'Choose explicit sessions, or courts with a date and time.').parse(req.body);
+    const courtIds = input.courtIds || [input.courtId!];
     const meta = JSON.stringify({ source: 'walk_in', customerName: input.customer, expectedPrice: input.expectedPrice, deskPayment: input.payment });
-    const result = await createCourtBooking(db, req.user!, { courtId: input.courtId, date: input.date, time: input.time, meta }, input.requestKey, async (tx, rows) => {
+    const result = await createCourtBooking(db, req.user!, { bookings: input.selections || courtIds.map(courtId => ({ courtId, date: input.date!, time: input.time! })), meta }, input.requestKey, async (tx, rows) => {
+      if (rows.reduce((sum, row) => sum + row.price, 0) !== input.expectedPrice) throw bookingFailure(409, 'Price changed. Review the reservation again.');
       for (const row of rows) {
-        if (row.price !== input.expectedPrice) throw bookingFailure(409, 'Price changed. Review the reservation again.');
         Object.assign(row, await recordCourtRentalPayment(tx, row, req.user!, input.customer, input.payment.method));
       }
     });

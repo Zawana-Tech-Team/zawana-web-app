@@ -42,11 +42,13 @@ try {
       await route.fulfill({ json: body });
     });
     await page.goto(`${origin}/bookings`);
+    await page.locator('details.member-booking-row summary').click();
     await page.getByRole('button', { name: 'Confirm manual payment', exact: true }).click();
-    await page.getByText('Database unavailable. Payment was not confirmed.', { exact: true }).waitFor();
+    await page.getByRole('dialog', { name: 'Confirm manual payment', exact: true }).getByRole('button', { name: 'Confirm payment', exact: true }).click();
+    await page.getByRole('dialog').getByText('Database unavailable. Payment was not confirmed.', { exact: true }).waitFor();
     assert.equal(booking.paymentStatus, 'pending'); assert.equal(page.url(), `${origin}/bookings`);
     rejectPayment = false;
-    await page.getByRole('button', { name: 'Confirm manual payment', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm payment', exact: true }).click();
     await page.getByText('Manual/simulated payment confirmed. No external charge was made.', { exact: true }).waitFor();
     assert.equal(booking.paymentStatus, 'paid'); assert.equal(calls, 2);
     await page.reload(); assert.equal(await page.getByRole('button', { name: 'Confirm manual payment', exact: true }).count(), 0);

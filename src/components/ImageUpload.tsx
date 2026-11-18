@@ -50,7 +50,7 @@ export function ImageUpload({
   const upload = async (file?: File) => {
     if (!file) return;
     setError("");
-    if (!/image\/(png|jpeg|webp)/.test(file.type))
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type))
       return setError("Choose a JPEG, PNG, or WebP image.");
     if (file.size > 12 * 1024 * 1024)
       return setError("Choose an image under 12 MB. It will be optimized before upload.");

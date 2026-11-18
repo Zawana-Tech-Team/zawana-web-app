@@ -2,7 +2,7 @@ import type { UserRole } from './index';
 
 export type CourtChangeSlot = { id: string; courtId: string; courtName: string; date: string; time: string; price: number; available: boolean };
 export type CourtChangeDetail = {
-  booking: { id: string; code: string; title: string; date: string; time: string; status: string; paymentStatus: string; price: number };
+  booking: { meta?: string | null; id: string; code: string; title: string; date: string; time: string; status: string; paymentStatus: string; price: number };
   customer: string;
   eligibility: { eligible: boolean; message: string; deadline?: string };
   revision: string;
@@ -17,4 +17,13 @@ export function courtBookingsPath(role?: UserRole) {
 }
 export function courtReschedulePath(id: string, role?: UserRole) {
   return `${courtBookingsPath(role)}/${encodeURIComponent(id)}/reschedule`;
+}
+
+/** Walk-in labels come from the booking; its account may identify the staff creator. */
+export function courtBookingCustomer(detail: CourtChangeDetail): string {
+  try {
+    const meta = JSON.parse(detail.booking.meta || '{}');
+    if (typeof meta?.customerName === 'string' && meta.customerName.trim()) return meta.customerName;
+  } catch { /* Legacy records without metadata retain the existing customer label. */ }
+  return detail.customer;
 }

@@ -1,3 +1,4 @@
+import { deliverRefundNotifications } from '../services/bookingRefunds.js';
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
@@ -11,6 +12,7 @@ export function createNotificationRouter(db: PrismaClient = prisma, authenticate
   const router = Router();
   const scope = (req: AuthRequest) => ({ OR: [{ userId: req.user!.id }, { userId: null, audience: 'all' }, { userId: null, audience: req.user!.role }] });
   router.get('/', authenticate, asyncRoute(async (req: AuthRequest, res) => {
+    if(req.user!.role==='member')await deliverRefundNotifications(db,undefined,req.user!.id);
     const history = req.query.history === '1';
     const rows = await db.notification.findMany({ where: { ...scope(req), ...(history ? {} : { activeInInbox: true, createdAt: { gt: new Date(Date.now() - NOTIFICATION_LIFETIME_MS) }, recipientReads: { none: { userId: req.user!.id } }, AND: [{ OR: [{ userId: null }, { read: false }] }] }) }, include: { recipientReads: { where: { userId: req.user!.id } } }, orderBy: { createdAt: 'desc' }, take: 100 });
     const lifecycle = await notificationLifecycle(db, rows);

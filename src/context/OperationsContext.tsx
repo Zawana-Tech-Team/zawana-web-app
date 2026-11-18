@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useCallback, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useCallback, useMemo, useState, useRef, type ReactNode } from "react";
 import type {
   Appointment,
   BadmintonPackage,
@@ -128,7 +128,9 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
+  const refreshGeneration = useRef(0);
   const refresh = useCallback(async () => {
+    const generation = ++refreshGeneration.current;
     if (!user) return;
     setLoading(true);
     setLoadError('');
@@ -164,7 +166,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       canGym ? get<any[]>("/memberships") : Promise.resolve([]),
       canCourts ? get<any[]>("/courts") : Promise.resolve([]),
       canCoaches ? get<any[]>("/coaches") : Promise.resolve([]),
-      canBookings ? get<any[]>("/bookings") : Promise.resolve([]),
+      canBookings ? allBookingPages() : Promise.resolve([]),
       canAppointments ? get<any[]>("/appointments") : Promise.resolve([]),
       canSchedules ? get<any[]>("/schedules") : Promise.resolve([]),
       canInventory ? get<any[]>("/products") : Promise.resolve([]),
@@ -185,9 +187,11 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
           : Promise.resolve([]),
       canBadminton ? get<any[]>("/badminton/enrollments") : Promise.resolve([])
     ]);
+    if (generation !== refreshGeneration.current) return;
     const val = (i: number) =>results[i].status === "fulfilled" ? results[i].value : [];
     const bookings = val(5);
-    setState({
+    setState((previous: typeof state) => {
+      const next = {
       badmintonPackages: val(0),
       badmintonEnrollments: val(16),
       gymPackages: val(1),
@@ -202,7 +206,10 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
             meta = b.meta ? JSON.parse(b.meta) : {}
           } catch {};return {
             id: b.id,
+            courtId: b.courtId,
             customer: meta.customerName || b.user?.name || "Member",
+            customerAccountId: b.user?.role === "member" && meta.source !== "walk_in" ? b.user.id : null,
+            customerName: meta.customerName || (b.user?.role === "member" ? b.user.name : null),
             court: b.court?.name || b.title,
             date: b.date,
             time: b.time,
@@ -223,6 +230,12 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       transactions: val(14),
       content: val(15),
       students: []
+      };
+      const keys = ['badmintonPackages', 'gymPackages', 'memberships', 'managedCourts', 'coaches', 'courtBookings', 'appointments', 'schedules', 'products', 'inventory', 'categories', 'storeOrders', 'cafeOrders', 'menu', 'transactions', 'content', 'badmintonEnrollments'] as const;
+      for (const [index, key] of keys.entries()) {
+        if (results[index].status === 'rejected') Object.assign(next, { [key]: previous[key] });
+      }
+      return next;
     });
     const failed = results.filter(x => x.status === 'rejected') as PromiseRejectedResult[];
     if (failed.length)
@@ -302,12 +315,12 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
   const metrics = useMemo(
     () => ({
       todayRevenue: state.transactions
-        .filter((t: any) => t.date === new Date().toISOString().slice(0, 10) && t.status === "paid")
+        .filter((t: any) => t.date === new Date().toISOString().slice(0, 10) && (t.status === "paid" || (t.resourceType === "booking_refund" && t.status === "refunded")))
         .reduce((a: number, t: any) => a + t.finalAmount, 0),
       monthlyRevenue: state.transactions
         .filter(
           (t: any) =>
-            String(t.date).startsWith(new Date().toISOString().slice(0, 7)) && t.status === "paid"
+            String(t.date).startsWith(new Date().toISOString().slice(0, 7)) && (t.status === "paid" || (t.resourceType === "booking_refund" && t.status === "refunded"))
         )
         .reduce((a: number, t: any) => a + t.finalAmount, 0),
       pendingBookings: state.courtBookings.filter((b: any) => b.status === "pending").length,
@@ -373,3 +386,9 @@ export const useOperations = () => {
   if (!c) throw Error("OperationsProvider missing");
   return c
 };
+
+async function allBookingPages() {
+  const first = await get<{ data: any[]; pagination: { totalPages: number } }>("/bookings?page=1&limit=100");
+  const pages = await Promise.all(Array.from({ length: Math.max(0, first.pagination.totalPages - 1) }, (_, i) => get<{ data: any[] }>(`/bookings?page=${i + 2}&limit=100`)));
+  return [...first.data, ...pages.flatMap(page => page.data)];
+}

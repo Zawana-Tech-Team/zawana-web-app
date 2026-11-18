@@ -1,19 +1,22 @@
+import { DeskMoveDialog, type MoveSource } from '../components/court-desk/DeskMoveDialog';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, CalendarDays, Check, Clock3 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CourtBooking, type SlotPick } from './CourtBooking';
 import { CourtBookingSteps } from '../components/CourtBookingSteps';
 import { Button, Card, Empty, Page, Toast } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 import { get, post } from '../api';
 import { bookingHasStarted } from '../utils/bookingTime';
-import { courtBookingsPath, type CourtChangeDetail, type CourtChangeQuote } from '../types/courtChanges';
+import { courtBookingCustomer, courtBookingsPath, type CourtChangeDetail, type CourtChangeQuote } from '../types/courtChanges';
 
 const day = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { timeZone: 'Asia/Yangon', day: 'numeric', month: 'long', year: 'numeric' });
 const amount = (value: number) => `${value.toLocaleString()} MMK`;
 
 export default function CourtReschedule() {
   const { id = '' } = useParams();
+  const { user } = useAuth();
+  if (user?.role === 'admin' || user?.role === 'badminton_fo') return <StaffRescheduleEntry bookingId={id} />;
   return <RescheduleFlow key={id} bookingId={id} />;
 }
 
@@ -75,7 +78,7 @@ function RescheduleFlow({ bookingId }: { bookingId: string }) {
   if (!done && !detail.eligibility.eligible && !exceptionAllowed) return <Page title="Reschedule your court" eyebrow="Zawana Badminton Arena"><Empty title="This booking cannot be rescheduled" body={error || detail.eligibility.message} action={<Link to={backTo}><Button variant="secondary">Back to bookings</Button></Link>} /></Page>;
 
   if (done) return <div ref={reviewRef}><Page title="Court booking rescheduled" eyebrow="Zawana Badminton Arena">
-    <Card className="mx-auto max-w-3xl overflow-hidden p-0"><div className="border-b border-zawana-border bg-zawana-900 p-6 sm:p-8"><span className="mb-5 grid h-12 w-12 place-items-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-800"><Check size={22} /></span><h2 className="text-2xl font-semibold tracking-tight">Your new court time is confirmed.</h2><p className="mt-3 text-sm text-zawana-500">{done.code} · {detail.customer}</p></div>
+    <Card className="mx-auto max-w-3xl overflow-hidden p-0"><div className="border-b border-zawana-border bg-zawana-900 p-6 sm:p-8"><span className="mb-5 grid h-12 w-12 place-items-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-800"><Check size={22} /></span><h2 className="text-2xl font-semibold tracking-tight">Your new court time is confirmed.</h2><p className="mt-3 text-sm text-zawana-500">{done.code} · {courtBookingCustomer(detail)}</p></div>
       <div className="space-y-6 p-6 sm:p-8"><Session title="New reservation" court={done.title} date={done.date} time={done.time} /><div className="flex flex-wrap items-center justify-between gap-3 border-t border-zawana-border pt-5 text-sm"><span className="text-zawana-500">Booking amount</span><span className="font-semibold">{amount(done.price)}</span></div><p className="text-xs leading-6 text-zawana-500">Only this one-hour session has changed. Payment remains {done.paymentStatus}. Your rescheduling history is available in booking details.</p><Link to={backTo}><Button>Back to bookings<ArrowRight size={15} /></Button></Link></div>
     </Card>
     {showSuccess && <Toast message="Booking rescheduled successfully." onClose={() => setShowSuccess(false)} />}
@@ -94,7 +97,7 @@ function RescheduleFlow({ bookingId }: { bookingId: string }) {
           <Card className="p-5 sm:p-6"><label className="block text-sm font-medium">Reason<textarea aria-label="Reason" rows={3} maxLength={1000} disabled={busy} className="mt-3" placeholder="A short note about this change" value={reason} onChange={e => setReason(e.target.value)} /></label><p className="mt-3 text-xs text-zawana-500">This note is saved in your booking history.</p></Card>
           <button type="button" disabled={busy} className="flex min-h-11 items-center gap-2 text-xs font-medium text-zawana-500 underline underline-offset-4" onClick={() => { setQuote(null); setStep(2); }}><ArrowLeft size={14} />Edit court selection</button>
         </div>
-        <Card className="h-fit overflow-hidden p-0 xl:sticky xl:top-24"><div className="border-b border-zawana-border bg-zawana-900 p-5"><p className="eyebrow text-zawana-accent">CHANGE SUMMARY</p><h2 className="mt-2 text-xl font-semibold">Confirm your change</h2><p className="mt-2 break-all text-xs text-zawana-500">{detail.booking.code} · {detail.customer}</p></div>
+        <Card className="h-fit overflow-hidden p-0 xl:sticky xl:top-24"><div className="border-b border-zawana-border bg-zawana-900 p-5"><p className="eyebrow text-zawana-accent">CHANGE SUMMARY</p><h2 className="mt-2 text-xl font-semibold">Confirm your change</h2><p className="mt-2 break-all text-xs text-zawana-500">{detail.booking.code} · {courtBookingCustomer(detail)}</p></div>
           <div className="space-y-5 p-5"><dl className="space-y-4 text-sm"><div className="flex justify-between gap-4"><dt className="text-zawana-500">Current amount</dt><dd>{amount(detail.booking.price)}</dd></div><div className="flex justify-between gap-4"><dt className="text-zawana-500">New amount</dt><dd>{amount(quote.proposed.price)}</dd></div></dl><p className="border-t border-zawana-border pt-4 text-sm font-semibold">Price difference: {amount(quote.difference)}</p>
             {quote.difference !== 0 ? <p role="status" className="rounded-xl bg-amber-50 p-3 text-xs leading-6 text-amber-900">Staff must arrange the payment adjustment before this move can be completed.</p> : <p className="text-xs leading-6 text-zawana-500">No additional payment is required. Your payment status stays {detail.booking.paymentStatus}.</p>}
             {!detail.eligibility.eligible && <div className="rounded-xl border border-zawana-border p-3 text-xs leading-6"><p className="font-medium">Manager exception</p><p className="mt-1 text-zawana-500">{exceptionReason}</p></div>}
@@ -108,4 +111,13 @@ function RescheduleFlow({ bookingId }: { bookingId: string }) {
 
 function Session({ title, court, date, time }: { title: string; court: string; date: string; time: string }) {
   return <section aria-label={title}><p className="text-[10px] font-semibold uppercase tracking-wider text-zawana-500">{title}</p><h3 className="mt-3 text-lg font-semibold">{court}</h3><p className="mt-3 flex items-start gap-2 text-sm text-zawana-500"><CalendarDays size={14} className="mt-1 shrink-0" />{day(date)}</p><p className="mt-2 flex items-start gap-2 text-sm text-zawana-500"><Clock3 size={14} className="mt-1 shrink-0" />{time}</p></section>;
+}
+
+function StaffRescheduleEntry({ bookingId }: { bookingId: string }) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [source, setSource] = useState<MoveSource | null>(null), [courts, setCourts] = useState<{ id: string; name: string }[]>([]), [error, setError] = useState('');
+  useEffect(() => { let live = true; void Promise.all([get<{ booking: CourtChangeDetail['booking'] & { courtId: string } }>(`/court-booking/bookings/${encodeURIComponent(bookingId)}/changes`), get<typeof courts>('/courts')]).then(([data, courts]) => { if (live) { setSource({ id: data.booking.id, kind: 'court', date: data.booking.date, time: data.booking.time, courtId: data.booking.courtId, title: data.booking.title }); setCourts(courts); } }).catch(e => { if (live) setError(e.message); }); return () => { live = false; }; }, [bookingId]);
+  const back = () => navigate(courtBookingsPath(user?.role));
+  return <Page title="Reschedule court rental" eyebrow="Badminton desk"><Button variant="secondary" onClick={back}>Back to bookings</Button>{error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}{source && <DeskMoveDialog sources={[source]} courts={courts} onClose={back} onChanged={async () => { back(); }} />}</Page>;
 }

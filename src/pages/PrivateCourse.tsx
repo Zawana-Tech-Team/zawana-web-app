@@ -1,3 +1,6 @@
+import { SegmentedControl } from '../components/Interactions';
+import { DeskDialog } from '../components/court-desk/DeskDialog';
+import { BookingActionBar } from '../components/member-booking/BookingActionBar';
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { motionTokens } from "../design/motion";
 import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
@@ -51,6 +54,8 @@ export function PrivateCourse() {
     duration: reduceMotion ? 0 : 0.14,
     ease: motionTokens.ease,
   };
+  const [visibleFloor, setVisibleFloor] = useState('all');
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(true);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
@@ -251,7 +256,7 @@ export function PrivateCourse() {
         time,
         expectedPrice: coursePrice,
       });
-      navigate("/bookings");
+      navigate("/bookings?kind=private_course");
     } catch (e: any) {
       setError(
         e.message ||
@@ -301,24 +306,13 @@ export function PrivateCourse() {
     <Page
       title="Private course"
       eyebrow="Badminton coaching"
-      actions={
-        <Link
-          to="/book/court"
-          className="flex min-h-11 items-center gap-2 text-sm font-medium text-zawana-500"
-        >
-          Court rental <ArrowRight size={15} />
-        </Link>
-      }
+      actions={<Link to="/bookings?kind=private_course" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">Booking history</Link>}
     >
-      <p className="mb-6 max-w-xl text-sm leading-relaxed text-zawana-500">
-        Personal coaching, at your pace. Choose your course, find your coach,
-        and make time to improve.
-      </p>
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="mx-auto max-w-4xl">
         <div className="min-w-0 space-y-5">
           <nav
             aria-label="Private course steps"
-            className="grid grid-cols-3 gap-2 rounded-2xl border border-zawana-border bg-white p-3 sm:p-5"
+            className="grid grid-cols-3 gap-2 border-b border-zawana-border pb-4"
           >
             {([1, 2, 3] as const).map((n) => (
               <button
@@ -364,7 +358,7 @@ export function PrivateCourse() {
               <>
                 <Card className="p-5 sm:p-6">
                   <h2 className="text-xl font-semibold tracking-tight">
-                    A little guidance. A better game.
+                    Choose a course
                   </h2>
                   <p className="mt-1 text-sm text-zawana-500">
                     Choose a course that suits your next step.
@@ -398,13 +392,6 @@ export function PrivateCourse() {
                           }}
                           className={`overflow-hidden rounded-2xl border text-left transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${course?.id === c.id ? "border-zawana-950 bg-zawana-950/[.025] ring-1 ring-zawana-950" : "border-zawana-border hover:border-zawana-500"}`}
                         >
-                          {c.imageUrl && (
-                            <img
-                              src={mediaImageSrc(c.imageUrl)}
-                              alt=""
-                              className="h-32 w-full object-cover"
-                            />
-                          )}
                           <span className="block p-5">
                             <span className="flex items-start justify-between gap-3">
                               <span className="text-sm font-semibold">
@@ -413,9 +400,6 @@ export function PrivateCourse() {
                               {course?.id === c.id && (
                                 <Check size={16} className="shrink-0" />
                               )}
-                            </span>
-                            <span className="mt-2 block text-xs leading-relaxed text-zawana-500">
-                              {c.description || "Badminton private coaching"}
                             </span>
                             <span className="mt-4 flex flex-wrap items-end justify-between gap-2">
                               <span className="text-lg font-semibold tracking-tight">
@@ -438,6 +422,7 @@ export function PrivateCourse() {
                       />
                     </div>
                   )}
+                  {course && (course.description || course.imageUrl) && <details className="mt-3"><summary className="member-booking-disclosure">About {course.title}</summary>{course.imageUrl && <img src={mediaImageSrc(course.imageUrl)} alt="" className="mt-3 h-32 max-w-full rounded-lg object-cover"/>}<p className="mt-3 text-sm leading-6 text-zawana-500">{course.description}</p></details>}
                 </Card>
                 <AnimatePresence>
                   {course && (
@@ -448,12 +433,9 @@ export function PrivateCourse() {
                     >
                       <Card className="p-5 sm:p-6">
                         <h2 className="text-base font-semibold">
-                          Find your coach
+                          Choose a coach
                         </h2>
-                        <p className="mt-1 text-sm text-zawana-500">
-                          Personal attention, with a coach assigned to your
-                          course.
-                        </p>
+
                         {eligibleCoaches.length ? (
                           <div
                             role="group"
@@ -474,7 +456,7 @@ export function PrivateCourse() {
                                 }}
                                 className={`flex min-w-0 items-center gap-4 rounded-2xl border p-4 text-left transition focus-visible:ring-2 focus-visible:ring-zawana-gold ${coach?.id === c.id ? "border-zawana-950 bg-zawana-950/[.025] ring-1 ring-zawana-950" : "border-zawana-border hover:border-zawana-500"}`}
                               >
-                                <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full bg-zawana-950/5 text-zawana-500">
+                                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-zawana-950/5 text-zawana-500">
                                   {c.imageUrl || c.user?.avatar ? (
                                     <img
                                       src={mediaImageSrc(
@@ -527,7 +509,7 @@ export function PrivateCourse() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h2 className="text-xl font-semibold tracking-tight">
-                        Make time for your game.
+                        Choose a date
                       </h2>
                       <p className="mt-1 text-sm text-zawana-500">
                         Choose a date for your {course?.duration}-minute
@@ -590,7 +572,7 @@ export function PrivateCourse() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-semibold tracking-tight">
-                      Your court. Your session.
+                      Choose a court & time
                     </h2>
                     <p className="mt-1 text-sm text-zawana-500">
                       {dateLabel(date)} · {course?.duration} minutes
@@ -618,7 +600,8 @@ export function PrivateCourse() {
                     body="Please check back for court availability."
                   />
                 )}
-                {floors.map((floor) => (
+                <SegmentedControl className="member-booking-floors" label="Court floor" value={visibleFloor} onChange={setVisibleFloor} options={[{value:'all',label:'All floors'}, ...floors.map(floor => ({value:floor.label,label:floor.label}))]} />
+                {floors.filter(floor => visibleFloor === 'all' || floor.label === visibleFloor).map((floor) => (
                   <section
                     key={floor.label}
                     aria-label={floor.label}
@@ -667,7 +650,7 @@ export function PrivateCourse() {
                                   setTime("");
                                   setError("");
                                 }}
-                                className="flex min-h-24 w-full items-center gap-4 p-4 text-left transition hover:bg-zawana-950/[.015] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zawana-gold disabled:cursor-not-allowed disabled:opacity-40 sm:p-5"
+                                className="flex min-h-16 w-full items-center gap-3 p-3 text-left transition hover:bg-zawana-950/[.015] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zawana-gold disabled:cursor-not-allowed disabled:opacity-40 sm:p-5"
                               >
                                 <span
                                   aria-hidden="true"
@@ -783,62 +766,17 @@ export function PrivateCourse() {
             )}
           </motion.div>
         </div>
-        <Card className="overflow-hidden p-0 xl:sticky xl:top-24">
-          <div className="border-b border-zawana-border p-5 sm:p-6">
-            <p className="text-xs font-medium uppercase tracking-[.14em] text-zawana-500">
-              Your session
-            </p>
-            <h2 className="mt-3 text-lg font-semibold">
-              {course?.title || "A session made for you"}
-            </h2>
-            <p className="mt-1 text-xs text-zawana-500">
-              {course
-                ? `${course.duration} minutes · Private coaching`
-                : "Choose a course to get started"}
-            </p>
-          </div>
-          <div className="space-y-5 p-5 sm:p-6">
-            <dl className="space-y-4 text-sm">
-              {[
-                ["Coach", coach?.user?.name || coach?.name],
-                ["Date", course && coach ? dateLabel(date) : ""],
-                ["Court", court?.name],
-                ["Time", time],
-              ].map(([label, value]) => (
-                <div
-                  key={label}
-                  className="flex items-start justify-between gap-4"
-                >
-                  <dt className="shrink-0 text-zawana-500">{label}</dt>
-                  <dd className="text-right text-xs font-medium leading-5">
-                    {value || "—"}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <div className="border-t border-zawana-border pt-5">
-              <p className="text-xs text-zawana-500">
-                Course price · court included
-              </p>
-              <p className="mt-1 text-3xl font-semibold tracking-tight">
-                {course ? `${coursePrice.toLocaleString(locale)} MMK` : "—"}
-              </p>
-            </div>
-            <Button
-              loading={busy}
-              disabled={!ready}
-              onClick={submit}
-              className="w-full"
-            >
-              {busy ? "Sending request…" : "Request private course"}
-              {!busy && <ArrowRight size={15} />}
-            </Button>
-            <p className="text-xs leading-relaxed text-zawana-500">
-              Your coach will review this request. Your court and time stay
-              reserved. Once accepted, you have 24 hours to pay and confirm.
-            </p>
-          </div>
-        </Card>
+        {step === 3 && <BookingActionBar hidden={reviewOpen} action={<Button disabled={!ready || busy} onClick={() => setReviewOpen(true)}>Review request <ArrowRight size={15}/></Button>}>
+          <span>Private course · court included</span><strong>{coursePrice.toLocaleString(locale)} MMK</strong>
+        </BookingActionBar>}
+        {reviewOpen && <DeskDialog title="Review private course" eyebrow="Private coaching" onClose={() => setReviewOpen(false)} busy={busy} cancelLabel="Back to selection"
+          summary={<span>Total <strong>{coursePrice.toLocaleString(locale)} MMK</strong></span>}
+          actions={<Button loading={busy} disabled={!ready || busy} onClick={submit}>{busy ? 'Sending request…' : 'Request private course'}</Button>}>
+          <h3 className="mb-5 font-semibold">{course?.title}</h3>
+          <dl className="space-y-4 text-sm">{[['Coach',coach?.user?.name || coach?.name], ['Date',dateLabel(date)], ['Court',court?.name], ['Time',time], ['Duration',`${course?.duration} minutes`], ['Payment','Pending coach approval']].map(([label,value]) => <div key={label} className="flex justify-between gap-4"><dt className="text-zawana-500">{label}</dt><dd className="text-right">{value}</dd></div>)}</dl>
+          <p className="mt-6 text-xs leading-6 text-zawana-500">Your coach will review this request. Your court and time stay reserved. Once accepted, you have 24 hours to pay and confirm.</p>
+          {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+        </DeskDialog>}
       </div>
     </Page>
   );

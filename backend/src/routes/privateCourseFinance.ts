@@ -1,3 +1,4 @@
+import { refundDetails, completeRefund, refundInput } from '../services/bookingRefunds.js';
 import { paymentMethodMatches } from '../services/transactionPresentation.js';
 import { Router } from "express";
 import type { PrismaClient, Prisma } from "@prisma/client";
@@ -22,6 +23,7 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
     court: true,
     coach: { select: { id: true, name: true } },
     privateCoursePayment: true,
+    refundRecord: {select:{amount:true,status:true}},
   } as const;
   const bookingScope = (actor: { id: string; role: string }): Prisma.BookingWhereInput => ({
     kind: "private_course",
@@ -413,6 +415,7 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
         include: {
           user: { select: { id: true, name: true } },
           coach: { select: { id: true, name: true } },
+          refundRecord: {select:{amount:true,status:true}},
           privateCoursePayment: {
             include: {
               allocations: { include: { settlement: true } },
@@ -514,12 +517,12 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
               ["CONFIRMED", "COMPLETED", "confirmed", "completed"].includes(
                 b.status,
               ),
-          ),
+          ) + rows.reduce((total,b)=>total+(b.refundRecord?Math.max(0,(b.payment?.amount||b.price)-b.refundRecord.amount):0),0),
           foCash: sum((b) => paid(b) && b.source === "BADMINTON_FO"),
           coachCash: sum((b) => paid(b) && b.source === "COACH"),
           online: sum((b) => paid(b) && b.source === "ONLINE"),
           unpaid: sum((b) => b.paymentStatus === "pending"),
-          refunds: sum((b) => b.paymentStatus === "refunded"),
+          refunds: rows.reduce((total,b) => total + (b.refundRecord?.amount || (b.paymentStatus === "refunded" ? b.price : 0)),0),
           personallyCollected: sum(
             (b) => paid(b) && b.payment?.collectedByUserId === req.user!.id,
           ),
@@ -571,81 +574,8 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
       );
     }),
   );
-  r.post(
-    "/bookings/:id/refund",
-    roles("admin"),
-    asyncRoute(async (req: AuthRequest, res) => {
-      const input = z
-        .object({
-          reason: z.string().min(10).max(2000),
-          evidence: z.string().min(10).max(2000),
-          reference: z.string().min(3).max(200),
-        })
-        .strict()
-        .parse(req.body);
-      res.json(
-        await db.$transaction(async (tx) => {
-          const b = await lockCourseBooking(tx, String(req.params.id));
-          const p = b.privateCoursePayment;
-          if (!p)
-            throw fail(
-              409,
-              "Reconcile the historical payment before recording a refund.",
-            );
-          const existing = await tx.privateCourseAdjustment.findUnique({
-            where: { paymentId: p.id },
-          });
-          if (existing) {
-            if (existing.reference !== input.reference)
-              throw fail(409, "Refund already recorded.");
-            return existing;
-          }
-          if (p.status !== "PAID")
-            throw fail(409, "Payment cannot be refunded.");
-          if (!p.transactionId)
-            throw fail(
-              409,
-              "Link the original sales transaction with admin evidence review before recording a historical refund.",
-            );
-          await tx.$executeRaw`UPDATE "PrivateCoursePayment" SET "id"="id" WHERE "id"=${p.id}`;
-          const allocations = await tx.privateCourseSettlementItem.count({
-            where: { paymentId: p.id },
-          });
-          if (allocations)
-            throw fail(
-              409,
-              "Settled or submitted collections require a separate treasury refund review.",
-            );
-          const adjustment = await tx.privateCourseAdjustment.create({
-            data: {
-              paymentId: p.id,
-              actorId: req.user!.id,
-              amount: p.amount,
-              ...input,
-            },
-          });
-          await tx.privateCoursePayment.update({
-            where: { id: p.id },
-            data: { status: "REFUNDED" },
-          });
-          if (p.transactionId)
-            await tx.transaction.update({
-              where: { id: p.transactionId },
-              data: { status: "refunded" },
-            });
-          await tx.booking.update({
-            where: { id: b.id },
-            data: {
-              status: "CANCELLED",
-              paymentStatus: "refunded",
-              paymentExpiresAt: null,
-              reservationExpiresAt: null,
-            },
-          });
-          return adjustment;
-        }),
-      );
-    }),
-  );
+  r.get('/bookings/:id/refund',roles('admin','badminton_fo'),asyncRoute(async(req:AuthRequest,res)=>res.json(await refundDetails(db,req.user!,String(req.params.id)))));
+  r.post('/bookings/:id/refund',roles('admin','badminton_fo'),asyncRoute(async(req:AuthRequest,res)=>res.json(await completeRefund(db,req.user!,String(req.params.id),refundInput.parse(req.body)))));
+
   return r;
 }

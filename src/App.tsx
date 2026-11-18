@@ -27,9 +27,6 @@ const Book = lazy(() => import('./pages/Book').then(module => ({ default: module
 const CourtBooking = lazy(() =>
   import('./pages/CourtBooking').then(module => ({ default: module.CourtBooking }))
 );
-const CoachBooking = lazy(() =>
-  import('./pages/CoachBooking').then(module => ({ default: module.CoachBooking }))
-);
 const Bookings = lazy(() =>
   import('./pages/Bookings').then(module => ({ default: module.Bookings }))
 );
@@ -245,7 +242,7 @@ export default function App() {
         path="/book/coach"
         element={
           <Guard role="member">
-            <CoachBooking />
+            <Navigate to="/book/court" replace />
           </Guard>
         }
       />

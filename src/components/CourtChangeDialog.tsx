@@ -1,11 +1,13 @@
+import { bookingHasStarted } from '../utils/bookingTime';
 import { useEffect, useState } from 'react';
 import { CalendarDays, CheckCircle2, Clock3, Info } from 'lucide-react';
 import { get, post } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Button, Toast } from './UI';
-import { StaffDialog } from './StaffDialog';
+import { DeskDialog } from './court-desk/DeskDialog';
+import './staff-dialog.css';
 import { useNavigate } from 'react-router-dom';
-import { courtReschedulePath, type CourtChangeDetail as Detail } from '../types/courtChanges';
+import { courtBookingCustomer, courtReschedulePath, type CourtChangeDetail as Detail } from '../types/courtChanges';
 
 type Cancellation = Detail['cancellations'][number];
 const stamp = (value: string) => new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Yangon', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -44,29 +46,26 @@ export function CourtChangeDialog({ bookingId, onClose, onChanged }: { bookingId
     await post(`${base}/cancellation-requests/${id}/review`, { approve, reason }); await refresh();
     setNotice(approve ? 'Cancellation approved. Financial review remains separate.' : 'Cancellation request rejected.'); onChanged();
   });
+  const staffAllowed = !!detail && ['admin', 'badminton_fo'].includes(user?.role || '') && detail.booking.status.toLowerCase() === 'confirmed' && !bookingHasStarted(detail.booking.date, detail.booking.time);
   const exceptionAllowed = user?.role === 'admin' && detail?.exceptionsEnabled && detail.booking.status.toLowerCase() === 'confirmed';
   const feedback = error ? <Toast placement="inline" message={error} type="error" onClose={() => setError('')} />
     : notice ? <Toast placement="inline" message={notice} onClose={() => setNotice('')} /> : null;
 
-  return <StaffDialog title="Court booking details" eyebrow="THE ZAWANA · COURT RENTAL" onClose={onClose} busy={busy} feedback={feedback}
-    footer={detail && <>
-      <span className="z-dialog__footer-note">{mode === 'cancel' ? 'Refunds require separate approval.' : 'Yangon time · UTC+6:30'}</span>
-      {mode === 'details' ? <Button className="z-dialog-secondary" disabled={busy} onClick={onClose}>Done</Button> : <>
-        <Button className="z-dialog-secondary" disabled={busy} onClick={() => setMode('details')}>Back</Button>
-        <Button className="z-dialog-danger" loading={busy} disabled={busy || reason.trim().length < 3} onClick={cancel}>{detail.booking.paymentStatus === 'pending' ? 'Confirm cancellation' : 'Submit cancellation request'}</Button>
-      </>}
-    </>}
-  >
+  return <DeskDialog title="Court booking details" eyebrow="Court rental" onClose={onClose} busy={busy} className="desk-court-details" cancelLabel={mode==='details'?'Done':'Cancel'}
+    summary={detail&&<p>{mode==='cancel'?'Refunds require separate approval.':'Yangon time · UTC+6:30'}</p>}
+    actions={detail&&mode==='cancel'&&<><Button variant="ghost" disabled={busy} onClick={()=>setMode('details')}>Back</Button><Button variant="danger" loading={busy} disabled={busy||reason.trim().length<3} onClick={cancel}>{detail.booking.paymentStatus==='pending'?'Confirm cancellation':'Submit cancellation request'}</Button></>} bodyClassName="space-y-5">
+    {feedback}
+
     {!detail ? <p role="status" className="z-empty">{error ? 'Booking details could not be loaded.' : 'Loading reservation…'}</p> : <>
       <section aria-label="Current reservation">
         <div className="z-booking-summary"><div><p className="z-reference">{detail.booking.code}</p><h3 className="z-session-title">{detail.booking.title}</h3></div><span className={`z-status z-status--${label(detail.booking.status)}`}>{label(detail.booking.status)}</span></div>
         <div className="z-session-meta"><span><CalendarDays size={14} strokeWidth={1.5} />{dateLabel(detail.booking.date)}</span><span><Clock3 size={14} strokeWidth={1.5} />{detail.booking.time}</span></div>
-        {mode === 'details' ? <dl className="z-booking-facts"><div className="z-fact"><dt>Reserved for</dt><dd>{detail.customer}</dd></div><div className="z-fact"><dt>Booking amount</dt><dd>{detail.booking.price.toLocaleString()} MMK</dd></div><div className="z-fact"><dt>Payment</dt><dd className="capitalize">{label(detail.booking.paymentStatus)}</dd></div></dl> : <p className="z-caption mt-4">{detail.customer} · {detail.booking.price.toLocaleString()} MMK · {label(detail.booking.paymentStatus)}</p>}
-        <div className="z-policy">{detail.eligibility.eligible ? <CheckCircle2 size={14} strokeWidth={1.5} /> : <Info size={14} strokeWidth={1.5} />}<div>{detail.eligibility.message}{detail.eligibility.deadline && <small>Change by {stamp(detail.eligibility.deadline)} · Yangon</small>}</div></div>
+        {mode === 'details' ? <dl className="z-booking-facts"><div className="z-fact"><dt>Reserved for</dt><dd>{courtBookingCustomer(detail)}</dd></div><div className="z-fact"><dt>Booking amount</dt><dd>{detail.booking.price.toLocaleString()} MMK</dd></div><div className="z-fact"><dt>Payment</dt><dd className="capitalize">{label(detail.booking.paymentStatus)}</dd></div></dl> : <p className="z-caption mt-4">{courtBookingCustomer(detail)} · {detail.booking.price.toLocaleString()} MMK · {label(detail.booking.paymentStatus)}</p>}
+        <div className="z-policy">{detail.eligibility.eligible ? <CheckCircle2 size={14} strokeWidth={1.5} /> : <Info size={14} strokeWidth={1.5} />}<div>{staffAllowed ? 'Desk staff can reschedule before the session starts without a 24-hour restriction.' : detail.eligibility.message}{!staffAllowed && detail.eligibility.deadline && <small>Change by {stamp(detail.eligibility.deadline)} · Yangon</small>}</div></div>
       </section>
       <nav className="z-dialog-nav" aria-label="Booking options">
         <button type="button" aria-pressed={mode === 'details'} disabled={busy} onClick={() => setMode('details')}>History</button>
-        <button type="button" disabled={busy || (!detail.eligibility.eligible && !exceptionAllowed)} onClick={() => navigate(courtReschedulePath(bookingId, user?.role))}>Change Date / Time</button>
+        <button type="button" disabled={busy || (!staffAllowed && !detail.eligibility.eligible && !exceptionAllowed)} onClick={() => navigate(courtReschedulePath(bookingId, user?.role))}>Change Date / Time</button>
         {['pending', 'confirmed'].includes(detail.booking.status.toLowerCase()) && <button type="button" className="z-nav-cancel" aria-pressed={mode === 'cancel'} disabled={busy} onClick={() => setMode('cancel')}>Cancel Booking</button>}
       </nav>
       {mode === 'cancel' && <section className="z-form" aria-label="Cancellation confirmation">
@@ -85,6 +84,6 @@ export function CourtChangeDialog({ bookingId, onClose, onChanged }: { bookingId
         </section>
       </>}
     </>}
-  </StaffDialog>;
+  </DeskDialog>;
 }
 function describe(value: string) { try { const s = JSON.parse(value); return `${s.date ? dateLabel(s.date) : 'Previous date'} · ${s.time || ''}`; } catch { return 'Historical schedule'; } }

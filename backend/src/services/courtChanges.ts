@@ -60,6 +60,7 @@ async function destination(db: Prisma.TransactionClient, target: Target) {
 }
 export async function quoteCourtChange(db: PrismaClient, id: string, actor: Actor, target: Target, exceptionReason?: string) {
   const b = await authorized(db, id, actor);
+  if(await db.bookingRescheduleRequest.findFirst({where:{activeKey:id,status:'REFUND_REQUESTED'}}))throw changeError('REFUND_REVIEW_PENDING','Resolve the refund review before rescheduling.');
   const policyException = enforcePolicy(b, actor, exceptionReason);
   const slot = await destination(db, target);
   return { original: snapshot(b), proposed: slot, difference: slot.price - b.price, revision: await revision(db, b), policyException };
@@ -89,6 +90,7 @@ export async function rescheduleCourt(db: PrismaClient, id: string, actor: Actor
     if (await revision(tx, b) !== expectedRevision) throw changeError('CONCURRENT_BOOKING_MODIFICATION', 'This reservation changed. Refresh and review it again.');
     const exception = enforcePolicy(b, actor, exceptionReason);
     await activePayment(tx, id);
+    if(await tx.bookingRescheduleRequest.findFirst({where:{activeKey:id,status:'REFUND_REQUESTED'}}))throw changeError('REFUND_REVIEW_PENDING','Resolve the refund review before rescheduling.');
     const slot = await destination(tx, target);
     if (slot.price !== b.price) throw changeError('PAYMENT_ADJUSTMENT_REQUIRED', `The price difference is ${slot.price - b.price} MMK. Contact staff to arrange the payment adjustment before moving.`);
     if (b.paymentStatus === 'refunded') throw changeError('BOOKING_NOT_ELIGIBLE', 'A refunded reservation requires staff review.');

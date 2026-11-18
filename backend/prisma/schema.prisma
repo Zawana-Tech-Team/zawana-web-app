@@ -128,6 +128,8 @@ enum TransactionBusiness {
 }
 
 model User {
+  processedBookingRefunds BookingRefund[] @relation("RefundEmployee")
+  customerBookingRefunds BookingRefund[] @relation("RefundCustomer")
   categoryQrRedemptions BadmintonQrRedemption[]
   notificationReads NotificationRead[]
   redeemedEntryQrs BadmintonEntryQr[] @relation("EntryQrRedeemer")
@@ -179,6 +181,7 @@ model Court {
   name      String       @unique
   type      String
   surface   String
+  floor     String?
   price     Int
   status    CourtStatus  @default(available)
   features  Json
@@ -189,6 +192,9 @@ model Court {
 }
 
 model CourtBlock {
+  effectiveFrom String?
+  effectiveUntil String?
+  excludedDates Json?
   id        String   @id @default(cuid())
   courtId   String
   court     Court    @relation(fields: [courtId], references: [id], onDelete: Cascade)
@@ -207,6 +213,9 @@ model CourtBlock {
 }
 
 model CourtDateOverride {
+  weeklyOnly Boolean @default(false)
+  holidayActive Boolean @default(false)
+  suspendedBlockIds Json?
   id          String                 @id @default(cuid())
   date        String                 @unique
   type        CourtDateOverrideType
@@ -273,6 +282,9 @@ model Schedule {
 }
 
 model Booking {
+  refundRecord BookingRefund?
+ staffRescheduleRequests BookingRescheduleRequest[]
+  rescheduleRequests PrivateRescheduleRequest[]
   privateCoursePayment PrivateCoursePayment?
   changes BookingChangeHistory[]
   cancellationRequests BookingCancellationRequest[]
@@ -496,6 +508,8 @@ model CafeOrderItem {
 }
 
 model Transaction {
+  originalBookingRefunds BookingRefund[] @relation("RefundOriginalPayment")
+  bookingRefundLedger BookingRefund? @relation("RefundLedger")
   resourceType String?
   resourceId String?
   confirmationMode String @default("LEGACY")
@@ -1131,4 +1145,101 @@ model BadmintonQrRedemption {
   redeemedAt DateTime @default(now())
   @@unique([qrId, memberId])
   @@index([memberId, redeemedAt])
+}
+
+model DeskMoveBatch {
+  id String @id @default(cuid())
+  actorId String
+  requestKey String
+  payloadHash String
+  result Json
+  reason String
+  createdAt DateTime @default(now())
+  @@unique([actorId, requestKey])
+}
+
+model PrivateRescheduleRequest {
+  id String @id @default(cuid())
+  bookingId String
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  pendingKey String? @unique
+  requestedById String
+  originalRevision String
+  original Json
+  courtId String
+  date String
+  time String
+  status String @default("PENDING")
+  reason String
+  reviewedById String?
+  reviewReason String?
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([bookingId, status])
+}
+
+model BookingRescheduleRequest {
+ id String @id @default(cuid())
+ bookingId String
+ booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+ activeKey String? @unique
+ customerId String
+ requestedById String
+ kind String
+ status String @default("PENDING_CUSTOMER")
+ reason String @default("")
+ response String?
+ oldSchedule Json
+ proposed Json?
+ oldPaid Int?
+ newPrice Int?
+ priceDifference Int?
+ priceAcknowledged Boolean @default(false)
+ privateProposalId String? @unique
+ createdAt DateTime @default(now())
+ updatedAt DateTime @default(now()) @updatedAt
+ completedAt DateTime?
+ expiresAt DateTime
+ events RescheduleRequestEvent[]
+ @@index([customerId, status])
+}
+model RescheduleRequestEvent {
+ id String @id @default(cuid())
+ requestId String
+ request BookingRescheduleRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+ actorId String
+ status String
+ detail Json
+ createdAt DateTime @default(now())
+}
+
+model BookingRefund {
+  id String @id @default(cuid())
+  bookingId String @unique
+  booking Booking @relation(fields:[bookingId],references:[id],onDelete:Restrict)
+  cancellationRequestId String?
+  originalTransactionId String
+  originalTransaction Transaction @relation("RefundOriginalPayment",fields:[originalTransactionId],references:[id],onDelete:Restrict)
+  transactionId String @unique
+  transaction Transaction @relation("RefundLedger",fields:[transactionId],references:[id],onDelete:Restrict)
+  customerId String?
+  customer User? @relation("RefundCustomer",fields:[customerId],references:[id],onDelete:Restrict)
+  customerName String
+  amount Int
+  paidAmount Int
+  method String
+  employeeName String
+  employeeUserId String
+  employee User @relation("RefundEmployee",fields:[employeeUserId],references:[id],onDelete:Restrict)
+  notes String
+  refundReference String?
+  referenceKey String? @unique
+  status String @default("REFUNDED")
+  processedAt DateTime @default(now())
+  requestKey String
+  payloadHash String
+  sourcePayments Json
+  notificationDeliveredAt DateTime?
+  @@unique([employeeUserId,requestKey])
+  @@index([customerId,processedAt])
 }

@@ -170,13 +170,7 @@ export function Generic({ title, body }: { title: string; body: string }) {
                       action: 'Explore badminton coaching',
                       body: 'Find available private courses and coaching through your member account.'
                     },
-                    {
-                      name: 'Train with intention.',
-                      image: 'gym',
-                      to: '/book/coach',
-                      action: 'Find a training session',
-                      body: 'Connect with a ZAWANA coach for a personal training session that fits your schedule.'
-                    }
+
                   ]
               ).map((f) => (
                 <Link key={f.name} to={f.to} className="booking-option">

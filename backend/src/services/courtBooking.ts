@@ -1,3 +1,4 @@
+import { blockOccurs } from './blockSchedule.js';
 import { recordCourtRentalPayment } from "./courtRentalPayment.js";
 import { createHash } from "node:crypto";
 import type {
@@ -231,8 +232,7 @@ export async function createCourtBooking(
           const dateBlocks = blocks.filter(
             (x) =>
               x.courtId === item.courtId &&
-              (x.date === item.date ||
-                (override?.type !== "open" && x.dayOfWeek === dow)),
+              blockOccurs(x, item.date, override),
           );
           let reason = "";
           if (override?.type === "closed")

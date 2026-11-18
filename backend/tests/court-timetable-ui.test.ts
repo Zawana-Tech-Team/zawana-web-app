@@ -30,3 +30,10 @@ test('floor labels reuse existing configured naming conventions without assuming
   assert.equal(courtFloor({ name: 'Training Studio' }), 'Other courts');
   assert.equal(courtFloor({ name: 'Court 12' }), 'Other courts');
 });
+
+test('explicit floor overrides court numbering and survives arbitrary court names', () => {
+  assert.equal(courtFloor({ name: 'Court 1', floor: '6th Floor' }), '6th floor');
+  assert.equal(courtFloor({ name: 'Court 8', floor: '2nd Floor' }), '2nd floor');
+  assert.equal(courtFloor({ name: 'Training Studio', floor: '6th Floor' }), '6th floor');
+  assert.equal(courtFloor({ name: 'Court 5', floor: null }), '6th floor');
+});

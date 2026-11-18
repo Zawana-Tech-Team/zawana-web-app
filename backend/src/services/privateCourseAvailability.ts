@@ -1,3 +1,4 @@
+import { blockOccurs } from './blockSchedule.js';
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { isDateKey } from "../utils/dateKeys.js";
 import { bookingFailure, occupyingStatuses } from "./courtBooking.js";
@@ -77,7 +78,7 @@ export async function privateCourseAvailability(
         courtId: court.id,
         active: true,
         OR:
-          override?.type === "open"
+          override?.type === "open" && !override.weeklyOnly
             ? [{ date: input.date }]
             : [
                 { date: input.date },
@@ -107,7 +108,7 @@ export async function privateCourseAvailability(
         !bookings.some(
           (b) => b.courtId === court.id && overlaps(b.time, time),
         ) &&
-        !blocks.some((b) => overlaps(`${b.start} — ${b.end}`, time));
+        !blocks.filter(b => blockOccurs(b, input.date, override)).some((b) => overlaps(`${b.start} — ${b.end}`, time));
       const future =
         input.date !== today(now) ||
         startMinute > current.hour * 60 + current.minute;

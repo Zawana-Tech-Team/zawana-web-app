@@ -1,3 +1,4 @@
+import { blockOccurs } from './blockSchedule.js';
 import type { PrismaClient } from "@prisma/client";
 import { isDateKey } from "../utils/dateKeys.js";
 import { bookingFailure, occupyingStatuses } from "./courtBooking.js";
@@ -44,10 +45,9 @@ function build(date: string, data: Awaited<ReturnType<typeof readCalendar>>) {
     bookings = data.bookings.filter((b) => b.date === date),
     holiday = data.holidays.find((h) => h.date === date),
     override = data.overrides.find((o) => o.date === date);
-  const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
   const blocks = data.blocks.filter(
     (b) =>
-      b.date === date || (override?.type !== "open" && b.dayOfWeek === dow),
+      blockOccurs(b, date, override),
   );
   const current = businessNow(),
     minDate = today();

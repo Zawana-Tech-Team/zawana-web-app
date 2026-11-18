@@ -53,6 +53,7 @@ export function registerBookingQueryRoutes({
     "/api/bookings",
     auth,
     asyncRoute(async (req: BookingRequest, res: Response) => {
+      res.setHeader("Cache-Control", "no-store");
       await expireReservations();
       const { hasPage, page, limit } = readPagination(req.query as Record<string, unknown>);
       const broadRoles: Role[] = ["admin", "owner", "gym_fo", "badminton_fo", "clinic_fo"];
@@ -171,7 +172,7 @@ export function registerBookingQueryRoutes({
         privateCoursePayment: { select: { paymentSource: true, paymentMethod: true, status: true } },
         court: true,
         coach: true,
-        user: { select: { id: true, name: true, email: true, phone: true } }
+        user: { select: { id: true, name: true, email: true, phone: true, role: true } }
       };
       if (!hasPage)
         return res.json(

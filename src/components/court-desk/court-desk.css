@@ -159,3 +159,114 @@
   .desk-scroll-hint { display: none; }
   .desk-timetable-caption { padding: 7px 10px; font-size: 10px; }
 }
+
+.court-timetable__heading[aria-pressed='true'], .court-timetable__slot[aria-pressed='true'] { background: #f5edc9; box-shadow: inset 0 0 0 2px #9c832d; }
+.court-timetable__slot[aria-pressed='true'] > span { color: #5d4b10; font-weight: 650; }
+.court-timetable__event[aria-pressed='true'] { outline: 3px solid #9c832d; outline-offset: -3px; }
+.desk-selection-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-block: 16px 24px; padding: 18px; border: 1px solid #dedfd5; border-radius: 14px; background: white; }
+.desk-selection-actions > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.desk-context-menu { position: fixed; z-index: 150; width: min(320px, calc(100vw - 16px)); overflow-y: auto; overscroll-behavior: contain; padding: 6px; border: 1px solid #dedfd5; border-radius: 12px; background: white; box-shadow: 0 12px 32px #20281f20; }
+.desk-context-menu button { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 12px; border-radius: 8px; text-align: left; font-size: 13px; }
+.desk-context-menu button:hover, .desk-context-menu button:focus-visible { background: #f4f5ef; }
+.desk-context-menu button:disabled { opacity: .5; }
+.desk-context-menu small { font-size: 11px; color: #747c6f; }
+
+.desk-booking-summary { flex: 1 1 100%; min-width: 0; display: grid; gap: 5px; overflow-wrap: anywhere; }
+.desk-booking-summary__phone { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; font-size: 13px; font-weight: 600; }
+.desk-booking-summary__phone:hover { text-decoration: underline; }
+.desk-booking-summary__phone:focus-visible { outline: 2px solid #9c832d; outline-offset: 3px; border-radius: 4px; }
+
+.desk-context-menu button.desk-context-menu__destructive { color: #b42318; }
+.desk-context-menu button.desk-context-menu__destructive:hover, .desk-context-menu button.desk-context-menu__destructive:focus-visible { background: #fef3f2; }
+
+/* Court Desk foundations: shared by portaled dialogs and the calendar workspace. */
+.court-desk, .desk-dialog, .desk-panel, .desk-history {
+  --desk-line: var(--color-zawana-border, #e2e4db);
+  --desk-ink: var(--color-zawana-950, #20281f);
+  --desk-muted: var(--color-zawana-500, #62685d);
+  --desk-surface: #fafbf8;
+  color: var(--desk-ink);
+}
+.desk-dialog { max-width: 720px; border-radius: var(--ui-radius, 14px); box-shadow: var(--ui-shadow-overlay); }
+.desk-dialog--compact { max-width: 560px; }
+.desk-dialog--wide { max-width: 880px; }
+.desk-dialog .desk-reservation-dialog__header { align-items: flex-start; padding: 20px 24px; }
+.desk-dialog__eyebrow { margin-bottom: 6px; color: var(--desk-muted); font-size: 11px; font-weight: 500; letter-spacing: .025em; }
+.desk-dialog .desk-dialog__title { font-size: 19px; font-weight: 600; letter-spacing: -.025em; line-height: 1.35; }
+.desk-dialog__description { max-width: 58ch; margin-top: 7px; color: var(--desk-muted); font-size: 12px; line-height: 1.6; }
+.desk-dialog .desk-dialog__close { width: 36px; min-width: 36px; height: 36px; min-height: 36px; flex-shrink: 0; padding: 0; margin-top: -3px; border-radius: var(--ui-radius-sm, 8px); }
+.desk-dialog .desk-reservation-dialog__body { padding: 20px 24px; overflow-wrap: anywhere; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.desk-dialog .desk-reservation-dialog__footer { padding: 16px 24px; background: var(--desk-surface); gap: 12px 20px; }
+.desk-dialog__footer-summary { flex: 1 1 180px; min-width: 0; }
+.desk-dialog__actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.desk-dialog .desk-dialog__actions .zawana-button { min-width: 104px; font-size: 12px; font-weight: 600; }
+.desk-dialog :is(input:not([type='checkbox']):not([type='radio']), textarea) { width: 100%; min-width: 0; border: 1px solid var(--desk-line); border-radius: var(--ui-radius-sm, 8px); background: white; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+.desk-dialog textarea { min-height: 88px; max-height: 200px; resize: vertical; }
+.desk-dialog :is(input, textarea):focus-visible { outline: 2px solid var(--color-zawana-gold); outline-offset: 2px; box-shadow: none; }
+.desk-dialog :is(input[type='checkbox'],input[type='radio']) { min-height: 18px; width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--color-zawana-gold); }
+.desk-dialog fieldset { min-width: 0; }
+.desk-dialog .premium-select { width: 100%; }
+.desk-steps { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 8px 20px; padding: 12px 24px; border-bottom: 1px solid var(--desk-line); background: var(--desk-surface); list-style: none; }
+.desk-steps li { display: inline-flex; align-items: center; gap: 7px; color: var(--desk-muted); font-size: 11px; }
+.desk-steps li > span { display: grid; width: 20px; height: 20px; place-items: center; border: 1px solid var(--desk-line); border-radius: 50%; font-size: 10px; }
+.desk-steps li[aria-current='step'] { color: var(--desk-ink); font-weight: 600; }
+.desk-steps li[aria-current='step'] > span { border-color: var(--color-zawana-gold); background: var(--color-zawana-gold); }
+.desk-steps li[data-complete='true'] > span { color: var(--desk-ink); background: white; }
+.desk-form-section { min-width: 0; padding: 16px; border: 1px solid var(--desk-line); border-radius: var(--ui-radius-sm, 8px); background: white; }
+.desk-form-section > legend { padding-inline: 5px; color: var(--desk-muted); font-size: 11px; font-weight: 500; }
+.desk-schedule { min-width: 0; padding: 12px 14px; border: 1px solid var(--desk-line); border-radius: var(--ui-radius-sm, 8px); background: var(--desk-surface); font-size: 12px; line-height: 1.6; }
+.desk-schedule__label { display: block; margin-bottom: 4px; color: var(--desk-muted); font-size: 10px; font-weight: 500; }
+.desk-schedule strong { display: block; font-size: 12px; font-weight: 600; }
+.desk-schedule > p { color: var(--desk-muted); }
+.desk-change-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.desk-change-summary .desk-schedule:last-child { background: white; border-color: color-mix(in srgb, var(--color-zawana-gold) 60%, var(--desk-line)); }
+.desk-section-label { margin-bottom: 10px; color: var(--desk-muted); font-size: 11px; font-weight: 500; }
+.desk-note { border: 1px solid var(--desk-line); border-radius: var(--ui-radius-sm, 8px); padding: 11px 13px; background: var(--desk-surface); color: var(--desk-muted); font-size: 12px; line-height: 1.6; }
+.desk-selection-list { max-height: 200px; overflow-y: auto; overscroll-behavior: contain; border-block: 1px solid var(--desk-line); }
+.desk-action-choice.zawana-button { justify-content: flex-start; min-height: 56px; padding: 12px 14px; gap: 12px; text-align: left; font-weight: 500; }
+.desk-action-choice > svg { width: 17px; height: 17px; flex-shrink: 0; }
+.desk-action-choice small { display: block; margin-top: 3px; color: var(--desk-muted); font-size: 11px; font-weight: 400; }
+.desk-panel { border: 1px solid var(--desk-line); border-radius: var(--ui-radius, 14px); background: white; box-shadow: var(--ui-shadow); }
+.desk-panel > h2 { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
+.desk-panel article { overflow-wrap: anywhere; }
+.desk-panel article > div > span { width: fit-content; border: 1px solid var(--desk-line); border-radius: 6px; padding: 3px 7px; background: var(--desk-surface); font-size: 10px; font-weight: 500; }
+.desk-panel article .zawana-button { min-height: 38px; padding: 7px 12px; font-size: 12px; font-weight: 500; }
+.court-desk .desk-filters { margin-bottom: 14px; padding: 14px; border: 1px solid var(--desk-line); border-radius: var(--ui-radius, 14px); background: white; }
+.court-desk .desk-selection-actions { padding: 16px; gap: 12px; box-shadow: var(--ui-shadow); border-radius: var(--ui-radius, 14px); }
+.desk-selection-actions .desk-booking-summary { gap: 5px; }
+.desk-booking-summary__phone { min-height: 36px; }
+.desk-context-menu { border-radius: var(--ui-radius-sm, 8px); box-shadow: var(--ui-shadow-raised); }
+.desk-context-menu button { min-height: 40px; padding: 10px 12px; font-size: 12px; font-weight: 500; }
+.desk-context-menu small { line-height: 1.5; font-size: 10px; font-weight: 400; }
+.desk-history > .desk-history-filters { padding: 14px; border: 1px solid var(--desk-line); border-radius: var(--ui-radius, 14px); background: white; }
+.court-timetable__event { box-shadow: 0 1px 2px rgb(22 28 24 / 3%); }
+.court-timetable__event[aria-pressed='true'] { outline-width: 2px; }
+.court-timetable__slot[aria-pressed='true'] { background: color-mix(in srgb, var(--color-zawana-gold) 15%, white); }
+@media (max-width: 639px) {
+  .desk-dialog .desk-reservation-dialog__header, .desk-dialog .desk-reservation-dialog__body, .desk-dialog .desk-reservation-dialog__footer { padding: 16px; }
+  .desk-dialog .desk-dialog__title { font-size: 18px; }
+  .desk-dialog .desk-dialog__close { min-width: 40px; width: 40px; height: 40px; min-height: 40px; }
+  .desk-dialog__actions { width: 100%; }
+  .desk-dialog .desk-dialog__actions .zawana-button { flex: 1 1 140px; min-width: 0; }
+  .desk-steps { padding: 10px 16px; gap: 8px 14px; }
+  .desk-steps li { font-size: 10px; }
+  .desk-change-summary { grid-template-columns: minmax(0, 1fr); }
+  .desk-form-section { padding: 12px; }
+}
+.desk-dialog label.desk-acknowledgment { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; font-size: 12px; line-height: 1.6; cursor: pointer; }
+.desk-court-details { --dialog-ink: var(--desk-ink); --dialog-muted: var(--desk-muted); --dialog-line: var(--desk-line); --dialog-surface: var(--desk-surface); }
+.desk-court-details .z-session-title { font-size: 18px; }
+.desk-toolbar__tools { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.desk-selection-chip { min-width: 0; padding: 10px 12px; border: 1px solid var(--desk-line); border-radius: var(--ui-radius-sm, 8px); background: var(--desk-surface); font-size: 11px; line-height: 1.5; }
+.desk-selection-chip b { font-weight: 600; }
+.desk-selection-chip button { min-height: 28px; color: var(--desk-muted); text-underline-offset: 3px; }
+.desk-history-facts { display: grid; gap: 12px; font-size: 13px; }
+.desk-history-facts > div { display: grid; grid-template-columns: 90px minmax(0,1fr); gap: 12px; }
+.desk-history-facts dt { color: var(--desk-muted); font-size: 12px; }
+@media (max-width: 639px) { .desk-toolbar__tools { width: 100%; justify-content: space-between; } .desk-toolbar__tools > label { flex: 1; min-width: 0; } }
+.desk-dialog .desk-contact-compact h3 { font-size: 15px; }
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .court-timetable__slot[data-state='elapsed'] > span { opacity: 0; }
+  .court-timetable__event > strong { font-size: 11px; }
+  .court-timetable__event > .desk-event-time-compact { font-size: 10px; }
+}

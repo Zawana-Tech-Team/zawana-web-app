@@ -120,7 +120,7 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
       },
       {
         to: "/badminton-fo/transactions",
-        label: "Transactions",
+        label: "Finance",
         icon: CreditCard,
       },
     ],

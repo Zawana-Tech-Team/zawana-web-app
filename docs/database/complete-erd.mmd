@@ -1,0 +1,900 @@
+erDiagram
+    ProductCategory {
+        String id PK
+        String name UK
+        Boolean active
+        DateTime createdAt
+    }
+    CafeMenuItem {
+        String id PK
+        String name
+        String category
+        String description
+        Int price
+        Boolean available
+        String imageUrl "nullable"
+        DateTime createdAt
+    }
+    User {
+        String id PK
+        String firebaseUid UK "nullable"
+        String name
+        String email UK
+        Boolean emailVerified
+        String passwordHash "nullable"
+        Role role
+        String phone "nullable"
+        String membership "nullable"
+        String avatar "nullable"
+        DateTime createdAt
+        Boolean active
+        DateTime deletedAt "nullable"
+        DateTime lastLoginAt "nullable"
+    }
+    Court {
+        String id PK
+        String name UK
+        String type
+        String surface
+        String floor "nullable"
+        Int price
+        CourtStatus status
+        Json features
+        DateTime createdAt
+    }
+    CourtBlock {
+        String effectiveFrom "nullable"
+        String effectiveUntil "nullable"
+        Json excludedDates "nullable"
+        String id PK
+        String courtId FK
+        String date
+        Int dayOfWeek "nullable"
+        Boolean active
+        String start
+        String end
+        String title
+        String type
+        String note "nullable"
+        DateTime createdAt
+    }
+    CourtDateOverride {
+        Boolean weeklyOnly
+        Boolean holidayActive
+        Json suspendedBlockIds "nullable"
+        String id PK
+        String date UK
+        CourtDateOverrideType type
+        String title
+        String reason "nullable"
+        String createdById FK "nullable"
+        DateTime createdAt
+    }
+    HolidayRate {
+        String id PK
+        String date UK
+        String title
+        Int price
+        Boolean active
+        DateTime createdAt
+    }
+    Coach {
+        String id PK
+        String name
+        String specialty
+        String department
+        String phone
+        String email
+        CoachStatus status
+        String color
+        String imageUrl "nullable"
+        String userId FK, UK "nullable"
+    }
+    Doctor {
+        String id PK
+        String userId FK, UK
+        String specialty
+        String phone
+        CoachStatus status
+        String color
+        DateTime createdAt
+    }
+    Schedule {
+        String id PK
+        String person
+        ScheduleRole role
+        String day
+        String start
+        String end
+        String service "nullable"
+        Boolean active
+        String doctorId FK "nullable"
+    }
+    Booking {
+        String id PK
+        String code UK
+        String userId FK
+        BookingKind kind
+        String title
+        String date
+        String time
+        String location
+        BookingStatus status
+        Int price
+        String courtId FK "nullable"
+        String coachId FK "nullable"
+        String meta "nullable"
+        PaymentStatus paymentStatus
+        DateTime reservationExpiresAt "nullable"
+        DateTime coachAcceptedAt "nullable"
+        DateTime paymentExpiresAt "nullable"
+        DateTime createdAt
+    }
+    PrivateTrainingSession {
+        String enrollmentId FK "nullable"
+        String requestKey "nullable"
+        String id PK
+        String memberId FK
+        String coachId FK
+        String date
+        String startTime
+        String endTime
+        Int durationMinutes
+        PrivateTrainingStatus status
+        String notes "nullable"
+        String createdById FK
+        DateTime createdAt
+        DateTime updatedAt
+    }
+    PrivateCourse {
+        String id PK
+        String title
+        String description
+        Int duration
+        Int price
+        String status
+        String imageUrl "nullable"
+        String category
+        DateTime createdAt
+    }
+    Class {
+        String id PK
+        String title
+        String coach
+        String time
+        Int duration
+        Int capacity
+        Int booked
+        String level
+        String location
+        Int price
+    }
+    MembershipPlan {
+        String id PK
+        String title
+        Int price
+        Int duration
+        String kind
+        Json features
+        String status
+    }
+    Membership {
+        String enrollmentId FK, UK "nullable"
+        String accessMode
+        String id PK
+        String customerId
+        String userId FK "nullable"
+        String customer
+        String phone
+        String packageId
+        String package
+        String startDate
+        String expiryDate
+        String status
+        String lastCheckIn "nullable"
+        Int sessionsTotal
+        Int sessionsRemaining
+    }
+    GymCheckIn {
+        String id PK
+        String membershipId FK
+        String date
+        String time
+        Int sessionsUsed
+        String staffId "nullable"
+        String note "nullable"
+        DateTime createdAt
+    }
+    Product {
+        String id PK
+        String name
+        Int price
+        String category
+        String categoryId FK "nullable"
+        String description
+        String sku UK
+        String barcode UK
+        Int stock
+        Int cost
+        Int tax
+        ProductStatus status
+        String imageUrl "nullable"
+    }
+    InventoryTransaction {
+        String id PK
+        String productId FK
+        String type
+        Int quantity
+        String note
+        String date
+    }
+    StoreOrder {
+        String id PK
+        String userId FK "nullable"
+        String customer
+        Int total
+        Int discount
+        Int tax
+        Int paid
+        String dueDate "nullable"
+        String status
+        Json items
+    }
+    CafeOrder {
+        String id PK
+        String orderNumber UK "nullable"
+        String customerId FK "nullable"
+        String customer
+        Json items
+        String location
+        String floor
+        String courtId FK "nullable"
+        String orderTime
+        String paymentMethod
+        String paymentStatus
+        Int subtotal
+        Int discount
+        Int tax
+        Int total
+        String status
+        String createdById FK "nullable"
+        String transactionId FK, UK "nullable"
+        DateTime createdAt
+        DateTime updatedAt
+    }
+    CafeOrderItem {
+        String id PK
+        String orderId FK
+        String menuItemId FK "nullable"
+        String name
+        Int quantity
+        Int unitPrice
+        String notes "nullable"
+        DateTime createdAt
+    }
+    Transaction {
+        String resourceType "nullable"
+        String resourceId "nullable"
+        String confirmationMode
+        String confirmedById "nullable"
+        String requestKey UK "nullable"
+        String requestHash "nullable"
+        String id PK
+        String userId FK "nullable"
+        String date
+        String customer
+        TransactionBusiness business
+        String item
+        Int amount
+        Int discount
+        Int tax
+        Int finalAmount
+        String paymentMethod
+        String staff
+        String status
+        DateTime createdAt
+    }
+    Appointment {
+        Int price
+        String id PK
+        String userId FK "nullable"
+        String doctorId FK "nullable"
+        String patient
+        String doctor
+        String date
+        String time
+        String type
+        AppointmentStatus status
+        String notes "nullable"
+        PaymentStatus paymentStatus
+    }
+    Student {
+        String id PK
+        String name
+        String phone
+        String className
+        String coach
+        String package
+        String paymentStatus
+        Int attendance
+        String expiryDate
+        String status
+    }
+    Notification {
+        String dedupeKey UK "nullable"
+        String id PK
+        String userId FK "nullable"
+        String title
+        String body
+        Boolean read
+        String link "nullable"
+        String audience "nullable"
+        String type "nullable"
+        String icon "nullable"
+        String imageUrl "nullable"
+        String actionLabel "nullable"
+        String entityType "nullable"
+        String entityId "nullable"
+        Boolean activeInInbox
+        DateTime createdAt
+    }
+    BadmintonPackage {
+        String id PK
+        String title
+        Int price
+        Int sessions
+        Int validity
+        String description
+        String status
+        String categoryId FK "nullable"
+        Json availableDays "nullable"
+        String availableFrom "nullable"
+        String availableUntil "nullable"
+        String scheduleNotes "nullable"
+        String courtRules "nullable"
+        String imageUrl "nullable"
+    }
+    BadmintonPackagePurchase {
+        String id PK
+        String code UK
+        String userId FK
+        String packageId FK
+        String packageName
+        Int price
+        String paymentMethod
+        String status
+        DateTime createdAt
+        DateTime paidAt "nullable"
+    }
+    PaymentAttempt {
+        String id PK
+        String reference UK
+        String userId FK
+        String resourceType
+        String resourceId
+        Int amount
+        String currency
+        String provider
+        String providerReference UK "nullable"
+        String checkoutUrl "nullable"
+        String qrCode "nullable"
+        PaymentAttemptStatus status
+        DateTime expiresAt
+        DateTime paidAt "nullable"
+        String failureReason "nullable"
+        DateTime createdAt
+        DateTime updatedAt
+    }
+    BadmintonPackageCategory {
+        String code UK "nullable"
+        String id PK
+        String name UK
+        Boolean active
+        String createdBy FK "nullable"
+        DateTime createdAt
+    }
+    BadmintonEnrollment {
+        String categoryCode "nullable"
+        String id PK
+        String studentId
+        String userId FK "nullable"
+        String studentName
+        String phone
+        String packageId
+        String packageName
+        Int sessionsTotal
+        Int sessionsRemaining
+        String startDate
+        String expiryDate
+        String status
+        Int renewalCount
+        String lastCheckIn "nullable"
+        String purchaseId FK, UK "nullable"
+        DateTime createdAt
+    }
+    BadmintonCheckIn {
+        String memberId "nullable"
+        String categoryCode "nullable"
+        String attendanceKey UK "nullable"
+        String source
+        String actorId "nullable"
+        String qrId FK "nullable"
+        String dailyKey UK "nullable"
+        String status
+        String packageSnapshot "nullable"
+        String id PK
+        String enrollmentId FK
+        String date
+        String time
+        Int sessionsUsed
+        String staffId "nullable"
+        String note "nullable"
+        DateTime createdAt
+    }
+    GymPackage {
+        String kind
+        Int rate
+        Int months
+        Int validityDays
+        Int sessionMinutes
+        Int minMembers
+        Int maxMembers
+        Boolean coachRequired
+        Int version
+        String id PK
+        String title
+        Int price
+        Int duration
+        Int sessions
+        String description
+        Json benefits
+        String status
+    }
+    ContentItem {
+        String id PK
+        String kind
+        String category
+        String body
+        String title
+        String image
+        String description
+        String googleFormLink
+        String status
+        String publishDate
+    }
+    AuthIdentity {
+        String id PK
+        String userId FK
+        String kind
+        String value
+        DateTime verifiedAt
+    }
+    AuthChallenge {
+        String id PK
+        String tokenHash UK
+        String proofKey UK
+        String firebaseUid
+        String phone
+        Int authTime
+        String intent
+        Int attempts
+        DateTime expiresAt
+        DateTime consumedAt "nullable"
+        DateTime createdAt
+    }
+    PendingRegistration {
+        String id PK
+        String tokenHash UK
+        String firebaseUid UK
+        String phoneUid "nullable"
+        String phone "nullable"
+        String name
+        String email
+        Boolean credentialsStarted
+        Boolean credentialsReady
+        String completedUserId "nullable"
+        DateTime expiresAt
+        DateTime createdAt
+    }
+    AuthSession {
+        String id PK
+        String userId FK
+        String accessHash UK
+        DateTime accessExpiresAt
+        DateTime expiresAt
+        DateTime revokedAt "nullable"
+        String method
+        String proofs
+        DateTime authenticatedAt
+    }
+    AuthRefreshToken {
+        String id PK
+        String sessionId FK
+        String tokenHash UK
+        DateTime consumedAt "nullable"
+    }
+    AuthAbuseCounter {
+        String key PK
+        Int count
+        DateTime expiresAt
+    }
+    AuthSecurityEvent {
+        String id PK
+        String userId "nullable"
+        String kind
+        DateTime createdAt
+    }
+    BookingSubmission {
+        String userId PK
+        String key PK
+        String payloadHash
+        String bookingIds
+        DateTime createdAt
+    }
+    GymPackageRevision {
+        String id PK
+        String packageId FK
+        Int version
+        Json snapshot
+        String actorId "nullable"
+        DateTime createdAt
+    }
+    GymEnrollment {
+        String id PK
+        String code UK
+        String packageId FK
+        Int packageVersion
+        Json snapshot
+        String kind
+        Int totalPrice
+        Int sessionsTotal
+        Int sessionsRemaining
+        String status
+        String startDate
+        String expiryDate
+        String coachId FK "nullable"
+        String createdById
+        String requestKey
+        String payloadHash
+        String renewalOfId FK "nullable"
+        String transactionId FK, UK "nullable"
+        String paymentMethod "nullable"
+        DateTime paidAt "nullable"
+        DateTime createdAt
+    }
+    GymEnrollmentMember {
+        String enrollmentId PK, FK
+        String userId PK, FK
+    }
+    GymSessionAttendance {
+        String sessionId PK, FK
+        String userId PK, FK
+        String status
+    }
+    GymSessionDebit {
+        String sessionId PK, FK
+        String enrollmentId FK
+        String actorId
+        DateTime createdAt
+    }
+    GymAuditLog {
+        String id PK
+        String actorId
+        String action
+        String entityType
+        String entityId
+        Json before "nullable"
+        Json after "nullable"
+        DateTime createdAt
+    }
+    BookingAttendance {
+        String status
+        String notes "nullable"
+        String id PK
+        String bookingId FK, UK
+        String recordedById
+        DateTime checkedInAt
+    }
+    BadmintonEntryQr {
+        String kind
+        String memberId FK "nullable"
+        String authorizedCategories
+        String encryptedToken "nullable"
+        String scopeKey "nullable"
+        String status
+        DateTime usedAt "nullable"
+        String redeemedBy FK "nullable"
+        String attendanceId FK, UK "nullable"
+        String categoryCode "nullable"
+        DateTime createdAt "nullable"
+        String id PK
+        String tokenHash UK
+        String createdById
+        DateTime expiresAt
+        DateTime revokedAt "nullable"
+    }
+    BadmintonQrVisit {
+        String categoryCode "nullable"
+        String qrId FK "nullable"
+        String id PK
+        String userId
+        String date
+        String checkInId FK, UK
+    }
+    AttendanceModification {
+        String id PK
+        String bookingId
+        String actorId
+        String reason
+        String previous
+        String current
+        DateTime createdAt
+    }
+    BookingChangeHistory {
+        String id PK
+        String bookingId FK
+        String action
+        String previous
+        String current
+        String requestedById
+        String approvedById "nullable"
+        String reason
+        Boolean policyException
+        DateTime createdAt
+    }
+    BookingCancellationRequest {
+        String id PK
+        String bookingId FK
+        String requestedById
+        String reason
+        String status
+        String refundStatus
+        String reviewedById "nullable"
+        String reviewReason "nullable"
+        DateTime reviewedAt "nullable"
+        DateTime createdAt
+    }
+    PrivateCoursePayment {
+        String id PK
+        String bookingId FK, UK
+        String transactionId FK, UK "nullable"
+        String paymentAttemptId FK, UK "nullable"
+        Int amount
+        String currency
+        String paymentSource
+        String paymentMethod
+        String status
+        String collectedByUserId "nullable"
+        DateTime receivedAt "nullable"
+        String verifiedByUserId "nullable"
+        DateTime verifiedAt "nullable"
+        String providerReference "nullable"
+        String externalReceiptReference "nullable"
+        String notes "nullable"
+        DateTime createdAt
+    }
+    PrivateCourseSettlement {
+        String id PK
+        String collectorId
+        String receivedById "nullable"
+        Int amount
+        String status
+        DateTime submittedAt
+        DateTime receivedAt "nullable"
+        String notes "nullable"
+        String requestKey
+        String payloadHash
+    }
+    PrivateCourseSettlementItem {
+        String settlementId PK, FK
+        String paymentId PK, FK
+        Int amount
+    }
+    PrivateCourseAdjustment {
+        String id PK
+        String paymentId FK, UK
+        String actorId
+        Int amount
+        String reason
+        String evidence
+        String reference
+        DateTime createdAt
+    }
+    PackageSecurityChallenge {
+        String id PK
+        String actorId FK
+        String mutationHash
+        DateTime createdAt
+        DateTime expiresAt
+        DateTime consumedAt "nullable"
+    }
+    PackageSecurityAudit {
+        String id PK
+        String actorId FK
+        String packageId "nullable"
+        String action
+        String changes
+        Boolean success
+        String requestIp "nullable"
+        DateTime createdAt
+    }
+    NotificationRead {
+        String notificationId PK, FK
+        String userId PK, FK
+        DateTime readAt
+    }
+    BadmintonQrDeskSlot {
+        Int id PK
+        String qrId FK, UK "nullable"
+        DateTime updatedAt
+    }
+    BadmintonQrRedemption {
+        String id PK
+        String qrId FK
+        String memberId FK
+        String enrollmentId FK
+        String attendanceId FK, UK
+        DateTime redeemedAt
+    }
+    DeskMoveBatch {
+        String id PK
+        String actorId
+        String requestKey
+        String payloadHash
+        Json result
+        String reason
+        DateTime createdAt
+    }
+    PrivateRescheduleRequest {
+        String id PK
+        String bookingId FK
+        String pendingKey UK "nullable"
+        String requestedById
+        String originalRevision
+        Json original
+        String courtId
+        String date
+        String time
+        String status
+        String reason
+        String reviewedById "nullable"
+        String reviewReason "nullable"
+        DateTime reviewedAt "nullable"
+        DateTime createdAt
+    }
+    BookingRescheduleRequest {
+        String id PK
+        String bookingId FK
+        String activeKey UK "nullable"
+        String customerId
+        String requestedById
+        String kind
+        String status
+        String reason
+        String response "nullable"
+        Json oldSchedule
+        Json proposed "nullable"
+        Int oldPaid "nullable"
+        Int newPrice "nullable"
+        Int priceDifference "nullable"
+        Boolean priceAcknowledged
+        String privateProposalId UK "nullable"
+        DateTime createdAt
+        DateTime updatedAt
+        DateTime completedAt "nullable"
+        DateTime expiresAt
+    }
+    RescheduleRequestEvent {
+        String id PK
+        String requestId FK
+        String actorId
+        String status
+        Json detail
+        DateTime createdAt
+    }
+    BookingRefund {
+        String id PK
+        String bookingId FK, UK
+        String cancellationRequestId "nullable"
+        String originalTransactionId FK
+        String transactionId FK, UK
+        String customerId FK "nullable"
+        String customerName
+        Int amount
+        Int paidAmount
+        String method
+        String employeeName
+        String employeeUserId FK
+        String notes
+        String refundReference "nullable"
+        String referenceKey UK "nullable"
+        String status
+        DateTime processedAt
+        String requestKey
+        String payloadHash
+        Json sourcePayments
+        DateTime notificationDeliveredAt "nullable"
+    }
+    Court ||--o{ CourtBlock : "courtId"
+    User o|--o{ CourtDateOverride : "createdById"
+    User o|--o| Coach : "userId"
+    User ||--o| Doctor : "userId"
+    Doctor o|--o{ Schedule : "doctorId"
+    User ||--o{ Booking : "userId"
+    Court o|--o{ Booking : "courtId"
+    Coach o|--o{ Booking : "coachId"
+    GymEnrollment o|--o{ PrivateTrainingSession : "enrollmentId"
+    User ||--o{ PrivateTrainingSession : "memberId"
+    Coach ||--o{ PrivateTrainingSession : "coachId"
+    User ||--o{ PrivateTrainingSession : "createdById"
+    GymEnrollment o|--o| Membership : "enrollmentId"
+    User o|--o{ Membership : "userId"
+    Membership ||--o{ GymCheckIn : "membershipId"
+    ProductCategory o|--o{ Product : "categoryId"
+    Product ||--o{ InventoryTransaction : "productId"
+    User o|--o{ StoreOrder : "userId"
+    User o|--o{ CafeOrder : "customerId"
+    Court o|--o{ CafeOrder : "courtId"
+    User o|--o{ CafeOrder : "createdById"
+    Transaction o|--o| CafeOrder : "transactionId"
+    CafeOrder ||--o{ CafeOrderItem : "orderId"
+    CafeMenuItem o|--o{ CafeOrderItem : "menuItemId"
+    User o|--o{ Transaction : "userId"
+    User o|--o{ Appointment : "userId"
+    Doctor o|--o{ Appointment : "doctorId"
+    User o|--o{ Notification : "userId"
+    BadmintonPackageCategory o|--o{ BadmintonPackage : "categoryId"
+    User ||--o{ BadmintonPackagePurchase : "userId"
+    BadmintonPackage ||--o{ BadmintonPackagePurchase : "packageId"
+    User ||--o{ PaymentAttempt : "userId"
+    User o|--o{ BadmintonPackageCategory : "createdBy"
+    User o|--o{ BadmintonEnrollment : "userId"
+    BadmintonPackagePurchase o|--o| BadmintonEnrollment : "purchaseId"
+    BadmintonEntryQr o|--o{ BadmintonCheckIn : "qrId"
+    BadmintonEnrollment ||--o{ BadmintonCheckIn : "enrollmentId"
+    User ||--o{ AuthIdentity : "userId"
+    User ||--o{ AuthSession : "userId"
+    AuthSession ||--o{ AuthRefreshToken : "sessionId"
+    GymPackage ||--o{ GymPackageRevision : "packageId"
+    GymPackage ||--o{ GymEnrollment : "packageId"
+    Coach o|--o{ GymEnrollment : "coachId"
+    GymEnrollment o|--o{ GymEnrollment : "renewalOfId"
+    Transaction o|--o| GymEnrollment : "transactionId"
+    GymEnrollment ||--o{ GymEnrollmentMember : "enrollmentId"
+    User ||--o{ GymEnrollmentMember : "userId"
+    PrivateTrainingSession ||--o{ GymSessionAttendance : "sessionId"
+    User ||--o{ GymSessionAttendance : "userId"
+    PrivateTrainingSession ||--o| GymSessionDebit : "sessionId"
+    GymEnrollment ||--o{ GymSessionDebit : "enrollmentId"
+    Booking ||--o| BookingAttendance : "bookingId"
+    User o|--o{ BadmintonEntryQr : "memberId"
+    User o|--o{ BadmintonEntryQr : "redeemedBy"
+    BadmintonCheckIn o|--o| BadmintonEntryQr : "attendanceId"
+    BadmintonEntryQr o|--o{ BadmintonQrVisit : "qrId"
+    BadmintonCheckIn ||--o| BadmintonQrVisit : "checkInId"
+    Booking ||--o{ BookingChangeHistory : "bookingId"
+    Booking ||--o{ BookingCancellationRequest : "bookingId"
+    Booking ||--o| PrivateCoursePayment : "bookingId"
+    Transaction o|--o| PrivateCoursePayment : "transactionId"
+    PaymentAttempt o|--o| PrivateCoursePayment : "paymentAttemptId"
+    PrivateCourseSettlement ||--o{ PrivateCourseSettlementItem : "settlementId"
+    PrivateCoursePayment ||--o{ PrivateCourseSettlementItem : "paymentId"
+    PrivateCoursePayment ||--o| PrivateCourseAdjustment : "paymentId"
+    User ||--o{ PackageSecurityChallenge : "actorId"
+    User ||--o{ PackageSecurityAudit : "actorId"
+    Notification ||--o{ NotificationRead : "notificationId"
+    User ||--o{ NotificationRead : "userId"
+    BadmintonEntryQr o|--o| BadmintonQrDeskSlot : "qrId"
+    BadmintonEntryQr ||--o{ BadmintonQrRedemption : "qrId"
+    User ||--o{ BadmintonQrRedemption : "memberId"
+    BadmintonEnrollment ||--o{ BadmintonQrRedemption : "enrollmentId"
+    BadmintonCheckIn ||--o| BadmintonQrRedemption : "attendanceId"
+    Booking ||--o{ PrivateRescheduleRequest : "bookingId"
+    Booking ||--o{ BookingRescheduleRequest : "bookingId"
+    BookingRescheduleRequest ||--o{ RescheduleRequestEvent : "requestId"
+    Booking ||--o| BookingRefund : "bookingId"
+    Transaction ||--o{ BookingRefund : "originalTransactionId"
+    Transaction ||--o| BookingRefund : "transactionId"
+    User o|--o{ BookingRefund : "customerId"
+    User ||--o{ BookingRefund : "employeeUserId"
+    Coach }o--o{ PrivateCourse : "PrivateCourseCoaches (implicit join)"

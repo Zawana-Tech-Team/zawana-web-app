@@ -239,6 +239,9 @@ export type MembershipRecord = {
 };
 
 export type CourtBooking = {
+  customerAccountId?: string | null;
+  customerName?: string | null;
+  courtId?: string | null;
   id: string;
   customer: string;
   court: string;
@@ -270,6 +273,7 @@ export type ManagedCourt = {
   name: string;
   type: 'Premium' | 'Standard';
   surface: string;
+  floor?: "2nd Floor" | "6th Floor" | null;
   price: number;
   status: 'available' | 'maintenance' | 'inactive';
   features: string[];

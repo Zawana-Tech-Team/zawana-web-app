@@ -1,3 +1,4 @@
+import { RefundDialog } from '../components/RefundWorkflow';
 import { startPayment } from '../services/paymentFlow';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
@@ -1932,6 +1933,7 @@ function PaymentReview({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState("");
+  const [refundOpen,setRefundOpen]=useState(false);
   const [details, setDetails] = useState({
     reference: "",
     reason: "",
@@ -2008,23 +2010,21 @@ function PaymentReview({
         </Button>
       )}
       {admin && row.payment?.status === "PAID" && (
-        <Button variant="secondary" onClick={() => setMode("refund")}>
+        <Button variant="secondary" onClick={() => setRefundOpen(true)}>
           Record completed refund
         </Button>
       )}
+      {refundOpen&&<RefundDialog bookingId={row.id} onClose={()=>setRefundOpen(false)} onCompleted={onSaved}/>}
       {mode && (
         <div className="space-y-2">
           <p className="text-sm">
-            {mode === "refund"
-              ? "Record a refund already issued, with supporting evidence. This does not send money through the gateway."
-              : "Admin historical review preserves the original revenue and does not infer a cash collector."}
+            Admin historical review preserves the original revenue and does not infer a cash collector.
           </p>
           {Object.entries(details)
             .filter(([k]) =>
               mode === "link-transaction"
                 ? ["transactionId", "reason", "evidence"].includes(k)
-                : k !== "transactionId" &&
-                  (mode !== "refund" || k !== "method"),
+                : k !== "transactionId",
             )
             .map(([k, v]) => (
               <label className="block" key={k}>
@@ -2050,13 +2050,7 @@ function PaymentReview({
             onClick={() =>
               void save(
                 mode,
-                mode === "refund"
-                  ? {
-                      reason: details.reason,
-                      evidence: details.evidence,
-                      reference: details.reference,
-                    }
-                  : mode === "link-transaction"
+                mode === "link-transaction"
                     ? {
                         transactionId: details.transactionId,
                         reason: details.reason,

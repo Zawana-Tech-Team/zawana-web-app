@@ -1,3 +1,4 @@
+import { courtFloor } from '../components/court-desk/timetable';
 import { Link } from 'react-router-dom';
 import { useDialog } from '../components/Interactions';
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
@@ -143,13 +144,15 @@ export function AdminManagement({ section, department = "Badminton" }: { section
       row
         ? {
             ...row,
+            floor: row.floor || (courtFloor(row) === "2nd floor" ? "2nd Floor" : courtFloor(row) === "6th floor" ? "6th Floor" : ""),
             features: Array.isArray(row.features) ? row.features.join(", ") : row.features || ""
           }
         : section === "courts"
           ? {
               name: "",
               type: "Standard",
-              surface: "Premium",
+              surface: "",
+              floor: "2nd Floor",
               price: 15000,
               status: "available",
               features: "LED lighting, Air conditioned"
@@ -167,6 +170,7 @@ export function AdminManagement({ section, department = "Badminton" }: { section
     setOpen(true);
   };
   const save = async () => {
+    if (section === "courts" && !["2nd Floor", "6th Floor"].includes(form.floor)) { notify("Choose a floor."); return; }
     setSaving(true);
     try {
       const payload =
@@ -339,12 +343,9 @@ export function AdminManagement({ section, department = "Badminton" }: { section
                 <option>Standard</option>
                 <option>Premium</option>
               </SelectField>
-              <Field
-                label="Surface"
-                value={form.surface || ""}
-                onChange={(e: any) => setForm({ ...form, surface: e.target.value })}
-                placeholder="Yonex PVC"
-              />
+              <SelectField label="Floor" required value={form.floor || ""} onChange={(e: any) => setForm({ ...form, floor: e.target.value })}>
+                <option value="" disabled>Choose floor</option><option>2nd Floor</option><option>6th Floor</option>
+              </SelectField>
               <Field
                 label="Price / session"
                 type="number"
@@ -461,7 +462,7 @@ function CourtCard({
         <p className="eyebrow text-zawana-gold">{row.type} COURT</p>
         <h3 className="mt-1 text-2xl font-black">{row.name}</h3>
         <p className="mt-1 text-xs text-white/55">
-          {row.surface} · {Number(row.price).toLocaleString()} MMK / session</p>
+          {courtFloor(row)} · {Number(row.price).toLocaleString()} MMK / session</p>
       </div>
       <div className="absolute left-1/2 top-1/2 h-24 w-px bg-white/15" />
       <div className="absolute inset-x-[18%] top-1/2 h-px bg-white/15" />

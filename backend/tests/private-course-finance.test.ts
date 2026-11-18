@@ -611,18 +611,15 @@ test("staff private course booking, finance and cash custody", async (t) => {
   await t.test(
     "refund is audited, authorized, idempotent and cancels booking",
     async () => {
-      const input = {
-        reason: "Member requested cancellation",
-        evidence: "Cash returned and receipt signed by member",
-        reference: "REFUND-001",
-      };
+      const detail=(await request(`${base}/bookings/${foBooking.id}/refund`,"GET",undefined,adminToken)).value;
+      const input = {amount:detail.paidAmount,method:'CASH',employeeName:admin.name,notes:'Cash returned and receipt signed by member',reference:'',confirmed:true,revision:detail.revision,requestKey:randomUUID()};
       assert.equal(
         (
           await request(
             `${base}/bookings/${foBooking.id}/refund`,
             "POST",
             input,
-            foToken,
+            coachSession.accessToken,
           )
         ).status,
         403,
@@ -655,7 +652,8 @@ test("staff private course booking, finance and cash custody", async (t) => {
       });
       assert.equal(b.status, "CANCELLED");
       assert.equal(b.paymentStatus, "refunded");
-      assert.equal(await db.transaction.count(), count);
+      assert.equal(await db.transaction.count(), count+1);
+      assert.equal((await db.transaction.findFirstOrThrow({where:{resourceType:"booking",resourceId:foBooking.id}})).status,"paid");
       assert.equal(await db.privateCourseAdjustment.count(), 1);
       assert.equal(
         (
@@ -732,11 +730,7 @@ test("staff private course booking, finance and cash custody", async (t) => {
         await db.bookingChangeHistory.count({ where: { bookingId: b.id } }),
         1,
       );
-      const refund = {
-        reason: evidence.reason,
-        evidence: evidence.evidence,
-        reference: "LEGACY-REFUND",
-      };
+      let refund = {amount:100,method:'CASH',employeeName:admin.name,notes:evidence.reason,reference:'',confirmed:true,revision:(await request(`${base}/bookings/${b.id}/refund`,"GET",undefined,adminToken)).value.revision,requestKey:randomUUID()};
       assert.equal(
         (
           await request(
@@ -791,6 +785,7 @@ test("staff private course booking, finance and cash custody", async (t) => {
         ).status,
         200,
       );
+      refund={...refund,revision:(await request(`${base}/bookings/${b.id}/refund`,"GET",undefined,adminToken)).value.revision};
       assert.equal(
         (
           await request(
@@ -805,7 +800,7 @@ test("staff private course booking, finance and cash custody", async (t) => {
       assert.equal(
         (await db.transaction.findUniqueOrThrow({ where: { id: original.id } }))
           .status,
-        "refunded",
+        "paid",
       );
     },
   );

@@ -1,7 +1,8 @@
 import type { ManagedCourt } from '../../types';
 
 /** Keep the application's existing floor convention; do not infer floors for other court names. */
-export function courtFloor(court: Pick<ManagedCourt, 'name'>) {
+export function courtFloor(court: Pick<ManagedCourt, 'name'> & { floor?: string | null }) {
+  if (court.floor === '2nd Floor' || court.floor === '6th Floor') return court.floor.toLowerCase();
   const number = Number(court.name.match(/(\d+)\D*$/)?.[1]);
   return number >= 1 && number <= 4 ? '2nd floor' : number >= 5 && number <= 8 ? '6th floor' : 'Other courts';
 }

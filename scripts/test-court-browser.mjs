@@ -66,6 +66,7 @@ try {
     if (!await button.count()) await page.getByRole('button', { name: 'Next month' }).click();
     await button.click();
   }
+  await page.getByText('Preferred times (optional)', { exact: true }).click();
   await page.getByRole('button', { name: 'Preferred time 8:00 AM — 9:00 AM', exact: true }).click();
   await page.getByRole('button', { name: 'Preferred time 9:00 AM — 10:00 AM', exact: true }).click();
   await page.screenshot({ path: join(artifacts, 'court-dates-desktop.png'), fullPage: true });
@@ -83,7 +84,18 @@ try {
   await upper.getByRole('button', { name: /Court 5/ }).click();
   await page.getByRole('button', { name: 'Court 5, 8:00 AM — 9:00 AM, Available', exact: true }).click();
   await page.screenshot({ path: join(artifacts, 'court-sessions-desktop.png'), fullPage: true });
-  assert.equal(await page.locator('#booking-summary').getByText('3 sessions', { exact: true }).count(), 1);
+  assert.equal(await page.getByRole('region', { name: 'Booking summary', exact: true }).getByText('3 sessions', { exact: true }).count(), 1);
+  await page.getByRole('button', { name: 'Edit dates & times', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: label(data.dates[0]), exact: true }).getAttribute('aria-pressed'), 'true');
+  await page.getByRole('button', { name: 'Choose courts', exact: true }).click();
+  await page.getByRole('button', { name: 'Review booking', exact: true }).click();
+  const review = page.getByRole('dialog', { name: 'Review booking', exact: true });
+  await review.waitFor();
+  assert.equal(await review.getByRole('button', { name: /^Remove / }).count(), 3);
+  await page.keyboard.press('Escape');
+  await review.waitFor({ state: 'hidden' });
+  assert.equal(await page.getByRole('button', { name: 'Review booking', exact: true }).evaluate(el => document.activeElement === el), true, 'Review restores focus');
+  await page.getByRole('button', { name: 'Review booking', exact: true }).click();
   const response = page.waitForResponse(r => r.url().endsWith('/bookings') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Book & record payment', exact: true }).click();
   const confirmed = await response;
