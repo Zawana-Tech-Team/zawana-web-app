@@ -72,19 +72,6 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
           },
         ],
       },
-      {
-        to: "/admin/gym",
-        label: "Gym",
-        icon: Dumbbell,
-        children: [
-          {
-            to: "/admin/gym-coaches",
-            label: "Coach Management",
-            icon: UserRound,
-          },
-          { to: "/admin/gym-packages", label: "Gym Packages", icon: Dumbbell },
-        ],
-      },
       { to: "/admin/finance", label: "Finance", icon: BarChart3 },
       { to: "/admin/cms", label: "Content & Achievements", icon: FileText },
     ],
@@ -104,19 +91,14 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
       { to: "/badminton-fo", label: "Dashboard", icon: LayoutDashboard },
       { to: "/badminton-fo/attendance", label: "Attendance", icon: CalendarDays },
       {
-        to: "/badminton-fo/check-in",
-        label: "Package Check-In & Sales",
-        icon: ClipboardList,
+        to: "/badminton-fo/packages",
+        label: "Packages",
+        icon: Package,
       },
       {
         to: "/badminton-fo/courts",
         label: "Court Rental Desk",
         icon: CalendarDays,
-      },
-      {
-        to: "/badminton-fo/active-packages",
-        label: "Active Packages",
-        icon: ClipboardList,
       },
       {
         to: "/badminton-fo/transactions",
@@ -211,7 +193,6 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
       { to: "/coach", label: "Dashboard", icon: LayoutDashboard },
       { to: "/coach/attendance", label: "Attendance", icon: CalendarDays },
       { to: "/coach/schedule", label: "My Calendar", icon: CalendarDays },
-      { to: "/coach/training", label: "Gym Training", icon: Dumbbell },
       { to: "/coach/bookings", label: "Bookings", icon: ClipboardList },
       { to: "/coach/clients", label: "Customers", icon: Users },
     ],
@@ -295,7 +276,7 @@ function NavItems({
           <WorkspaceNavLink
             key={to}
             to={to}
-            end
+            end={to !== "/badminton-fo/packages"}
             onClick={onNavigate}
             className={({ isActive }) =>
               `group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${isActive ? "bg-zawana-gold-soft text-zawana-950 before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-zawana-accent" : "text-zawana-600 hover:bg-zawana-800 hover:text-zawana-950"}`

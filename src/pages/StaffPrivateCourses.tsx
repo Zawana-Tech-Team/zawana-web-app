@@ -1,3 +1,4 @@
+import { useBookingRevision } from '../hooks/useBookingRevision';
 import { RefundDialog } from '../components/RefundWorkflow';
 import { startPayment } from '../services/paymentFlow';
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -198,6 +199,7 @@ type Confirmation = {
   reason?: boolean;
 };
 export default function StaffPrivateCourses() {
+  const bookingRevision = useBookingRevision();
   const { user } = useAuth();
   const isCoach = user?.role === "coach";
   const [view, setView] = useState("book");
@@ -269,7 +271,7 @@ export default function StaffPrivateCourses() {
     return () => {
       ++sequenceRef.current;
     };
-  }, [load]);
+  }, [load, bookingRevision]);
   const action = async (path: string, data: unknown) => {
     setBusy(true);
     setError("");

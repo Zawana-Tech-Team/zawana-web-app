@@ -1,3 +1,4 @@
+import { useBookingRevision } from '../hooks/useBookingRevision';
 import { SegmentedControl } from '../components/Interactions';
 import { courtBlockOccurs } from '../utils/bookingTime';
 import { CourtBookingSteps } from '../components/CourtBookingSteps';
@@ -307,6 +308,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
 
+  const bookingRevision = useBookingRevision();
   const availabilityRequest = useRef(0);
   const loadMonth = async () => {
     const request = ++availabilityRequest.current;
@@ -315,7 +317,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
       const data = await get<any>(
         `/bookings/month-availability?month=${monthKey}`,
       );
-      if (request === availabilityRequest.current) setMonthData(data);
+      if (request === availabilityRequest.current) { setMonthData(data); setError(''); }
     } catch (e: any) {
       if (request !== availabilityRequest.current) return;
       setError(e.message || "Could not load court availability.");
@@ -326,7 +328,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
   };
   useEffect(() => {
     void loadMonth();
-  }, [monthKey, reschedule?.availabilityVersion]);
+  }, [monthKey, reschedule?.availabilityVersion, bookingRevision]);
 
   const courts = monthData?.courts || [];
   const pickedDate = parseDate(date);

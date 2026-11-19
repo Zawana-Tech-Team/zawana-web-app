@@ -36,14 +36,14 @@ test('staff/customer requests: ownership, money, notifications and scoped timing
    const replay=await createStaffRequests(db,fo,[first.id,second.id],'Retry reason');assert.equal(replay.createdCount,0);assert.equal(replay.existingCount,2);
    assert.deepEqual(await db.booking.findMany({where:{id:{in:[first.id,second.id]}},orderBy:{id:'asc'}}),original);
    assert.deepEqual(await db.transaction.findMany({orderBy:{id:'asc'}}),ledger);
-   for(const row of batch.requests)assert.equal(await db.notification.count({where:{entityId:row.id,userId:member.id}}),1);
+   for(const row of batch.requests)assert.equal(await db.notification.count({where:{entityId:row.batchId||row.id,userId:member.id}}),1);
  });
  await t.test('same-name rentals on different accounts notify only their actual owners',async()=>{
    const first=await make('6:00 AM — 7:00 AM',true,addDateKeyDays(date,2)),second=await make('7:00 AM — 8:00 AM',true,addDateKeyDays(date,2));
    await db.booking.update({where:{id:first.id},data:{meta:JSON.stringify({customerName:'Shared Customer'})}});
    await db.booking.update({where:{id:second.id},data:{userId:other.id,meta:JSON.stringify({customerName:' shared   CUSTOMER '})}});
    const result=await createStaffRequests(db,fo,[first.id,second.id],'Please select new times');assert.equal(result.createdCount,2);
-   for(const request of result.requests){const owner=request.bookingId===first.id?member:other;const wrong=owner.id===member.id?other:member;assert.equal(request.customerId,owner.id);assert.equal(await db.notification.count({where:{entityId:request.id,userId:owner.id}}),1);assert.equal(await db.notification.count({where:{entityId:request.id,userId:wrong.id}}),0);await assert.rejects(customerRequestAction(db,wrong,request.id,'ADMIN_HANDLING'),/not found/);await customerRequestAction(db,owner,request.id,'ADMIN_HANDLING');}
+   for(const request of result.requests){const owner=request.bookingId===first.id?member:other;const wrong=owner.id===member.id?other:member;assert.equal(request.customerId,owner.id);assert.equal(await db.notification.count({where:{entityId:request.batchId||request.id,userId:owner.id}}),1);assert.equal(await db.notification.count({where:{entityId:request.batchId||request.id,userId:wrong.id}}),0);await assert.rejects(customerRequestAction(db,wrong,request.id,'ADMIN_HANDLING'),/not found/);await customerRequestAction(db,owner,request.id,'ADMIN_HANDLING');}
  });
  await t.test('batch validation rejects unrelated names, walk-ins, private bookings and unauthorized callers',async()=>{
    const first=await make('6:00 AM — 7:00 AM',true,addDateKeyDays(date,3)),second=await make('7:00 AM — 8:00 AM',true,addDateKeyDays(date,3));
@@ -68,7 +68,7 @@ test('staff/customer requests: ownership, money, notifications and scoped timing
    const first=await make('6:00 AM — 7:00 AM',true,addDateKeyDays(date,5)),second=await make('7:00 AM — 8:00 AM',true,addDateKeyDays(date,5));
    const results=await Promise.all([createStaffRequests(db,fo,[first.id,second.id]),createStaffRequests(db,fo,[second.id,first.id])]);
    assert.equal(results.reduce((n,result)=>n+result.createdCount,0),2);
-   for(const id of [first.id,second.id]){const request=await db.bookingRescheduleRequest.findUniqueOrThrow({where:{activeKey:id}});assert.equal(await db.notification.count({where:{entityId:request.id,userId:member.id}}),1);}
+   for(const id of [first.id,second.id]){const request=await db.bookingRescheduleRequest.findUniqueOrThrow({where:{activeKey:id}});assert.equal(await db.notification.count({where:{entityId:request.batchId||request.id,userId:member.id}}),1);}
  });
 
  }finally{await db.$disconnect();rmSync(dir,{recursive:true,force:true});}

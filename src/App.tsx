@@ -450,26 +450,20 @@ export default function App() {
       {[
         '/badminton-fo',
         '/badminton-fo/notifications',
-        '/badminton-fo/check-in',
+        '/badminton-fo/packages',
+        '/badminton-fo/packages/check-in',
         '/badminton-fo/courts',
         '/badminton-fo/bookings',
-        '/badminton-fo/active-packages',
         '/badminton-fo/transactions'
       ].map(path => operational('badminton_fo', path))}
-      <Route path="/badminton-fo/pos" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/active-packages" replace /></Guard>} />
-      <Route
-        path="/badminton-fo/packages"
-        element={
-          <Guard role="badminton_fo">
-            <Navigate to="/badminton-fo/check-in" replace />
-          </Guard>
-        }
-      />
+      <Route path="/badminton-fo/pos" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/packages" replace /></Guard>} />
+      <Route path="/badminton-fo/check-in" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/packages/check-in" replace /></Guard>} />
+      <Route path="/badminton-fo/active-packages" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/packages" replace /></Guard>} />
       <Route
         path="/badminton-fo/students"
         element={
           <Guard role="badminton_fo">
-            <Navigate to="/badminton-fo/check-in" replace />
+            <Navigate to="/badminton-fo/packages/check-in" replace />
           </Guard>
         }
       />

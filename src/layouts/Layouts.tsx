@@ -36,7 +36,6 @@ type SidebarItem = readonly [string, string, LucideIcon];
 const member: readonly SidebarItem[] = [
   ['/member', 'Overview', Home],
   ['/attendance', 'Attendance', CalendarDays],
-  ['/check-in', 'Scan check-in', ClipboardList],
   ['/book/court', 'Court rental', CalendarDays],
   ['/private-course', 'Private course', Dumbbell],
   ['/bookings', 'Booking history', ClipboardList],

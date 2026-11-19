@@ -83,7 +83,7 @@ try {
     await dialog.locator('select[aria-label="Destination court 2"]').selectOption(data.courts[0].id,{force:true});
     await dialog.locator('select[aria-label="Destination time 1"]').selectOption('6:00 AM — 7:00 AM',{force:true});
     await dialog.locator('select[aria-label="Destination time 2"]').selectOption('6:00 AM — 7:00 AM',{force:true});
-    await dialog.getByLabel('Reason for change',{exact:true}).fill('Customer requested new destinations');
+    await dialog.locator('select[aria-label="Reason"]').selectOption('EVENT',{force:true});
     await dialog.getByRole('button',{name:'Check availability & preview',exact:true}).click();
     await dialog.getByText('Total additional payment: 5,000 MMK',{exact:true}).waitFor();
     await dialog.getByRole('button',{name:'Cash',exact:true}).click();
@@ -97,12 +97,12 @@ try {
     await page.locator('.court-timetable__event').filter({hasText:'Junior Academy'}).click();
     await page.getByRole('button',{name:'Weekly Class Actions',exact:true}).click();
     await page.getByRole('menuitem',{name:'Reschedule',exact:true}).waitFor();
-    assert.deepEqual(await page.getByRole('menu',{name:'Court actions'}).getByRole('menuitem').allTextContents(),['Reschedule','Remove Weekly Class']);
+    assert.deepEqual(await page.getByRole('menu',{name:'Court actions'}).getByRole('menuitem').allTextContents(),['Reschedule','Remove Today','Remove Weekly']);
     await page.getByRole('menuitem',{name:'Reschedule',exact:true}).click();
     dialog=page.getByRole('dialog',{name:'Move selected bookings',exact:true});
     await dialog.locator('select[aria-label="Destination court 1"]').selectOption(data.courts[1].id,{force:true});
     await dialog.locator('select[aria-label="Destination time 1"]').selectOption('1:00 PM — 3:30 PM',{force:true});
-    await dialog.getByLabel('Reason for change',{exact:true}).fill('Move only this class occurrence');
+    await dialog.locator('select[aria-label="Reason"]').selectOption('EVENT',{force:true});
     assert.equal(await dialog.getByRole('button',{name:'Check availability & preview',exact:true}).isDisabled(),true);
     await dialog.locator('select[aria-label="Weekly change scope 1"]').selectOption('occurrence',{force:true});
     await dialog.getByRole('button',{name:'Check availability & preview',exact:true}).click();
@@ -115,7 +115,7 @@ try {
     await dialog.locator('select[aria-label="Destination court 1"]').selectOption(data.courts[3].id,{force:true});
     await dialog.locator('select[aria-label="Destination time 1"]').selectOption('2:00 PM — 4:30 PM',{force:true});
     await dialog.locator('select[aria-label="Weekly change scope 1"]').selectOption('future',{force:true});
-    await dialog.getByLabel('Reason for change',{exact:true}).fill('Move this and future class sessions');
+    await dialog.locator('select[aria-label="Reason"]').selectOption('EVENT',{force:true});
     await dialog.getByRole('button',{name:'Check availability & preview',exact:true}).click();await dialog.getByRole('button',{name:'Confirm all moves',exact:true}).click();await dialog.waitFor({state:'hidden'});
     await readyDesk(data.date);
     await cell('Court 5',data.date,'12:00 PM — 1:00 PM').click();await actions('Private Course');
@@ -132,7 +132,7 @@ try {
     await page.locator('.court-timetable__event').filter({hasText:'Private Fundamentals'}).click();await page.getByRole('button',{name:'Private Course Actions',exact:true}).click();
     assert.equal(await page.getByRole('menuitem',{name:'Reschedule selected sessions',exact:true}).count(),0);
     await page.getByRole('menuitem').filter({hasText:'Request Reschedule'}).click();
-    dialog=page.getByRole('dialog',{name:'Send reschedule request',exact:true});await dialog.getByLabel('Reason (optional)',{exact:true}).fill('Please choose a different session');await dialog.getByRole('button',{name:'Send Request',exact:true}).click();await dialog.waitFor({state:'hidden'});
+    dialog=page.getByRole('dialog',{name:'Send reschedule request',exact:true});await dialog.locator('select[aria-label="Reason"]').selectOption('MAINTENANCE',{force:true});await dialog.getByRole('button',{name:'Send Request',exact:true}).click();await dialog.waitFor({state:'hidden'});
     const actorContext=async token=>{const c=await browser.newContext({viewport:{width:1280,height:900},reducedMotion:'reduce'});await c.addInitScript(({token,origin})=>{if(location.origin===origin){localStorage.setItem('zawana_access_token',token);localStorage.setItem('zawana_language','en');}},{token,origin:ui});return c;};
     const memberContext=await actorContext(data.memberToken),coachContext=await actorContext(data.coachToken);
     const memberPage=await memberContext.newPage(),coachPage=await coachContext.newPage();memberPage.setDefaultTimeout(15000);coachPage.setDefaultTimeout(15000);
@@ -142,10 +142,11 @@ try {
       await memberPage.locator('details.member-booking-row').filter({hasText:'Private course'}).locator('summary').click();
       await memberPage.locator('details.member-booking-row').filter({hasText:'Private course'}).getByRole('button',{name:'Change Date / Time',exact:true}).click();
       const form=memberPage.getByRole('dialog',{name:'Request private course reschedule',exact:true});
-      await form.locator('select[aria-label="New private course court"]').selectOption(data.courts[0].id,{force:true});
-      await form.getByLabel('New date',{exact:true}).fill(nextDate);
-      await form.locator('select[aria-label="New private course time"]').selectOption('2:00 PM — 3:00 PM',{force:true});
+      await form.locator('select[aria-label="Replacement court"]').selectOption(data.courts[0].id,{force:true});
+      await form.getByLabel('Replacement date',{exact:true}).fill(nextDate);
+      await form.locator('select[aria-label="Available replacement time"]').selectOption('2:00 PM — 3:00 PM',{force:true});
       await form.getByLabel('Reason',{exact:true}).fill('Customer prefers this new time');
+      await form.getByRole('button',{name:'Review replacement',exact:true}).click();
       await form.getByRole('button',{name:'Send to coach for approval',exact:true}).click();await form.waitFor({state:'hidden'});
     };
     const original=await db.booking.findUniqueOrThrow({where:{id:course.id}});const receiptsBefore=await db.transaction.count();const paymentBefore=await db.privateCoursePayment.findUniqueOrThrow({where:{bookingId:course.id}});
@@ -170,18 +171,18 @@ try {
     await foPage.goto(`${ui}/badminton-fo/courts`);await foPage.getByLabel('Operating day',{exact:true}).fill(nextWeek);
     await foPage.locator('.court-timetable__event').filter({hasText:'Junior Academy'}).click();await foPage.getByRole('button',{name:'Weekly Class Actions',exact:true}).click();
     await foPage.getByRole('menuitem',{name:'Reschedule',exact:true}).waitFor();
-    assert.deepEqual(await foPage.getByRole('menu',{name:'Court actions'}).getByRole('menuitem').allTextContents(),['Reschedule','Remove Weekly Class']);
-    await foPage.getByRole('menuitem',{name:'Remove Weekly Class',exact:true}).click();let removal=foPage.getByRole('dialog',{name:'Remove weekly class',exact:true});await removal.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await foPage.locator('.court-timetable__event').filter({hasText:'Junior Academy'}).count(),1);
-    await foPage.getByRole('button',{name:'Weekly Class Actions',exact:true}).click();await foPage.getByRole('menuitem',{name:'Remove Weekly Class',exact:true}).click();removal=foPage.getByRole('dialog',{name:'Remove weekly class',exact:true});
+    assert.deepEqual(await foPage.getByRole('menu',{name:'Court actions'}).getByRole('menuitem').allTextContents(),['Reschedule','Remove Today','Remove Weekly']);
+    await foPage.getByRole('menuitem',{name:'Remove Weekly',exact:true}).click();let removal=foPage.getByRole('dialog',{name:'Remove weekly class',exact:true});await removal.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await foPage.locator('.court-timetable__event').filter({hasText:'Junior Academy'}).count(),1);
+    await foPage.getByRole('button',{name:'Weekly Class Actions',exact:true}).click();await foPage.getByRole('menuitem',{name:'Remove Weekly',exact:true}).click();removal=foPage.getByRole('dialog',{name:'Remove weekly class',exact:true});
     const originalClasses=await db.courtBlock.findMany({where:{type:'class'}}),bookingsBeforeRemoval=await db.booking.findMany({orderBy:{id:'asc'}}),paymentsBeforeRemoval=await db.transaction.findMany({orderBy:{id:'asc'}});
     await foPage.setViewportSize({width:390,height:844});assert.ok(await removal.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await foPage.screenshot({path:join(artifacts,'weekly-class-removal-mobile.png')});
-    await foPage.route('**/api/rescheduling/weekly/remove',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Removal service temporarily unavailable'})}));await removal.getByRole('button',{name:'Remove Weekly Class',exact:true}).click();await removal.getByRole('alert').filter({hasText:'Removal service temporarily unavailable'}).waitFor();assert.deepEqual(await db.courtBlock.findMany({where:{type:'class'}}),originalClasses);await foPage.unroute('**/api/rescheduling/weekly/remove');
-    const removedResponse=foPage.waitForResponse(r=>r.url().endsWith('/rescheduling/weekly/remove')&&r.request().method()==='POST');await removal.getByRole('button',{name:'Remove Weekly Class',exact:true}).click();assert.equal((await removedResponse).status(),200);await removal.waitFor({state:'hidden'});
+    await foPage.route('**/api/rescheduling/weekly/remove',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Removal service temporarily unavailable'})}));await removal.getByRole('button',{name:'Remove Weekly',exact:true}).click();await removal.getByRole('alert').filter({hasText:'Removal service temporarily unavailable'}).waitFor();assert.deepEqual(await db.courtBlock.findMany({where:{type:'class'}}),originalClasses);await foPage.unroute('**/api/rescheduling/weekly/remove');
+    const removedResponse=foPage.waitForResponse(r=>r.url().endsWith('/rescheduling/weekly/remove')&&r.request().method()==='POST');await removal.getByRole('button',{name:'Remove Weekly',exact:true}).click();assert.equal((await removedResponse).status(),200);await removal.waitFor({state:'hidden'});
     await foPage.getByRole('button',{name:`Court 2, ${nextWeek}, 2:00 PM — 3:00 PM, Available`,exact:true}).waitFor();assert.equal(await foPage.locator('.court-timetable__event').filter({hasText:'Junior Academy'}).count(),0);
     assert.equal(await db.courtBlock.count({where:{type:'class'}}),originalClasses.length);assert.deepEqual(await db.booking.findMany({orderBy:{id:'asc'}}),bookingsBeforeRemoval);assert.deepEqual(await db.transaction.findMany({orderBy:{id:'asc'}}),paymentsBeforeRemoval);
     await foPage.reload();await foPage.getByLabel('Operating day',{exact:true}).fill(nextWeek);assert.equal(await foPage.locator('.court-timetable__event').filter({hasText:'Junior Academy'}).count(),0);
     await foContext.close();
     await memberContext.close();await coachContext.close();assert.deepEqual(errors,[]);
-    console.log(JSON.stringify({ok:true,checks:['arbitrary courts, times, dates and retained floor selections','atomic multi-session rentals','same-name rental batch selection, individual destinations and paid surcharge','mobile move preview','explicit weekly scope, single occurrence and future series','weekly menu has exactly two actions','FO soft removal, cancel/failure behavior, history/payment preservation and immediate availability','FO private invitation without direct move','customer proposal, coach rejection and approval','original payment preserved','FO history and existing staff reschedule links use reviewed flow'],artifacts},null,2));
+    console.log(JSON.stringify({ok:true,checks:['arbitrary courts, times, dates and retained floor selections','atomic multi-session rentals','same-name rental batch selection, individual destinations and paid surcharge','mobile move preview','explicit weekly scope, single occurrence and future series','weekly menu has three scoped actions','FO soft removal, cancel/failure behavior, history/payment preservation and immediate availability','FO private invitation without direct move','customer proposal, coach rejection and approval','original payment preserved','FO history and existing staff reschedule links use reviewed flow'],artifacts},null,2));
   }finally{await db.$disconnect();}
 }finally{await browser?.close();children.forEach(child=>child.kill());}

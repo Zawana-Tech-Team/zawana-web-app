@@ -1,9 +1,11 @@
+import { ArrowUpRight, CalendarDays, ChevronDown, Clock3, Search, SlidersHorizontal, UserRound } from 'lucide-react';
+import '../components/member-booking/booking-history.css';
+import { useBookingRevision } from '../hooks/useBookingRevision';
 import '../components/member-booking/member-booking.css';
 import { DeskDialog } from '../components/court-desk/DeskDialog';
 import { MemberRefundHistory } from '../components/RefundWorkflow';
 import { BookingRequestInbox } from '../components/BookingRequestWorkflow';
 import { deskRescheduleEligibility } from '../utils/deskRescheduleEligibility';
-import { usePaymentRevision } from '../hooks/usePaymentRevision';
 import { PrivateRescheduleDialog, PrivateRescheduleInbox } from '../components/PrivateRescheduling';
 import { startPayment } from '../services/paymentFlow';
 import { courtReschedulePath } from '../types/courtChanges';
@@ -13,7 +15,7 @@ import { SegmentedControl } from '../components/Interactions';
 import { Select } from '../components/Select';
 import { useCallback, useEffect, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Button, Card, Badge, Page, Empty, Pagination } from "../components/UI";
+import { Button, Badge, Page, Empty, Pagination } from "../components/UI";
 import { get, patch, post } from "../api";
 import { formatBookingDate, localDateKey, type BookingDatePreset } from "../utils/bookingDates";
 import { useLanguage } from "../context/LanguageContext";
@@ -45,11 +47,13 @@ export function Bookings() {
   const [searchParams] = useSearchParams();
   const categoryParam = searchParams.get('kind') || '';
   const requestId = searchParams.get('request');
+  const batchId = searchParams.get('batch');
   const refundId = searchParams.get('refund');
-  const [view, setView] = useState(() => requestId ? 'requests' : refundId || window.location.hash === '#refunds' ? 'refunds' : 'bookings');
-  useEffect(() => { if (requestId) setView('requests'); else if (refundId) setView('refunds'); }, [requestId, refundId]);
-  const revision = usePaymentRevision();
+  const [view, setView] = useState(() => requestId || batchId ? 'requests' : refundId || window.location.hash === '#refunds' ? 'refunds' : 'bookings');
+  useEffect(() => { if (requestId || batchId) setView('requests'); else if (refundId) setView('refunds'); }, [requestId, batchId, refundId]);
+  const revision = useBookingRevision();
   const loadGeneration = useRef(0);
+  const lastQuery = useRef('');
   const [bookings, setBookings] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [coaches, setCoaches] = useState<any[]>([]);
@@ -109,7 +113,9 @@ export function Bookings() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const generationRef = loadGeneration;
+    const query = JSON.stringify({ filters, page });
+    if (query !== lastQuery.current) { setLoading(true); lastQuery.current = query; }
     setError("");
     const timer = window.setTimeout(
       () => {
@@ -125,11 +131,11 @@ export function Bookings() {
     );
     return () => {
       active = false;
+      ++generationRef.current;
       window.clearTimeout(timer);
     };
-  }, [load, filters.q, revision]);
+  }, [load, filters, page, revision]);
 
-  useEffect(() => { const refresh = () => { if (!document.hidden) void load().catch(() => undefined); }; const timer = window.setInterval(refresh, 30000); window.addEventListener('focus', refresh); return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); }; }, [load]);
 
   const updateFilters = (next: Partial<BookingFilter>) => {
     setPage(1);
@@ -176,6 +182,7 @@ export function Bookings() {
 
   const statusLabel = (value: string) =>
     ({
+        PENDING: "Pending",
         PENDING_COACH_CONFIRMATION: "Waiting for coach",
         AWAITING_PAYMENT: "Payment required",
         COACH_DECLINED: "Coach declined",
@@ -184,7 +191,7 @@ export function Bookings() {
         COMPLETED: "Completed",
         CANCELLED: "Cancelled"
       } as Record<string, string>
-    )[value] || String(value).replaceAll("_", " ");
+    )[value.toUpperCase()] || String(value).replaceAll("_", " ");
   const presets: { id: BookingDatePreset; label: string }[] = [
     { id: "today", label: "Today" },
     { id: "yesterday", label: "Yesterday" },
@@ -192,10 +199,11 @@ export function Bookings() {
     { id: "all", label: "All" }
   ];
 
-  return <Page title="Booking history" eyebrow="Zawana">
+  return <Page title="Booking history" eyebrow="Your activity" actions={<Link className="booking-history-new" to="/book/court">Book a court <ArrowUpRight size={16} aria-hidden="true"/></Link>}>
+    <div className="booking-history">
       <SegmentedControl label="Booking management" className="member-booking-management mb-6" value={view} onChange={setView} options={[{value:'bookings',label:'Bookings'},{value:'requests',label:'Requests'},{value:'refunds',label:'Refunds'}]} />
-      {view === 'refunds' && <MemberRefundHistory />}
-      {view === 'requests' && <><p className="mb-5 text-sm text-zawana-500">Schedule changes and coach responses appear here. Your original session stays booked until a change is confirmed.</p><BookingRequestInbox /><PrivateRescheduleInbox onChanged={() => { void load(); }} /></>}
+      {view === 'refunds' && <MemberRefundHistory onViewRequests={() => setView('requests')} />}
+      {view === 'requests' && <><BookingRequestInbox /><PrivateRescheduleInbox memberView onChanged={() => { void load(); }} /></>}
       {privateChange && <PrivateRescheduleDialog booking={privateChange} onClose={() => setPrivateChange(null)} onChanged={() => { setMessage('Your proposal was sent to the coach. Your original session stays booked.'); setView('requests'); void load(); }} />}
 
     {error &&
@@ -210,20 +218,20 @@ export function Bookings() {
         {message}
       </p>}
     {view === 'bookings' && <>
+    <section className="booking-history-overview" aria-label="Booking overview">
+      <div className="booking-history-intro"><span className="booking-history-symbol"><CalendarDays size={23} strokeWidth={1.5} aria-hidden="true"/></span><div><h2>Your sessions, at a glance.</h2><p>Keep track of your courts, coaching and schedule changes.</p></div></div>
+      <div className="booking-history-metrics">{[{id:'today' as const,label:'Today'},{id:'upcoming' as const,label:'Upcoming'},{id:'all' as const,label:'All bookings'}].map(item => <button key={item.id} type="button" onClick={() => setPreset(item.id)} aria-pressed={filters.datePreset === item.id && !filters.from && !filters.to}><span>{item.label}</span><strong>{loading ? '—' : dateCounts[item.id].toLocaleString(locale)}</strong></button>)}</div>
+    </section>
     <SegmentedControl label="Booking category" className="member-booking-categories mb-5" value={filters.kind} onChange={kind => updateFilters({kind})} options={[{value:'',label:'All bookings'},{value:'court',label:'Court rental'},{value:'private_course',label:'Private course'},{value:'class',label:'Weekly class'}]} />
-    <div className="mb-5 space-y-4">
-      <div className="max-w-xs"><Select aria-label="Booking dates" value={filters.from || filters.to ? 'custom' : filters.datePreset} onChange={event => setPreset(event.target.value as BookingDatePreset)}>
+    <div className="booking-history-tools">
+      <label className="booking-history-search"><Search size={18} aria-hidden="true"/><input aria-label="Search bookings" placeholder="Search booking, court or coach" value={filters.q} onChange={event => updateFilters({q:event.target.value})}/></label>
+
+      <details className="booking-history-filters"><summary className="member-booking-disclosure"><SlidersHorizontal size={16} aria-hidden="true"/>Filters{Object.entries(filters).some(([key,value]) => !['datePreset','kind'].includes(key) && value) ? ' · Active' : ''}</summary>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="booking-history-dates"><Select aria-label="Booking dates" value={filters.from || filters.to ? 'custom' : filters.datePreset} onChange={event => setPreset(event.target.value as BookingDatePreset)}>
         {(filters.from || filters.to) && <option value="custom">Custom dates</option>}
         {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.label} · {dateCounts[preset.id]}</option>)}
       </Select></div>
-      <details><summary className="member-booking-disclosure">Filters{Object.entries(filters).some(([key,value]) => !['datePreset','kind'].includes(key) && value) ? ' · Active' : ''}</summary>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        <input
-          aria-label="Search bookings"
-          placeholder="Search booking, court or coach"
-          value={filters.q}
-          onChange={e => updateFilters({ q: e.target.value })}
-        />
         <Select
           aria-label="Booking status"
           value={filters.status}
@@ -307,16 +315,19 @@ export function Bookings() {
         >Clear filters</button>}
       </details>
     </div>
+    <div className="booking-history-list-heading"><h2>{filters.datePreset === 'upcoming' ? 'Upcoming sessions' : filters.datePreset === 'today' ? 'Today’s sessions' : 'Your sessions'}</h2><span>{loading ? 'Updating…' : `${pageInfo.total.toLocaleString(locale)} booking${pageInfo.total === 1 ? '' : 's'}`}</span></div>
     {loading ?
-      <Card className="p-8">Loading bookings…</Card> :
+      <div className="booking-history-loading" role="status"><span className="sr-only">Loading bookings…</span>{[0,1,2].map(item => <div key={item} className="booking-history-skeleton" aria-hidden="true"><span/><div><i/><i/></div></div>)}</div> :
       <div className="space-y-3">
         {bookings.map(booking =>
           <details key={booking.id} className="member-booking-row">
-            <summary className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0"><h3 className="text-sm font-semibold">{({court:'Court rental',private_course:'Private course',pt:'Other booking',class:'Class'} as Record<string,string>)[booking.kind] || booking.kind} · {booking.court?.name || booking.coach?.name || booking.location}</h3><p className="mt-1 text-sm text-zawana-500">{formatBookingDate(booking.date, {month:'short',day:'numeric',year:'numeric'}, locale)} · {normalizeBookingTime(booking.time || '')}</p></div>
-              <div className="flex items-center gap-3"><Badge good={['confirmed','CONFIRMED','COMPLETED'].includes(booking.status)}>{statusLabel(booking.status)}</Badge><span className="text-xs font-semibold underline underline-offset-4"><span className="member-booking-row__more">View booking</span><span className="member-booking-row__less">Hide details</span></span></div>
+            <summary className="booking-history-card-summary">
+              <span className="booking-history-date" aria-hidden="true"><span>{formatBookingDate(booking.date, {month:'short'}, locale)}</span><strong>{formatBookingDate(booking.date, {day:'2-digit'}, locale)}</strong><small>{formatBookingDate(booking.date, {year:'numeric'}, locale)}</small></span>
+              <div className="booking-history-card-main"><p className="booking-history-kind">{booking.kind === 'private_course' ? <UserRound size={13} aria-hidden="true"/> : <CalendarDays size={13} aria-hidden="true"/>}{({court:'Court rental',private_course:'Private course',pt:'Other booking',class:'Weekly class'} as Record<string,string>)[booking.kind] || booking.kind}</p><h3>{booking.court?.name || booking.title || booking.location}</h3><p className="booking-history-session"><Clock3 size={14} aria-hidden="true"/><span>{normalizeBookingTime(booking.time || '')}</span></p><span className="sr-only">{formatBookingDate(booking.date, {month:'long',day:'numeric',year:'numeric'}, locale)}</span>{booking.coach && <p className="booking-history-coach">With {booking.coach.name}</p>}</div>
+              <div className="booking-history-card-state"><span className="booking-history-status" data-tone={['confirmed','completed'].includes(String(booking.status).toLowerCase()) ? 'confirmed' : ['cancelled','expired','coach_declined'].includes(String(booking.status).toLowerCase()) ? 'muted' : 'pending'}><span aria-hidden="true"/>{statusLabel(booking.status)}</span><p className="booking-history-price">{Number(booking.price).toLocaleString(locale)} <small>MMK</small></p><span className="booking-history-payment">{booking.paymentStatus === 'paid' ? 'Paid' : booking.paymentStatus === 'refunded' ? 'Refunded' : 'Payment pending'}</span></div>
+              <span className="booking-history-expand"><span className="member-booking-row__more">View booking</span><span className="member-booking-row__less">Hide details</span><ChevronDown size={18} aria-hidden="true"/></span>
             </summary>
-            <div className="mt-4 border-t border-zawana-border pt-4">
+            <div className="booking-history-card-details">
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
               <div>
                 <h4 className="mb-2 text-sm font-semibold">{booking.title}</h4>
@@ -392,5 +403,6 @@ export function Bookings() {
     {cancelCandidate && <DeskDialog title="Cancel booking?" size="compact" onClose={() => setCancelCandidate(null)} busy={!!cancelling} cancelLabel="Keep booking" actions={<Button variant="danger" loading={!!cancelling} onClick={() => void cancel(cancelCandidate)}>Cancel booking</Button>}><p className="text-sm">Cancel {cancelCandidate.title} on {cancelCandidate.date} at {normalizeBookingTime(cancelCandidate.time || '')}?</p>{error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}</DeskDialog>}
     {paymentCandidate && <DeskDialog title="Confirm manual payment" size="compact" onClose={() => setPaymentCandidate(null)} busy={!!paying} cancelLabel="Back" summary={<strong>{Number(paymentCandidate.price).toLocaleString(locale)} MMK</strong>} actions={<Button loading={!!paying} onClick={() => void confirmCourse(paymentCandidate)}>Confirm payment</Button>}><p className="text-sm">{paymentCandidate.title} · {paymentCandidate.date} · {normalizeBookingTime(paymentCandidate.time || '')}</p><p className="mt-4 text-sm text-zawana-500">This records a manual/simulated payment. No external charge will be made.</p>{error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}</DeskDialog>}
     {changeBooking && <CourtChangeDialog bookingId={changeBooking} onClose={() => setChangeBooking(null)} onChanged={() => void load()} />}
+    </div>
   </Page>;
 }

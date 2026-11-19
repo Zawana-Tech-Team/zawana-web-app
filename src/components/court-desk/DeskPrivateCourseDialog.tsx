@@ -1,3 +1,4 @@
+import { useBookingRevision } from '../../hooks/useBookingRevision';
 import { useEffect, useRef, useState } from 'react';
 import { get, post } from '../../api';
 import { DeskDialog, DeskSteps } from './DeskDialog';
@@ -17,6 +18,7 @@ export function DeskPrivateCourseDialog({ court, date, initialTime, onClose, onC
   const [slots, setSlots] = useState<Slot[]>([]), [time, setTime] = useState(''), [loading, setLoading] = useState(false);
   const [payment, setPayment] = useState(emptyDeskPayment), [saving, setSaving] = useState(false), [error, setError] = useState('');
   const retry = useRef({ payload: '', key: '' });
+  const bookingRevision = useBookingRevision();
   const course = courses.find(item => item.id === courseId);
   const coaches = [...new Map(courses.flatMap(item => item.coaches).map(coach => [coach.id, coach])).values()];
   useEffect(() => { let live = true; void get<{ courses: Course[] }>('/staff/private-courses/catalog').then(data => { if (live) setCourses(data.courses); }).catch(error => { if (live) setError(error.message); }); return () => { live = false; }; }, []);
@@ -34,10 +36,10 @@ export function DeskPrivateCourseDialog({ court, date, initialTime, onClose, onC
       if (!live) return;
       setSlots(data.slots);
       const initial = data.slots.find(slot => slot.available && slot.time.split(' — ')[0] === initialTime.split(' — ')[0]);
-      setTime(initial?.time || '');
+      setTime(current => data.slots.some(slot => slot.available && slot.time === current) ? current : initial?.time || '');
     }).catch(error => { if (live) setError(error.message); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [course, coachId, court.id, date, initialTime]);
+  }, [course, coachId, court.id, date, initialTime, bookingRevision]);
   const resetAvailability = () => { setSlots([]); setTime(''); setLoading(true); setError(''); setPayment(emptyDeskPayment()); };
   const submit = async () => {
     if (!course || !member || !deskPaymentReady(payment) || !slots.some(slot => slot.time === time && slot.available)) return;

@@ -1179,7 +1179,20 @@ model PrivateRescheduleRequest {
   @@index([bookingId, status])
 }
 
+model BookingRequestBatch {
+ id String @id
+ senderId String
+ recipientId String
+ reason String
+ createdAt DateTime @default(now())
+ requests BookingRescheduleRequest[]
+ @@index([recipientId, createdAt])
+}
+
 model BookingRescheduleRequest {
+ batchId String?
+ batch BookingRequestBatch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
+ @@index([batchId])
  id String @id @default(cuid())
  bookingId String
  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)

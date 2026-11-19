@@ -1,3 +1,5 @@
+import { BulkRefundDialog } from '../components/BulkRefundDialog';
+import { useBookingRevision } from '../hooks/useBookingRevision';
 import { DeskDialog } from '../components/court-desk/DeskDialog';
 import { RefundDialog, RefundInbox } from '../components/RefundWorkflow';
 import { RemoveWeeklyClassDialog } from '../components/court-desk/RemoveWeeklyClassDialog';
@@ -30,7 +32,7 @@ import { motionTokens } from '../design/motion';
 import { Select } from '../components/Select';
 import { Children, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 
 import {
   Plus,
@@ -532,37 +534,31 @@ export default function OperationsPage({ role }: { role: UserRole }) {
       </>
     </Page>;
 
-  if (isBad && view === 'packages')
-    return <Page title={title} eyebrow="Badminton FO">
-      <BadmintonPackages />
-    </Page>;
-
-  if (isBad && view === 'students')
-    return <Page title={title} eyebrow="Badminton FO">
-      <>
-        {commonTop()}
-        <StudentManager showForm={showForm} setShowForm={setShowForm} notify={notify} />
-      </>
-    </Page>;
-
-  if (isBad && view === 'check-in')
-    return <Page title={title} eyebrow="Badminton FO">
-      <>
-        {commonTop()}
+  if (isBad && (view === 'packages' || view === 'check-in'))
+    return <Page title="Packages" eyebrow="Badminton FO">
+      {commonTop()}
+      <nav aria-label="Package sections" className="mb-6 flex flex-wrap gap-2">
+        {[
+          { to: '/badminton-fo/packages', label: 'Active Packages' },
+          { to: '/badminton-fo/packages/check-in', label: 'Scan Check-in' },
+        ].map(section => <NavLink key={section.to} to={section.to} end
+          className={({ isActive }) => `inline-flex min-h-11 items-center rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${isActive ? 'bg-zawana-950 text-white' : 'border border-zawana-border bg-white text-zawana-600 hover:bg-zawana-gold-soft'}`}>
+          {section.label}
+        </NavLink>)}
+      </nav>
+      {view === 'check-in' ? <>
+        <h2 className="mb-4 text-lg font-semibold">Scan Check-in</h2>
         <QrDesk />
         <BadmintonCheckIn key="check-in" notify={notify} />
-      </>
+      </> : <>
+        <h2 className="mb-4 text-lg font-semibold">Active Packages</h2>
+        <BadmintonCheckIn key="active-packages" notify={notify} activationOnly />
+      </>}
     </Page>;
 
   if (isBad && view === 'transactions')
     return <Page title="Finance" eyebrow="Badminton FO">
       <BadmintonTransactions />
-    </Page>;
-
-  if (isBad && view === 'active-packages')
-    return <Page title="Active Packages" eyebrow="Badminton FO">
-      {commonTop()}
-      <BadmintonCheckIn key="active-packages" notify={notify} activationOnly />
     </Page>;
 
   if (isGym && view === 'dashboard')
@@ -1602,7 +1598,7 @@ function FOStats({ business }: { business: string }) {
             />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link to="/badminton-fo/check-in">
+            <Link to="/badminton-fo/packages/check-in">
               <Button>
                 <PackagePlus size={15} /> Activate package</Button>
             </Link>
@@ -1702,7 +1698,7 @@ function courtBookingRow(b: any) {
 }
 
 function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'error' | 'info') => void }) {
-  const revision = usePaymentRevision();
+  const revision = useBookingRevision();
   const [historyKind, setHistoryKind] = useState('court');
   const [historyDetail, setHistoryDetail] = useState<any>(null);
   const showHistory = (row: any) => row.kind === 'court' ? setChangeBooking(row.id) : setHistoryDetail(row);
@@ -5408,6 +5404,7 @@ function POS({
 }
 
 function CourtDesk({ notify }: { notify: (s: string) => void }) {
+  const bookingRevision = useBookingRevision();
   const o = useOperations();
   const [holidayView, setHolidayView] = useState(false);
   const [suspendedClasses, setSuspendedClasses] = useState<{ id: string; title: string; start: string; end: string }[]>([]);
@@ -5418,7 +5415,9 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
   const [form, setForm] = useState<'rental' | 'weekly' | 'private' | null>(null);
   const [moveSources, setMoveSources] = useState<MoveSource[]>([]);
   const [inviteIds, setInviteIds] = useState<string[]>([]);
+  const [bulkRefundIds, setBulkRefundIds] = useState<string[]>([]);
   const [refundId, setRefundId] = useState('');
+  const [occurrenceOnly, setOccurrenceOnly] = useState(false);
   const [removeClasses, setRemoveClasses] = useState<SelectedRecord[]>([]);
   const [invalidSelections, setInvalidSelections] = useState<string[]>([]);
   const [checkingSelections, setCheckingSelections] = useState(false);
@@ -5444,7 +5443,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
   const [holiday, setHoliday] = useState<any>(null);
   const [dateOverride, setDateOverride] = useState<any>(null);
 
-  const bookings = o.courtBookings.filter(b => b.date === date);
+  const [bookings, setBookings] = useState<CourtBooking[]>([]);
 
   const to24 = (value: string) => {
     const r = rangeOf(value);
@@ -5458,12 +5457,13 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     const request = ++availabilityRequest.current;
     setCalendarError('');
     try {
-      const [availability, weekly, privateBookings, suspended] = await Promise.all([
+      const [availability, weekly, privateBookings, suspended, rentals] = await Promise.all([
         get<any>(`/bookings/availability?date=${date}`),
 
         get<any[]>(`/court-blocks?date=${date}&courtId=`),
         get<any[]>(`/staff/private-courses/bookings?date=${date}`),
         get<typeof suspendedClasses>(`/holidays/${date}/classes`),
+        get<CourtBooking[]>(`/staff/court-desk/rentals?date=${date}`),
       ]);
 
       const merged = [...(weekly || []), ...(availability.blocks || [])];
@@ -5471,6 +5471,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       const unique = Array.from(new Map(merged.map((b: any) => [b.id, b])).values());
       if (request !== availabilityRequest.current) return;
 
+      setBookings(rentals);
       setBlocks(unique);
       setSuspendedClasses(suspended);
       setAvailabilityBookings(availability.bookings || []);
@@ -5488,7 +5489,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
 
   useEffect(() => {
     void refreshBlocks();
-  }, [refreshBlocks, o.courtBookings]);
+  }, [refreshBlocks, o.courtBookings, bookingRevision]);
 
   const isBlocked = (c: any, t: string) =>
     blocks.some(
@@ -5558,7 +5559,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       if (rows.some(row => row.id === item.id && row.date === item.date))
         return rows.filter(row => row.id !== item.id || row.date !== item.date);
       if (next.kind === 'private' || rows.some(row => row.kind !== next.kind)) return [item];
-      if (next.kind === 'rental' && !canCombineRentals(rows, item)) return [item];
+      if (rows.length >= 30) return rows;
       return [...rows, item];
     });
   };
@@ -5571,7 +5572,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     if (!selectedRecords.length || !['rental', 'weekly'].includes(record.kind)) return;
     setMoveSources(selectedRecords.map(row => ({ ...row, kind: row.kind === 'rental' ? 'court' : 'weekly' }))); setMenuOpen(false);
   };
-  const refreshed = async () => { await o.refresh(); await refreshBlocks(); clearSelection(); setForm(null); setMoveSources([]); notify('Reservations and history updated.'); };
+  const refreshed = async () => { clearSelection(); setForm(null); setMoveSources([]); await Promise.all([o.refresh(), refreshBlocks()]); notify('Reservations and history updated.'); };
   const selectedCourtIds = selections.filter(s => s.date === date).map(s => s.courtId);
 
   if (holidayView) return <HolidayManagement onBack={() => { setHolidayView(false); void o.refresh(); void refreshBlocks(); }} onChanged={async () => { await o.refresh(); await refreshBlocks(); }} />;
@@ -5606,7 +5607,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     />}
     <div className="desk-selection-actions" aria-label="Court selection actions">
       {selectedRecords.length > 0 && ['rental','private'].includes(record.kind) && <BookingContextSummary key={record.id} bookingId={record.id} />}
-      {record?.kind === 'rental' && <p className="w-full text-xs text-zawana-500">Select more rentals with the same customer name or account to reschedule together.</p>}
+      {record?.kind === 'rental' && <p className="w-full text-xs text-zawana-500">Select rentals to refund separately. Rescheduling and grouped requests require the same customer name or account.</p>}
       {!(selectedRecords.length === 1 && ['rental','private'].includes(record.kind)) && <div className="w-full" aria-live="polite"><strong>{selectedRecords.length ? `${selectedRecords.length} ${record.kind === 'private' ? 'private course' : record.kind === 'weekly' ? 'weekly class' : 'rental'} sessions selected` : `${selections.length} sessions selected`}</strong>
       <ul className="mt-3 flex flex-wrap gap-2" aria-label="Selection tray">{selections.map(s => <li key={deskSelectionKey(s)} className="desk-selection-chip"><b>{s.courtName}</b><p className="mt-1">{s.date} · {s.time}</p>{invalidSelections.includes(deskSelectionKey(s)) && <p className="mt-1 text-red-700">Unavailable — remove or choose another session</p>}<button className="mt-2 underline" onClick={() => setSelections(rows => rows.filter(row => deskSelectionKey(row) !== deskSelectionKey(s)))} aria-label={`Remove ${s.courtName} ${s.date} ${s.time}`}>Remove</button></li>)}{selectedRecords.filter(r => r.kind !== 'private').map(r => <li key={`${r.id}|${r.date}`} className="desk-selection-chip"><b>{o.managedCourts.find(c => c.id === r.courtId)?.name} · {r.title}</b><p className="mt-1">{r.date} · {r.time}</p><button className="mt-2 underline" onClick={() => setSelectedRecords(rows => rows.filter(row => row.id !== r.id || row.date !== r.date))}>Remove session</button></li>)}</ul>
       {!selectedRecords.length && !selections.length && <p className="mt-2 text-xs text-zawana-500">Select individual court-and-time cells. Your selection stays in the tray while you change dates or floors.</p>}</div>}
@@ -5615,11 +5616,12 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
         label={selectedRecords.length ? record.kind === 'private' ? 'Private Course Actions' : record.kind === 'weekly' ? 'Weekly Class Actions' : 'Booking Actions' : `Actions (${selections.length} Sessions Selected)`}>
         {selectedRecords.length ? record.kind === 'weekly' ? <>
           <button type="button" role="menuitem" onClick={openMoves}>Reschedule</button>
-          <button type="button" role="menuitem" className="desk-context-menu__destructive" onClick={() => { setRemoveClasses([...selectedRecords]); setMenuOpen(false); }}>Remove Weekly Class</button>
+          <button type="button" role="menuitem" className="desk-context-menu__destructive" onClick={() => { setOccurrenceOnly(true); setRemoveClasses([...selectedRecords]); setMenuOpen(false); }}>Remove Today</button>
+          <button type="button" role="menuitem" className="desk-context-menu__destructive" onClick={() => { setOccurrenceOnly(false); setRemoveClasses([...selectedRecords]); setMenuOpen(false); }}>Remove Weekly</button>
         </> : <>
-          {record.kind !== 'private' && record.kind !== 'blocked' && <button type="button" role="menuitem" onClick={openMoves}>{record.kind==='rental' && selectedRecords.length === 1 ? 'Reschedule':'Reschedule selected sessions'}</button>}
-          {['private','rental'].includes(record.kind) && <button type="button" role="menuitem" onClick={() => { setInviteIds(selectedRecords.map(row => row.id)); setMenuOpen(false); }}>Request Reschedule<small>{selectedRecords.length > 1 ? `Send requests for ${selectedRecords.length} selected rentals` : record.kind==='private'?'Customer chooses; coach approves':'Customer chooses a replacement, staff assistance or refund review'}</small></button>}
-          <button type="button" role="menuitem" disabled={selectedRecords.length!==1} onClick={() => { setRefundId(record.id); setMenuOpen(false); }}>Refund{selectedRecords.length!==1&&<small>Select one booking to process its refund</small>}</button>
+          {record.kind !== 'private' && record.kind !== 'blocked' && <button type="button" role="menuitem" disabled={record.kind === 'rental' && !selectedRecords.every(row => canCombineRentals(selectedRecords, row))} onClick={openMoves}>{record.kind==='rental' && selectedRecords.length === 1 ? 'Reschedule':'Reschedule selected sessions'}</button>}
+          {['private','rental'].includes(record.kind) && <button type="button" role="menuitem" disabled={record.kind === 'rental' && !selectedRecords.every(row => canCombineRentals(selectedRecords, row))} onClick={() => { setInviteIds(selectedRecords.map(row => row.id)); setMenuOpen(false); }}>Request Reschedule<small>{selectedRecords.length > 1 ? `Send requests for ${selectedRecords.length} selected rentals` : record.kind==='private'?'Customer chooses; coach approves':'Customer chooses a replacement, staff assistance or refund review'}</small></button>}
+          <button type="button" role="menuitem" onClick={() => { if (selectedRecords.length === 1) setRefundId(record.id); else setBulkRefundIds(selectedRecords.map(row => row.id)); setMenuOpen(false); }}>{selectedRecords.length === 1 ? 'Refund' : 'Refund Selected'}</button>
         </> : <>{[{ kind: 'rental', label: 'Court Rental' }, { kind: 'weekly', label: 'Weekly Class' }, { kind: 'private', label: 'Private Course' }].map(action => <button type="button" role="menuitem" key={action.kind} disabled={action.kind === 'private' && selections.length !== 1} onClick={() => openAction(action.kind)}>{action.label}{action.kind === 'private' && selections.length !== 1 && <small>Select exactly one session</small>}</button>)}</>}
       </CourtActionMenu>{checkingSelections && <span role="status" className="self-center text-xs text-zawana-500">Checking selected sessions…</span>}</div>
     </div>
@@ -5637,14 +5639,16 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
     <AnimatePresence>{form === 'private' && selections[0] && <DeskPrivateCourseDialog court={{ id: selections[0].courtId, name: selections[0].courtName }} date={selections[0].date} initialTime={selections[0].time} onClose={() => setForm(null)} onCreated={() => { void refreshed(); }} />}
       {(form === 'rental' || form === 'weekly') && <DeskBatchBookingDialog kind={form} selections={selections} onClose={() => setForm(null)} onCreated={refreshed} />}
       {!!moveSources.length && <DeskMoveDialog sources={moveSources} courts={o.managedCourts} onClose={() => setMoveSources([])} onChanged={refreshed} />}
+      {!!bulkRefundIds.length && <BulkRefundDialog bookingIds={bulkRefundIds} onClose={() => setBulkRefundIds([])} onCompleted={async () => { clearSelection(); await Promise.all([o.refresh(), refreshBlocks()]); }} />}
       {!!refundId && <RefundDialog bookingId={refundId} onClose={() => setRefundId('')} onCompleted={async () => { await o.refresh(); await refreshBlocks(); clearSelection(); notify('Refund recorded. The booking reservation was released.'); }} />}
-      {!!removeClasses.length && <RemoveWeeklyClassDialog sources={removeClasses} onClose={() => setRemoveClasses([])} onRemoved={async () => { await o.refresh(); await refreshBlocks(); clearSelection(); setRemoveClasses([]); notify('Weekly class removed from the recurring schedule.'); }} />}
+      {!!removeClasses.length && <RemoveWeeklyClassDialog occurrenceOnly={occurrenceOnly} sources={removeClasses} onClose={() => setRemoveClasses([])} onRemoved={async () => { await o.refresh(); await refreshBlocks(); clearSelection(); setRemoveClasses([]); notify(occurrenceOnly ? 'Selected class occurrences removed. Future classes remain.' : 'Weekly class removed from the recurring schedule.'); }} />}
       {!!inviteIds.length && <StaffRescheduleRequestDialog bookingIds={inviteIds} onClose={() => setInviteIds([])} onSent={notify} />}
     </AnimatePresence>
   </div>
 }
 
 function Professional({ role }: { role: UserRole }) {
+  const bookingRevision = useBookingRevision(role === 'coach');
   const o = useOperations();
   const [coachBookings, setCoachBookings] = useState<any[]>([]);
   const [error, setError] = useState('');
@@ -5662,7 +5666,7 @@ function Professional({ role }: { role: UserRole }) {
     return () => {
       active = false
     }
-  }, [role]);
+  }, [role, bookingRevision]);
 
   const bookings = role === 'doctor' ? o.appointments : coachBookings;
 
@@ -5747,6 +5751,8 @@ function Professional({ role }: { role: UserRole }) {
 }
 
 function CoachBookings({ notify }: { notify: (s: string) => void }) {
+  const bookingRevision = useBookingRevision();
+  const loadVersion = useRef(0);
   const [rows, setRows] = useState<any[]>([]),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(''),
@@ -5755,21 +5761,23 @@ function CoachBookings({ notify }: { notify: (s: string) => void }) {
   const [filters, setFilters] = useState({ q: '', status: '', from: '', to: '' });
 
   const load = () => {
+    const version = ++loadVersion.current;
     const p = new URLSearchParams({ page: String(page), limit: '20', kind: 'private_course' });
     for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
     return get<any>(`/bookings?${p}`)
       .then(r => {
+        if (version !== loadVersion.current) return;
         setRows(r.data || []);
         setPageInfo(r.pagination || { total: 0, totalPages: 0 });
         setError('')
       })
-      .catch((e: any) => setError(e.message || 'Could not load assigned bookings.'))
+      .catch((e: any) => { if (version === loadVersion.current) setError(e.message || 'Could not load assigned bookings.'); })
   };
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), filters.q ? 250 : 0);
-    return () => window.clearTimeout(timer)
-  }, [page, filters]);
+    return () => { window.clearTimeout(timer); ++loadVersion.current; };
+  }, [page, filters, bookingRevision]);
 
   const setFilter = (key: string, value: string) => {
     setPage(1);

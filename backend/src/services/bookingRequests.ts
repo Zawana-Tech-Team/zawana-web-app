@@ -1,8 +1,10 @@
+import { requestMessage, requestScheduleMessage } from '../domain/requestMessages.js';
+import { replacementSlots } from './rescheduleAvailability.js';
 import { paidRentalAmount } from './rentalPaymentBalance.js';
-import type { Booking, Prisma, PrismaClient } from '@prisma/client';
+import type { Booking, BookingRescheduleRequest, Prisma, PrismaClient } from '@prisma/client';
 import { bookingFailure as fail } from './courtBooking.js';
 import { assertDestination, digest, validateDestination, type Actor } from './deskMoves.js';
-import { range, formatRange } from './courtPolicy.js';
+import { range } from './courtPolicy.js';
 import { blockOccurs } from './blockSchedule.js';
 import { scheduleInstant } from './courtChanges.js';
 type Tx = Prisma.TransactionClient;
@@ -26,9 +28,9 @@ export async function staffBookingDetail(db: PrismaClient, actor:Actor,id:string
 function requireRequestStaff(actor: Actor) {
   if (!['admin','badminton_fo'].includes(actor.role)) throw fail(403,'Only badminton staff can send requests.');
 }
-async function createStaffRequestInTransaction(tx: Tx, actor: Actor, bookingId: string, reason: string) {
+async function createStaffRequestInTransaction(tx: Tx, actor: Actor, bookingId: string, reason: string, notes = '', notify = true) {
   await tx.$executeRaw`UPDATE "Booking" SET date=date WHERE id=${bookingId}`;
-  const b=await tx.booking.findUnique({where:{id:bookingId},include:{user:{select:{id:true,role:true,active:true}}}});
+  const b=await tx.booking.findUnique({where:{id:bookingId},include:{court:{select:{name:true}},user:{select:{id:true,role:true,active:true}}}});
   if(!b||!['court','private_course'].includes(b.kind)||!['confirmed','CONFIRMED'].includes(b.status)||b.paymentStatus==='refunded')throw fail(409,'Only confirmed court rentals and private courses can receive requests.');
   if(b.user.role!=='member'||!b.user.active)throw fail(409,'This booking has no linked active member account. Contact the customer directly instead.');
   const existing=await tx.bookingRescheduleRequest.findUnique({where:{activeKey:bookingId}});
@@ -41,21 +43,30 @@ async function createStaffRequestInTransaction(tx: Tx, actor: Actor, bookingId: 
     await requestEvent(tx,existing.id,actor.id,status,{replacedByNewRequest:true});
   }
   const row=await tx.bookingRescheduleRequest.create({data:{bookingId,activeKey:bookingId,customerId:b.userId,requestedById:actor.id,kind:b.kind,reason,oldSchedule:requestSnapshot(b),oldPaid:await paidRentalAmount(tx,b),expiresAt:new Date(Date.now()+7*86400000)}});
-  await requestEvent(tx,row.id,actor.id,row.status,{reason,original:requestSnapshot(b)});
-  await tx.notification.create({data:{userId:b.userId,audience:'member',title:'Reschedule Request',body:`Your booking on ${b.date} at ${b.time} has a reschedule request from Zawana. Please review your available options.`,link:`/bookings?request=${row.id}`,type:'reschedule',entityType:'reschedule_request',entityId:row.id}});
+  await requestEvent(tx,row.id,actor.id,row.status,{reason,notes,message:requestMessage(reason),original:requestSnapshot(b)});
+  if (notify) await tx.notification.create({data:{userId:b.userId,audience:'member',title:'Reschedule Request',body:`${requestMessage(reason)}\n\n${requestScheduleMessage({court:b.court?.name,date:b.date,time:b.time})}`,link:`/bookings?request=${row.id}`,type:'reschedule',entityType:'reschedule_request',entityId:row.id}});
   return {request:row,created:true};
 }
-export async function createStaffRequest(db:PrismaClient,actor:Actor,bookingId:string,reason=''){
+export async function createStaffRequest(db:PrismaClient,actor:Actor,bookingId:string,reason='',notes=''){
  requireRequestStaff(actor);
- return db.$transaction(async tx => (await createStaffRequestInTransaction(tx,actor,bookingId,reason)).request);
+ return db.$transaction(async tx => (await createStaffRequestInTransaction(tx,actor,bookingId,reason,notes)).request);
 }
 
 /** Batch delivery reuses the per-booking lifecycle and commits every notification together. */
-export async function createStaffRequests(db: PrismaClient, actor: Actor, bookingIds: string[], reason = '') {
+export async function createStaffRequests(db: PrismaClient, actor: Actor, bookingIds: string[], reason = '', notes = '', requestKey?: string) {
   requireRequestStaff(actor);
   if (!bookingIds.length || bookingIds.length > 30 || new Set(bookingIds).size !== bookingIds.length)
     throw fail(400, 'Select between 1 and 30 different rental bookings.');
   return db.$transaction(async tx => {
+    const payloadHash = digest({ operation: 'REQUEST_BATCH', ids: [...bookingIds].sort(), reason, notes });
+    if (requestKey) {
+      const prior = await tx.deskMoveBatch.findUnique({ where: { actorId_requestKey: { actorId: actor.id, requestKey } } });
+      if (prior) {
+        if (prior.payloadHash !== payloadHash) throw fail(409, 'This retry key belongs to another submission.');
+        return prior.result as unknown as { requests: BookingRescheduleRequest[]; createdCount: number; existingCount: number };
+      }
+      await tx.deskMoveBatch.create({ data: { actorId: actor.id, requestKey, payloadHash, reason: 'Grouped booking requests', result: {} } });
+    }
     const ids = [...bookingIds].sort();
     for (const id of ids) await tx.$executeRaw`UPDATE "Booking" SET date=date WHERE id=${id}`;
     const bookings = await tx.booking.findMany({where:{id:{in:ids}},include:{user:{select:{id:true,name:true,role:true,active:true}}}});
@@ -74,9 +85,20 @@ export async function createStaffRequests(db: PrismaClient, actor: Actor, bookin
         throw fail(409, 'Selected rentals must share the same customer name or member account.');
     }
     const results = [];
-    for (const id of ids) results.push(await createStaffRequestInTransaction(tx,actor,id,reason));
+    for (const id of ids) results.push(await createStaffRequestInTransaction(tx,actor,id,reason,notes,false));
+    const fresh = results.filter(result => result.created).map(result => result.request);
+    for (const recipientId of [...new Set(fresh.map(row => row.customerId))]) {
+      const children = fresh.filter(row => row.customerId === recipientId);
+      const id = `batch-${digest({ actor: actor.id, recipientId, requests: children.map(row => row.id).sort() })}`;
+      await tx.bookingRequestBatch.create({ data: { id, senderId: actor.id, recipientId, reason } });
+      await tx.bookingRescheduleRequest.updateMany({ where: { id: { in: children.map(row => row.id) } }, data: { batchId: id } });
+      for (const child of children) child.batchId = id;
+      await tx.notification.create({ data: { userId: recipientId, audience: 'member', title: `${children.length} reschedule request${children.length === 1 ? '' : 's'}`, body: requestMessage(reason), link: `/bookings?batch=${id}`, type: 'reschedule', entityType: 'reschedule_batch', entityId: id } });
+    }
     const createdCount = results.filter(result => result.created).length;
-    return {requests:results.map(result => result.request),createdCount,existingCount:results.length-createdCount};
+    const result = {requests:results.map(result => result.request),createdCount,existingCount:results.length-createdCount};
+    if (requestKey) await tx.deskMoveBatch.update({ where: { actorId_requestKey: { actorId: actor.id, requestKey } }, data: { result: asJson(result) } });
+    return result;
   }, {maxWait:5000,timeout:15000});
 }
 
@@ -94,7 +116,7 @@ export async function listBookingRequests(db:PrismaClient,actor:Actor,bookingId?
   if(row.privateProposalId)await tx.privateRescheduleRequest.updateMany({where:{id:row.privateProposalId,status:'PENDING'},data:{status:'EXPIRED',pendingKey:null,reviewedAt:new Date(),reviewReason:expired?'Staff request expired.':'Original booking changed.'}});
   await requestEvent(tx,row.id,row.requestedById,status,{origin:'system',reason:expired?'Request lifetime ended':'Original booking changed'});
  });
- return db.bookingRescheduleRequest.findMany({where:scope,include:{booking:{select:{code:true,title:true,date:true,time:true,courtId:true,kind:true,status:true,paymentStatus:true,court:{select:{id:true,name:true,floor:true}},coach:{select:{name:true}},user:{select:{name:true,...(actor.role==='member'?{}:{phone:true})}}}},events:{orderBy:{createdAt:'asc'}}},orderBy:{updatedAt:'desc'}});
+ return db.bookingRescheduleRequest.findMany({where:scope,include:{batch:true,booking:{select:{code:true,title:true,date:true,time:true,courtId:true,kind:true,status:true,paymentStatus:true,court:{select:{id:true,name:true,floor:true}},coach:{select:{name:true}},user:{select:{name:true,...(actor.role==='member'?{}:{phone:true})}}}},events:{orderBy:{createdAt:'asc'}}},orderBy:{updatedAt:'desc'}});
 }
 async function own(tx:Tx,actor:Actor,id:string){
  const row=await tx.bookingRescheduleRequest.findUnique({where:{id},include:{booking:true}});
@@ -104,13 +126,21 @@ async function own(tx:Tx,actor:Actor,id:string){
  if(Object.entries(requestSnapshot(row.booking)).some(([key,value])=>(row.oldSchedule as Record<string,unknown>)[key]!==value))throw fail(409,'The original booking changed. Ask staff to review the request.');
  return row;
 }
-export async function customerRequestAction(db:PrismaClient,actor:Actor,id:string,action:'ADMIN_HANDLING'|'REFUND_REQUESTED'){
+export async function customerRequestAction(db:PrismaClient,actor:Actor,id:string,action:'ADMIN_HANDLING'|'REFUND_REQUESTED'|'DECLINED'){
  return db.$transaction(async tx=>{
   const initial=await tx.bookingRescheduleRequest.findUnique({where:{id},select:{bookingId:true}});
   if(!initial)throw fail(404,'Request not found.');
   await tx.$executeRaw`UPDATE "Booking" SET date=date WHERE id=${initial.bookingId}`;
   await tx.$executeRaw`UPDATE "BookingRescheduleRequest" SET status=status WHERE id=${id}`;
   const row=await own(tx,actor,id);
+  if (row.status === action) return row;
+  if (action === 'DECLINED') {
+    if (row.privateProposalId) await tx.privateRescheduleRequest.updateMany({ where: { id: row.privateProposalId, status: 'PENDING' }, data: { status: 'WITHDRAWN', pendingKey: null, reviewedAt: new Date(), reviewedById: actor.id, reviewReason: 'Customer declined the staff request.' } });
+    const result = await tx.bookingRescheduleRequest.update({ where: { id }, data: { status: 'DECLINED', response: 'DECLINED', activeKey: null, completedAt: new Date() } });
+    await requestEvent(tx, id, actor.id, 'DECLINED', { bookingUnchanged: true });
+    await requestStaffNotice(tx, id, 'Customer declined reschedule request', `${row.booking.code} · Original booking and payment remain unchanged.`);
+    return result;
+  }
   if(row.kind==='private_course'&&action==='ADMIN_HANDLING')throw fail(400,'Private courses offer Reschedule or Refund only.');
   if(row.privateProposalId&&action==='REFUND_REQUESTED') {
     const withdrawn=await tx.privateRescheduleRequest.updateMany({where:{id:row.privateProposalId,status:'PENDING'},data:{status:'WITHDRAWN',pendingKey:null,reviewedById:actor.id,reviewedAt:new Date(),reviewReason:'Customer requested refund review instead.'}});
@@ -136,8 +166,7 @@ async function quote(tx:Tx,actor:Actor,id:string,target:CustomerTarget){
 }
 export async function quoteCustomerRequest(db:PrismaClient,actor:Actor,id:string,target:CustomerTarget){return db.$transaction(async tx=>{const q=await quote(tx,actor,id,target);return {revision:q.revision,newPrice:q.newPrice,paidAmount:q.paidAmount,priceDifference:q.priceDifference,courtName:q.courtName};});}
 export async function requestAvailability(db:PrismaClient,actor:Actor,id:string,date:string,courtId:string){
- return db.$transaction(async tx=>{const row=await own(tx,actor,id),span=range(row.booking.time)!;const slots=[];
- for(let start=360;start+span.end-span.start<=1260;start+=60){const time=formatRange(start,start+span.end-span.start);let available=true;try{validateDestination({date,time},span.end-span.start);await assertDestination(tx,{date,time,courtId},[row.bookingId],row.kind==='private_course'?row.booking.coachId||undefined:undefined);}catch{available=false;}slots.push({time,available});}return {slots};});
+ return db.$transaction(async tx => { const row = await own(tx, actor, id); return replacementSlots(tx, row.booking, date, courtId); });
 }
 export async function confirmCustomerRequest(db:PrismaClient,actor:Actor,id:string,target:CustomerTarget,revision:string,acknowledged:boolean){
  return db.$transaction(async tx=>{

@@ -1,3 +1,5 @@
+import { OperationalReasonField } from '../OperationalReasonField';
+import { operationalReasonLabel } from '../../../backend/src/domain/rescheduleReasons';
 import { useRef, useState } from 'react';
 import { post } from '../../api';
 import { Select } from '../Select';
@@ -42,10 +44,11 @@ export function DeskMoveDialog({ sources, courts, onClose, onChanged, initialDes
         <div className="grid gap-4 sm:grid-cols-3"><label>Destination court<Select aria-label={`Destination court ${i+1}`} value={move.courtId} onChange={e=>edit(i,{courtId:e.target.value})}>{courts.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></label><label>Destination date<input aria-label={`Destination date ${i+1}`} type="date" value={move.date} onChange={e=>edit(i,{date:e.target.value})}/></label><label>Destination time<Select aria-label={`Destination time ${i+1}`} value={move.time} onChange={e=>edit(i,{time:e.target.value})}>{Array.from({length:Math.max(0,Math.floor((900-durationOf(sources[i].time))/60)+1)},(_,h)=>timeRange(6+h,durationOf(sources[i].time))).map(t=><option key={t}>{t}</option>)}</Select></label></div>
         {kind==='weekly'&&<label>Apply change to<Select aria-label={`Weekly change scope ${i+1}`} value={move.scope||''} onChange={e=>edit(i,{scope:e.target.value as Move['scope']})}><option value="">Choose which classes to change</option><option value="occurrence">This occurrence only</option><option value="future">This and future occurrences</option></Select></label>}
       </fieldset>)}
-      <label className="block">Reason for change<textarea className="mt-2" disabled={busy} minLength={3} maxLength={1000} value={reason} onChange={e=>{setReason(e.target.value);setPreview(null);setPayment(emptyDeskPayment());}}/></label>
+      <OperationalReasonField value={reason} disabled={busy} onChange={value => { setReason(value); setPreview(null); setPayment(emptyDeskPayment()); }}/>
+
     </>:<section aria-label="Move preview" className="space-y-4">
       {preview.rows.map((row,i)=><div key={row.id} className="space-y-2"><div className="desk-change-summary"><DeskSchedule label="Original booking" court={courts.find(c=>c.id===sources[i].courtId)?.name} date={sources[i].date} time={sources[i].time}/><DeskSchedule label="Replacement" court={row.target.courtName} date={row.target.date} time={row.target.time}/></div>{kind==='weekly'?<p className="text-xs font-medium">{row.scope==='future'?'This and future occurrences':'This occurrence only'}</p>:<p className="text-xs text-zawana-500">Price basis: {(row.paidBasis??row.original.price??0).toLocaleString()} MMK · Destination rate: {row.destinationPrice.toLocaleString()} MMK · Additional charge: {row.surcharge.toLocaleString()} MMK</p>}</div>)}
-      <div className="desk-note">Reason: {reason}</div>
+      <div className="desk-note">Reason: {operationalReasonLabel(reason)}</div>
       <p className="text-sm font-semibold">Total additional payment: {preview.surcharge.toLocaleString()} MMK</p>
       {kind==='court'&&<p className="text-xs text-zawana-500">Cheaper destinations receive no refund and do not offset other charges.</p>}
       {preview.surcharge>0&&<DeskPaymentFields value={payment} onChange={setPayment} disabled={busy}/>}

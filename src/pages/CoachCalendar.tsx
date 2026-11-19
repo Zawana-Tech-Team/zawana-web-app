@@ -1,3 +1,4 @@
+import { useBookingRevision } from '../hooks/useBookingRevision';
 import { SegmentedControl, SelectionContent } from '../components/Interactions';
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clock3, CalendarDays } from 'lucide-react';
@@ -42,14 +43,13 @@ export function CoachCalendar() {
     [view, setView] = useState<'day' | 'week' | 'month'>('week'),
     [data, setData] = useState<any>({ bookings: [] }),
     [error, setError] = useState('');
+  const bookingRevision = useBookingRevision();
   const [from, to] = rangeOf(date, view);
-  const load = () =>
-    get<any>(`/coach/calendar?start=${from}&end=${to}`)
-      .then(setData)
-      .catch((e: any) => setError(e.message || 'Could not load coach calendar.'));
   useEffect(() => {
-    load()
-  }, [from, to]);
+    let live = true;
+    void get(`/coach/calendar?start=${from}&end=${to}`).then(data => { if (live) { setData(data); setError(''); } }).catch(e => { if (live) setError(e.message || 'Could not load coach calendar.'); });
+    return () => { live = false; };
+  }, [from, to, bookingRevision]);
   const days = useMemo(() => {
     if (view === 'day') return [new Date(date)];
     if (view === 'week') return Array.from({ length: 7 }, (_, i) => add(startWeek(date), i));

@@ -1,3 +1,5 @@
+import { isDateKey } from '../utils/dateKeys.js';
+import { blockOccurs, blockExcludedDates } from './blockSchedule.js';
 import type { CourtBlock, Prisma, PrismaClient } from '@prisma/client';
 import { bookingFailure as fail } from './courtBooking.js';
 import { digest, type Actor } from './deskMoves.js';
@@ -74,4 +76,30 @@ export async function repairTodayWeeklyRemovals(db: PrismaClient) {
     await tx.deskMoveBatch.create({data:{actorId:'SYSTEM',requestKey:`weekly-removal-today:${payloadHash}`,payloadHash,reason:'Repair today weekly removal',result:JSON.parse(JSON.stringify(result))}});
     return {date,removedIds};
   },{maxWait:10000,timeout:20000});
+}
+
+/** Remove selected occurrences only; never truncate the recurring schedule. */
+export async function removeClassOccurrences(db: PrismaClient, actor: Actor, occurrences: { id: string; date: string }[], requestKey: string) {
+  if (!['admin', 'badminton_fo'].includes(actor.role)) throw fail(403, 'Only badminton staff may remove classes.');
+  if (!occurrences.length || occurrences.length > 30 || new Set(occurrences.map(row => `${row.id}:${row.date}`)).size !== occurrences.length) throw fail(400, 'Select between 1 and 30 different class occurrences.');
+  const selected = [...occurrences].sort((a, b) => `${a.id}:${a.date}`.localeCompare(`${b.id}:${b.date}`));
+  const payloadHash = digest({ operation: 'REMOVE_CLASS_OCCURRENCES', selected });
+  return db.$transaction(async tx => {
+    const prior = await tx.deskMoveBatch.findUnique({ where: { actorId_requestKey: { actorId: actor.id, requestKey } } });
+    if (prior) { if (prior.payloadHash !== payloadHash) throw fail(409, 'This retry key belongs to another operation.'); return prior.result; }
+    const receipt = await tx.deskMoveBatch.create({ data: { actorId: actor.id, requestKey, payloadHash, reason: 'Class occurrence removal', result: {} } });
+    const initial = await tx.courtBlock.findMany({ where: { id: { in: selected.map(row => row.id) }, type: 'class' } });
+    for (const courtId of [...new Set(initial.map(row => row.courtId))].sort()) await tx.$executeRaw`UPDATE "Court" SET status=status WHERE id=${courtId}`;
+    const previous = [], current = [];
+    for (const occurrence of selected) {
+      const block = await tx.courtBlock.findUnique({ where: { id: occurrence.id } });
+      if (!isDateKey(occurrence.date) || occurrence.date < today()) throw fail(400, 'Historical class occurrences cannot be removed.');
+      if (!block || !initial.some(row => row.id === block.id && row.courtId === block.courtId) || block.type !== 'class' || !blockOccurs(block, occurrence.date)) throw fail(409, 'The selected class occurrence is no longer active.');
+      previous.push(block);
+      current.push(await tx.courtBlock.update({ where: { id: block.id }, data: { excludedDates: [...new Set([...blockExcludedDates(block), occurrence.date])] } }));
+    }
+    const result = JSON.parse(JSON.stringify({ operation: 'REMOVE_CLASS_OCCURRENCES', selected, previous, current })) as Prisma.InputJsonValue;
+    await tx.deskMoveBatch.update({ where: { id: receipt.id }, data: { result } });
+    return result;
+  }, { maxWait: 10000, timeout: 20000 });
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
@@ -47,7 +48,7 @@ try {
   start(join(root, 'node_modules/.bin/vite'), ['--host', '127.0.0.1', '--port', String(uiPort), '--strictPort'], root);
   await Promise.all([ready(`${api}/health`), ready(ui)]);
   const request = async (path, { token, body, method = 'GET' } = {}) => fetch(`${api}${path}`, {
-    method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {})
+    method, headers: { 'Content-Type': 'application/json', ...(method === 'POST' ? { 'Idempotency-Key': randomUUID() } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {})
   });
   const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   browser = await chromium.launch({ headless: true, ...(existsSync(chrome) ? { executablePath: chrome } : {}) });
@@ -56,8 +57,18 @@ try {
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${ui}/badminton-fo/pos`);
-  await page.waitForURL('**/badminton-fo/active-packages');
+  await page.waitForURL('**/badminton-fo/packages');
   await page.getByRole('heading', { name: 'Active Packages', exact: true }).waitFor();
+  const sections = page.getByRole('navigation', { name: 'Package sections' });
+  assert.equal(await sections.getByRole('link', { name: 'Active Packages' }).getAttribute('aria-current'), 'page');
+  assert.equal(await page.getByRole('link', { name: 'Packages', exact: true }).count(), 1);
+  assert.equal(await page.getByRole('link', { name: 'Gym', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'Package Check-In & Sales', exact: true }).count(), 0);
+  await sections.getByRole('link', { name: 'Scan Check-in', exact: true }).click();
+  await page.waitForURL('**/badminton-fo/packages/check-in');
+  await page.getByRole('heading', { name: 'Scan Check-in', exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Packages', exact: true }).getAttribute('aria-current'), 'page');
+  await sections.getByRole('link', { name: 'Active Packages', exact: true }).click();
   assert.equal(await page.getByRole('link', { name: 'POS', exact: true }).count(), 0);
   await page.getByRole('textbox', { name: 'Search member accounts' }).fill('Aye');
   await page.getByRole('button', { name: `Select ${data.member.name}`, exact: true }).click();
@@ -65,8 +76,8 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Check in', exact: true }).count(), 0);
   assert.equal(await page.getByText('Check-in desk', { exact: true }).count(), 0);
   await page.getByRole('spinbutton', { name: 'Discount (%)' }).fill('10');
-  await page.getByRole('button', { name: 'KPay', exact: true }).click();
-  await page.getByText('Total due · KPay', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Cash', exact: true }).click();
+  await page.getByText('Total due · Cash', { exact: true }).waitFor();
   await page.screenshot({ path: join(artifacts, 'activation-desktop.png'), fullPage: true });
   const activation = page.waitForResponse(r => r.url().endsWith('/badminton/enrollments') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Activate package', exact: true }).last().click();
@@ -77,11 +88,11 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Check in', exact: true }).count(), 0);
   const transactions = await (await request('/transactions', { token: data.token })).json();
   const sale = transactions.find(t => t.customer === data.member.name);
-  assert.equal(sale.paymentMethod, 'KPay');
+  assert.equal(sale.paymentMethod, 'Cash');
   assert.equal(sale.amount, 150000);
   assert.equal(sale.discount, 15000);
   assert.equal(sale.finalAmount, 135000);
-  console.log('PASS Browser member search → KPay activation with 10% discount → persisted finance transaction');
+  console.log('PASS Browser member search → Cash activation with 10% discount → persisted finance transaction');
   const renewed = await request(`/badminton/enrollments/${enrollment.id}/renew`, { token: data.token, method: 'POST', body: { packageId: data.pkg.id, paymentMethod: 'Cash', discountPercent: 20 } });
   assert.equal(renewed.status, 200, await renewed.text());
   const afterRenew = await (await request('/transactions', { token: data.token })).json();
@@ -89,7 +100,7 @@ try {
   assert.equal(renewal.paymentMethod, 'Cash');
   assert.equal(renewal.discount, 30000);
   assert.equal(renewal.finalAmount, 120000);
-  const invalid = await request('/badminton/enrollments', { token: data.token, method: 'POST', body: { userId: data.member.id, packageId: data.pkg.id, paymentMethod: 'KPay', discountPercent: 101 } });
+  const invalid = await request('/badminton/enrollments', { token: data.token, method: 'POST', body: { userId: data.member.id, packageId: data.pkg.id, paymentMethod: 'Cash', discountPercent: 101 } });
   assert.equal(invalid.status, 400);
   await page.goto(`${ui}/badminton-fo/check-in`);
   await page.getByRole('textbox', { name: 'Search package holders' }).fill('Aye');
@@ -102,6 +113,33 @@ try {
   await page.getByRole('spinbutton', { name: 'Discount (%)' }).waitFor();
   await page.screenshot({ path: join(artifacts, 'activation-mobile.png'), fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile layout overflows');
+  await page.getByRole('navigation', { name: 'Package sections' }).getByRole('link', { name: 'Scan Check-in' }).click();
+  await page.getByRole('heading', { name: 'Scan Check-in', exact: true }).waitFor();
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile check-in layout overflows');
+  const memberContext = await browser.newContext();
+  await memberContext.addInitScript(token => localStorage.setItem('zawana_access_token', token), data.memberToken);
+  const memberPage = await memberContext.newPage();
+  for (const path of ['/badminton-fo/packages', '/badminton-fo/packages/check-in', '/badminton-fo/check-in']) {
+    await memberPage.goto(ui + path);
+    await memberPage.waitForURL('**/member');
+    assert.equal(await memberPage.getByRole('navigation', { name: 'Package sections' }).count(), 0);
+  }
+  assert.equal((await request('/badminton/enrollments', { token: data.memberToken })).status, 403);
+  assert.equal(await memberPage.getByRole('link', { name: 'Scan check-in', exact: true }).count(), 0);
+  await memberPage.getByRole('link', { name: 'Packages', exact: true }).click();
+  await memberPage.getByRole('link', { name: 'Scan to check in →', exact: true }).first().waitFor();
+  await memberContext.close();
+  for (const actor of data.navigationSessions) {
+    const roleContext = await browser.newContext();
+    await roleContext.addInitScript(token => localStorage.setItem('zawana_access_token', token), actor.token);
+    const rolePage = await roleContext.newPage();
+    await rolePage.goto(`${ui}/${actor.role}`);
+    await rolePage.getByRole('link', { name: 'Dashboard', exact: true }).waitFor();
+    assert.equal(await rolePage.getByRole('button', { name: 'Gym', exact: true }).count(), 0);
+    assert.equal(await rolePage.getByRole('link', { name: 'Gym Training', exact: true }).count(), 0);
+    assert.equal(await rolePage.getByRole('link', { name: 'Scan check-in', exact: true }).count(), 0);
+    await roleContext.close();
+  }
   assert.deepEqual(errors, []);
   console.log('PASS Cash renewal, invalid discount rejection, separate check-in page and mobile activation controls');
 } catch (error) {

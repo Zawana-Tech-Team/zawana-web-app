@@ -7,13 +7,14 @@ const terminal = (status: string) => ['completed', 'cancelled', 'canceled', 'exp
 /** Derive expiry from durable timestamps and actual resource state, never browser state. */
 export async function notificationLifecycle(db: PrismaClient, rows: Notification[], now = new Date()) {
   const ids = (...types: string[]) => [...new Set(rows.filter(n => n.entityId && types.includes(n.entityType || '')).map(n => n.entityId!))];
-  const [bookings, cafe, store, gymSessions, gymEnrollments, qrs] = await Promise.all([
+  const [bookings, cafe, store, gymSessions, gymEnrollments, qrs, batches] = await Promise.all([
     db.booking.findMany({ where: { id: { in: ids('booking', 'court', 'private_course') } }, select: { id: true, status: true, date: true, time: true, reservationExpiresAt: true, paymentExpiresAt: true } }),
     db.cafeOrder.findMany({ where: { id: { in: ids('cafe_order') } }, select: { id: true, status: true } }),
     db.storeOrder.findMany({ where: { id: { in: ids('store_order') } }, select: { id: true, status: true } }),
     db.privateTrainingSession.findMany({ where: { id: { in: ids('gym_session') } }, select: { id: true, status: true } }),
     db.gymEnrollment.findMany({ where: { id: { in: ids('gym_enrollment') } }, select: { id: true, status: true } }),
     db.badmintonEntryQr.findMany({ where: { id: { in: ids('qr', 'badminton-qr') } }, select: { id: true, status: true, expiresAt: true, revokedAt: true } }),
+    db.bookingRequestBatch.findMany({ where: { id: { in: ids('reschedule_batch') } }, select: { id: true, requests: { select: { status: true } } } }),
   ]);
   return rows.map(row => {
     let expiresAt = new Date(row.createdAt.getTime() + NOTIFICATION_LIFETIME_MS), done = false;
@@ -42,6 +43,8 @@ export async function notificationLifecycle(db: PrismaClient, rows: Notification
       done = !qr || qr.status !== 'ACTIVE' || !!qr.revokedAt;
       sooner(qr?.expiresAt);
     }
-    return { ...row, expiresAt, activeInInbox: row.activeInInbox && !done && expiresAt > now };
+    const batch = row.entityType === 'reschedule_batch' ? batches.find(batch => batch.id === row.entityId) : undefined;
+    const body = batch ? `${row.body}\n\n${batch.requests.length} booking requests · ${batch.requests.filter(item => item.status === 'PENDING_CUSTOMER').length} awaiting response. Review each booking separately.` : row.body;
+    return { ...row, body, expiresAt, activeInInbox: row.activeInInbox && !done && expiresAt > now };
   });
 }

@@ -236,7 +236,7 @@ export function Notifications() {
                           {new Date(notification.time).toLocaleString(locale)}
                         </span>
                       </div>
-                      <p className="mt-2 max-w-3xl text-sm leading-6 text-zawana-500">
+                      <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-zawana-500">
                         {notification.body}
                       </p>
                     </div>

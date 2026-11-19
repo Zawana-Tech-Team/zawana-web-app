@@ -1,3 +1,7 @@
+import { Banknote, CreditCard, RotateCcw } from 'lucide-react';
+import { HistoryLoading } from './member-booking/HistoryPresentation';
+import { useBookingRevision } from '../hooks/useBookingRevision';
+import { useLanguage } from '../context/LanguageContext';
 import { useEffect, useRef, useState } from 'react';
 import { get, post } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -56,9 +60,23 @@ export function RefundInbox({pendingOnly=false}:{pendingOnly?:boolean}){
  if(!authorized||(!rows.length&&!error))return null;
  return <section className="desk-panel mb-5 p-5" aria-label="Refund management"><h2 className="text-lg font-semibold">Refund requests</h2>{error&&<p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-3 divide-y">{pendingOnly && !rows.some(d=>!d.refund) && <p className="text-sm text-zawana-500">No pending refund requests.</p>}{rows.filter(d=>!pendingOnly || !d.refund).map(d=><article key={d.booking.id} className="space-y-2 py-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><strong>{d.customer.name} · {d.customer.phone||'Phone number unavailable'}</strong><span>{status(d)}</span></div><p className="text-xs text-zawana-500">{d.booking.code} · {d.booking.kind==='court'?'Court Rental':'Private Course'} · {d.court?.name} · {d.booking.date} · {d.booking.time}</p><p className="text-xs">{d.refund?`Refunded ${money(d.refund.amount)} by ${method(d.refund.method)}`:`Original payment: ${d.paidAmount==null?'Needs review':money(d.paidAmount)}`}</p><Button variant="secondary" onClick={()=>setOpen(d.booking.id)}>{d.refund?'View Refund':'Process Refund'}</Button></article>)}</div>{open&&<RefundDialog bookingId={open} onClose={()=>setOpen('')} onCompleted={refresh}/>}</section>;
 }
-export function MemberRefundHistory(){
- const revision=usePaymentRevision();const [rows,setRows]=useState<{id:string;amount:number;method:string;processedAt:string;booking:{code:string;title:string}}[]>([]);
- useEffect(()=>{let live=true;const load=()=>{void get<typeof rows>('/rescheduling/refunds/mine').then(r=>{if(live)setRows(r);}).catch(()=>{});};load();const timer=window.setInterval(load,15000);window.addEventListener('focus',load);return()=>{live=false;window.clearInterval(timer);window.removeEventListener('focus',load);};},[revision]);
- if(!rows.length)return null;
- return <section id="refunds" aria-label="Refund history" className="desk-panel mb-5 p-5"><h2 className="text-lg font-semibold">Refund history</h2>{rows.map(r=><article key={r.id} className="mt-3 space-y-1 border-t pt-3 text-sm"><strong>Refunded {money(r.amount)} · {method(r.method)}</strong><p>{r.booking.code} · {r.booking.title}</p><p className="text-xs text-zawana-500">Staff confirmed the money was returned · {new Date(r.processedAt).toLocaleString()}</p></article>)}</section>;
+export function MemberRefundHistory({onViewRequests}:{onViewRequests?:()=>void}){
+ const revision=useBookingRevision(), {locale}=useLanguage();
+ const [rows,setRows]=useState<{id:string;amount:number;method:string;processedAt:string;booking:{code:string;title:string}}[]>([]),[loaded,setLoaded]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{
+   let live=true;
+   void get<typeof rows>('/rescheduling/refunds/mine').then(data=>{if(live){setRows(data);setError('');}}).catch(error=>{if(live)setError(error instanceof Error?error.message:'Could not load refunds.');}).finally(()=>{if(live)setLoaded(true);});
+   return()=>{live=false;};
+ },[revision]);
+ const total=rows.reduce((sum,row)=>sum+row.amount,0);
+ const processedDate=(date:string)=>new Intl.DateTimeFormat(locale,{timeZone:'Asia/Yangon',day:'numeric',month:'short',year:'numeric'}).format(new Date(date));
+ return <section id="refunds" aria-label="Refund history" className="refund-history">
+   <header className="history-section-header"><div className="history-section-title"><span className="history-section-icon"><RotateCcw size={23} strokeWidth={1.5} aria-hidden="true"/></span><div><h2>Your refund history</h2><p>Completed refunds, with a clear record of each booking.</p></div></div><div className="history-section-count"><strong>{loaded?rows.length:'—'}</strong><span>Completed refunds</span></div></header>
+   {!loaded&&!error&&<HistoryLoading label="Loading refund history…"/>}
+   {error&&<p role="alert" className="history-error">{error}</p>}
+   {loaded&&!!rows.length&&<div className="refund-history-total"><div><span className="history-eyebrow">Total recorded refunds</span><p>{total.toLocaleString(locale)} <small>MMK</small></p></div><span>Returned across {rows.length} booking{rows.length===1?'':'s'}</span></div>}
+   {loaded&&!rows.length&&!error&&<div className="history-empty"><RotateCcw size={30} strokeWidth={1.3} aria-hidden="true"/><h3>No completed refunds yet</h3><p>Once staff confirm a refund, its amount and payment method will appear here.</p></div>}
+   <div className="refund-history-list">{rows.map(row=><article key={row.id} className="refund-history-card"><span className="refund-history-method-icon">{row.method==='CASH'?<Banknote size={24} strokeWidth={1.4} aria-hidden="true"/>:<CreditCard size={24} strokeWidth={1.4} aria-hidden="true"/>}</span><div className="refund-history-card-main"><span className="booking-history-status">Refunded</span><h3>{row.booking.title}</h3><p>{row.booking.code}</p><span className="refund-history-recorded">Recorded {processedDate(row.processedAt)} · {method(row.method)}</span></div><div className="refund-history-amount"><strong>{row.amount.toLocaleString(locale)} <small>MMK</small></strong><span>{method(row.method)}</span></div></article>)}</div>
+   {loaded&&<div className="refund-history-help"><p>Waiting for a refund? Requests under review stay in Requests until staff record the refund.</p>{onViewRequests&&<Button variant="secondary" onClick={onViewRequests}>View requests</Button>}</div>}
+ </section>;
 }

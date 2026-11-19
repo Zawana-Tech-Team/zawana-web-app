@@ -1,3 +1,5 @@
+import { isDateKey } from '../utils/dateKeys.js';
+import { occupyingStatuses } from '../services/courtBooking.js';
 import { reserveDeskWeekly, reserveWeeklySelections } from '../services/deskWeekly.js';
 import { recordCourtRentalPayment } from "../services/courtRentalPayment.js";
 import { Router } from 'express';
@@ -15,6 +17,16 @@ export function createCourtDeskRouter(db: PrismaClient, expire: () => Promise<vo
   router.use(auth, roles('admin', 'badminton_fo'));
   router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
   router.use(asyncRoute(async (_req, _res, next) => { await expire(); next(); }));
+  router.get('/rentals', asyncRoute(async (req, res) => {
+    const date = String(req.query.date || '');
+    if (!isDateKey(date)) throw bookingFailure(400, 'Choose a valid booking date.');
+    const rows = await db.booking.findMany({ where: { date, kind: 'court', status: { in: occupyingStatuses } }, include: { court: true, user: { select: { id: true, name: true, role: true } } }, orderBy: { id: 'asc' } });
+    res.json(rows.map(row => {
+      let meta: { customerName?: string; source?: string } = {};
+      try { meta = JSON.parse(row.meta || '{}'); } catch { /* Keep legacy records readable. */ }
+      return { id: row.id, courtId: row.courtId, customer: meta.customerName || row.user.name, customerAccountId: row.user.role === 'member' && meta.source !== 'walk_in' ? row.user.id : null, customerName: meta.customerName || (row.user.role === 'member' ? row.user.name : null), court: row.court?.name || row.title, date: row.date, time: row.time, session: 60, price: row.price, paymentStatus: row.paymentStatus, status: row.status };
+    }));
+  }));
   router.post('/weekly', asyncRoute(async (req: AuthRequest, res) => {
     if (req.body.selections) {
       const input = z.object({ selections: z.array(z.object({ courtId: z.string().min(1), date: z.string(), time: z.string() }).strict()).min(1).max(30), title: z.string().trim().min(1).max(120), requestKey: z.string().uuid() }).strict().parse(req.body);

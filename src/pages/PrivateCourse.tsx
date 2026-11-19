@@ -1,3 +1,4 @@
+import { useBookingRevision } from '../hooks/useBookingRevision';
 import { SegmentedControl } from '../components/Interactions';
 import { DeskDialog } from '../components/court-desk/DeskDialog';
 import { BookingActionBar } from '../components/member-booking/BookingActionBar';
@@ -135,6 +136,7 @@ export function PrivateCourse() {
   const availability =
     availabilityResult?.date === date ? availabilityResult.data : null;
   const needsAvailability = step >= 2;
+  const bookingRevision = useBookingRevision();
   useEffect(() => {
     if (!needsAvailability) return;
     let active = true;
@@ -142,7 +144,7 @@ export function PrivateCourse() {
     setLoadingAvailability(true);
     get<any>(`/bookings/availability?date=${date}`)
       .then((data) => {
-        if (active) setAvailabilityResult({ date, data });
+        if (active) { setAvailabilityResult({ date, data }); setError(''); }
       })
       .catch((e: any) => {
         if (active) setError(e.message || "Could not load court availability.");
@@ -153,7 +155,7 @@ export function PrivateCourse() {
     return () => {
       active = false;
     };
-  }, [date, needsAvailability]);
+  }, [date, needsAvailability, bookingRevision]);
 
   const courseOptions = courses;
   const eligibleCoaches = useMemo(

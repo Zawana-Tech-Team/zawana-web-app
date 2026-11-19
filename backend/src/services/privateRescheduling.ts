@@ -1,3 +1,4 @@
+import { replacementSlots } from './rescheduleAvailability.js';
 import { createStaffRequest, requestStaffNotice, requestEvent } from './bookingRequests.js';
 import type { Booking, Prisma, PrismaClient } from '@prisma/client';
 import { assertDestination, digest, validateDestination, type Actor } from './deskMoves.js';
@@ -90,7 +91,7 @@ export async function decidePrivateReschedule(db: PrismaClient, actor: Actor, re
         const duration = range(b.time)!; validateDestination(request, duration.end - duration.start);
         await assertDestination(tx, request, [b.id], b.coachId || undefined);
         if (await tx.paymentAttempt.findFirst({ where: { resourceId: b.id, status: { in: ['INITIATING', 'PENDING'] } } })) throw fail(409, 'Resolve the active payment checkout first.');
-      } catch (error) { status = 'CONFLICTED'; resultReason = error instanceof Error ? error.message : 'The destination is unavailable.'; }
+      } catch (error) { if (![400, 409].includes((error as { statusCode?: number }).statusCode || 0)) throw error; status = 'CONFLICTED'; resultReason = error instanceof Error ? error.message : 'The destination is unavailable.'; }
       if (status === 'APPROVED') await tx.booking.update({ where: { id: b.id }, data: { date: request.date, time: request.time, courtId: request.courtId } });
     }
     const result = await tx.privateRescheduleRequest.update({ where: { id: request.id }, data: { status, pendingKey: null, reviewedById: actor.id, reviewedAt: new Date(), reviewReason: resultReason } });
@@ -106,4 +107,14 @@ export async function decidePrivateReschedule(db: PrismaClient, actor: Actor, re
     if (decision === 'withdraw' && b.coach?.userId) await notice(tx, b.coach.userId, 'Reschedule proposal withdrawn', 'The customer withdrew their proposed change. The original session remains.', b.id, true);
     return result;
   }, { maxWait: 10000, timeout: 15000 });
+}
+
+export async function privateReplacementAvailability(db: PrismaClient, actor: Actor, bookingId: string, date: string, courtId: string) {
+  if (actor.role !== 'member') throw fail(403, 'Only the customer can choose a replacement session.');
+  return db.$transaction(async tx => {
+    const booking = await getBooking(tx, bookingId, actor);
+    const policy = rescheduleEligibility(booking);
+    if (!policy.eligible) throw fail(409, policy.message);
+    return replacementSlots(tx, booking, date, courtId);
+  });
 }

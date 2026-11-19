@@ -1,3 +1,4 @@
+import { BOOKING_CHANGED, bookingMutation } from './services/bookingSync';
 import { verifyPackageAccount } from './services/packageReauthentication';
 import type { User } from "./types";
 
@@ -80,6 +81,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:holidays|rescheduling|payments|staff\/court-desk|store\/orders|cafe\/orders|gym\/enrollments|badminton\/enrollments|member\/(?:badminton-packages|private-courses))/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
   if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:bookings|court-booking|courts|court-blocks)/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
+  if (typeof window !== 'undefined' && bookingMutation(path, method)) window.dispatchEvent(new Event(BOOKING_CHANGED));
   if (paymentRetrySlot) sessionStorage.removeItem(paymentRetrySlot);
   return data as T;
 }

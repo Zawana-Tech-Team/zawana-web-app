@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,readdirSync,readFileSync,rmSync}from'node:fs';import{tmpdir}from'node:os';import{join}from'node:path';import{DatabaseSync}from'node:sqlite';import{randomUUID}from'node:crypto';import{PrismaClient}from'@prisma/client';
-import {completeRefund,refundDetails,refundInput,memberRefunds,deliverRefundNotifications,listRefunds} from '../src/services/bookingRefunds.js';
+import {completeRefundBatch,previewRefundBatch,completeRefund,refundDetails,refundInput,memberRefunds,deliverRefundNotifications,listRefunds} from '../src/services/bookingRefunds.js';
 import {createStaffRequest,customerRequestAction} from '../src/services/bookingRequests.js';
 import {courtAvailability} from '../src/services/courtAvailability.js';
 import {today}from'../src/services/courtPolicy.js';import{addDateKeyDays}from'../src/utils/dateKeys.js';
@@ -77,6 +77,22 @@ test('audited manual booking refunds, exact availability release and notificatio
  });
  await t.test('signed refund ledger yields correct revenue and supports partial refunds without a second refund',async()=>{
  const {b}=await make(),record=await completeRefund(db,fo,b.id,await input(b.id,fo,{amount:10000}));assert.equal(record.amount,10000);const ledger=await db.transaction.aggregate({where:{AND:[recognizedLedgerRevenue,{OR:[{resourceType:'booking',resourceId:b.id},{resourceType:'booking_refund',resourceId:b.id}]}]},_sum:{finalAmount:true}});assert.equal(ledger._sum.finalAmount,20000);assert.equal((await slot(b)).available,true);await assert.rejects(completeRefund(db,fo,b.id,await input(b.id)),/already completed/);const where=await categoryWhere(db,'Court Rental');assert.equal(await db.transaction.count({where:{AND:[where,{id:record.transactionId}]}}),1);
+ });
+ await t.test('bulk refunds retain per-booking eligibility, partial failures and durable retries',async()=>{
+ const a=await make(),b=await make(),unpaid=await make();await db.transaction.delete({where:{id:unpaid.receipt.id}});
+ const preview=await previewRefundBatch(db,fo,[a.b.id,b.b.id,unpaid.b.id]);assert.equal(preview.length,3);assert.match(preview[2].detail!.blocked!,/Reconcile/);
+ await assert.rejects(previewRefundBatch(db,member,[a.b.id]),/Admin/);
+ const items=[{bookingId:a.b.id,input:await input(a.b.id)},{bookingId:b.b.id,input:{...(await input(b.b.id)),notes:''}},{bookingId:unpaid.b.id,input:{...(await input(unpaid.b.id))}}];
+ const result=await completeRefundBatch(db,fo,items);assert.equal(result.completedCount,1);assert.equal(result.failedCount,2);
+ assert.equal((await db.booking.findUniqueOrThrow({where:{id:b.b.id}})).paymentStatus,'paid');assert.equal((await slot(b.b)).available,false);
+ await completeRefundBatch(db,fo,items);assert.equal(await db.bookingRefund.count({where:{bookingId:a.b.id}}),1);assert.equal(await db.transaction.count({where:{resourceType:'booking_refund',resourceId:a.b.id}}),1);
+ await assert.rejects(completeRefundBatch(db,member,items),/Admin/);
+ const c=await make(),d=await make(),e=await make();const batch=await completeRefundBatch(db,admin,await Promise.all([c,d,e].map(async row=>({bookingId:row.b.id,input:await input(row.b.id,admin)}))));assert.equal(batch.completedCount,3);assert.equal(batch.failedCount,0);
+ for(const row of [c,d,e]){assert.equal((await slot(row.b)).available,true);assert.deepEqual(await db.transaction.findUnique({where:{id:row.receipt.id}}),row.receipt);}
+ });
+ await t.test('bulk online refunds require unique completed references per booking',async()=>{
+ const a=await make(),b=await make();const items=await Promise.all([a,b].map(async row=>({bookingId:row.b.id,input:await input(row.b.id,fo,{method:'ONLINE',reference:'BANK-RF-849275061'})})));
+ const result=await completeRefundBatch(db,fo,items);assert.equal(result.completedCount,1);assert.equal(result.failedCount,1);assert.match(result.results[1].message!,/already been used/);assert.equal((await db.booking.findUniqueOrThrow({where:{id:b.b.id}})).status,b.b.status);
  });
  }finally{await db.$disconnect();rmSync(dir,{recursive:true,force:true});}
 });

@@ -106,3 +106,32 @@ export async function completeRefund(db:PrismaClient,actor:Actor,bookingId:strin
   await deliverRefundNotifications(db,result.id).catch(()=>undefined);
   return result;
 }
+
+/** Separate transactions/receipts per booking; a failed item never masks a committed refund. */
+export async function previewRefundBatch(db: PrismaClient, actor: Actor, bookingIds: string[]) {
+  staff(actor);
+  if (!bookingIds.length || bookingIds.length > 30 || new Set(bookingIds).size !== bookingIds.length) throw fail(400, 'Select between 1 and 30 different bookings.');
+  const rows = [];
+  for (const bookingId of bookingIds) {
+    try { rows.push({ bookingId, detail: await refundDetails(db, actor, bookingId), error: null }); }
+    catch (error) { if ((error as { statusCode?: number }).statusCode !== 404) throw error; rows.push({ bookingId, detail: null, error: 'Booking not found.' }); }
+  }
+  return rows;
+}
+export async function completeRefundBatch(db: PrismaClient, actor: Actor, items: { bookingId: string; input: unknown }[]) {
+  staff(actor);
+  if (!items.length || items.length > 30 || new Set(items.map(item => item.bookingId)).size !== items.length) throw fail(400, 'Select between 1 and 30 different bookings.');
+  const results = [];
+  for (const item of items) {
+    const parsed = refundInput.safeParse(item.input);
+    if (!parsed.success) { results.push({ bookingId: item.bookingId, status: 'failed' as const, message: parsed.error.issues.map(issue => issue.message).join(' ') }); continue; }
+    try {
+      const refund = await completeRefund(db, actor, item.bookingId, parsed.data);
+      results.push({ bookingId: item.bookingId, status: 'completed' as const, refundId: refund.id, amount: refund.amount });
+    } catch (error) {
+      const code = (error as { statusCode?: number }).statusCode;
+      results.push({ bookingId: item.bookingId, status: 'failed' as const, message: code && code < 500 && error instanceof Error ? error.message : 'This refund could not be recorded. Retry with the same details or ask an administrator to check it.' });
+    }
+  }
+  return { results, completedCount: results.filter(row => row.status === 'completed').length, failedCount: results.filter(row => row.status === 'failed').length };
+}
