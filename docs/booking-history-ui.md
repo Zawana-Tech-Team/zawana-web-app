@@ -21,3 +21,71 @@ Verification:
 - `git diff --check`: passed.
 
 Visual review used local desktop/mobile screenshots. Full cross-browser and physical-device verification was not performed. No production deployment.
+
+## Requests and Refunds follow-through
+
+The same member activity presentation now covers Requests and Refunds. Requests use overview counts, grouped progress, restrained status badges, original/requested schedule comparisons and a keyboard-accessible message disclosure. Pending court requests retain the visible A. Reschedule, B. Let Admin Handle and C. Refund actions; the shared action component also supplies those controls for standalone pending court requests. Coach approvals have matching comparison cards and readable member-facing status labels. Coach decision controls and underlying request states remain unchanged.
+
+Refunds show completed-record counts, a recorded total, payment-method icons, booking references and Yangon-local recorded dates. An explicit empty state and a View requests shortcut distinguish completed refunds from requests still under review. Refresh errors preserve existing records and clear after successful recovery. No internal refund notes are displayed.
+
+Shared presentation is in `src/components/member-booking/HistoryPresentation.tsx`; the existing BookingRequestWorkflow, PrivateRescheduling and RefundWorkflow components retain their services and mutations. No API, database or financial-rule changes.
+
+Verified during follow-through:
+
+- Frontend build passed, including TypeScript compilation; existing large-chunk warning remains.
+- Focused ESLint on the shared history presentation and the three affected workflow components passed.
+- `scripts/test-member-activity-browser.mjs` passed: desktop/tablet/mobile requests and refunds, empty states, A/B/C visibility, coach comparison, keyboard message disclosure, private-note exclusion, failed-refresh record retention and recovery.
+- `scripts/test-weekly-batch-browser.mjs` passed: independent grouped rescheduling/refund/Admin Handle actions and live counts. Its apology check now opens the message disclosure first.
+- `scripts/test-booking-refunds-browser.mjs` passed: original single cash/online/private-course refund workflows, availability, financial history and permissions.
+- `scripts/test-reviewed-rescheduling-browser.mjs` passed: private proposals, coach rejection/approval, retained original payment and weekly/rental regressions. The member status assertion now expects the readable Approved label; coach raw-state assertions are unchanged.
+- `git diff --check` passed.
+
+Local screenshots were visually inspected. Physical-device and full cross-browser verification remain outstanding; no deployment was performed.
+
+## Final grouped affected-booking notice correction
+
+This supersedes the earlier grouped replacement-selector and A/B/C presentation. Grouped court notices now render **N Requests → Important Booking Notice → original court/date/time/status → Accept / Refund / Admin Handle**. The apology is visible once, adapts to Event/Maintenance, and does not refer to proposed changes. No alternatives, replacement selectors, proposed schedules, Decline, or Review Requests are rendered in the grouped flow. Existing standalone rental/private-course rescheduling remains separate.
+
+Implementation:
+
+- `src/components/member-booking/AffectedBookingGroup.tsx` and `affected-booking-notice.css`: isolated grouped notice presentation, original-only cards, three independent actions, confirmations, loading/error/success feedback and responsive layouts. Staff may open the existing financial refund dialog for a refund-review item.
+- `src/components/BookingRequestWorkflow.tsx`: delegates grouped items to the isolated notice component; grouped request links focus the group instead of mounting the generic replacement dialog. Staff batch creation needs only existing booking IDs, reason and optional notes, and previews the affected-notice wording.
+- `backend/src/services/bookingRequests.ts`: new audited ACKNOWLEDGED response for grouped court notices only. It sets response ACCEPT, closes that request and notifies staff, while leaving booking/payment fields unchanged. Duplicate acknowledgement returns the existing result; competing responses cannot both win. Grouped Decline and replacement availability/quote/confirmation are rejected. Original court names are captured for new groups and resolved safely for historical originals, rather than falling back to the booking's current court.
+- `backend/src/routes/rescheduling.ts`: the existing member response DTO additionally accepts ACKNOWLEDGED. Role and object ownership checks remain enforced.
+- `backend/src/domain/requestMessages.ts`, `notificationLifecycle.ts`: dedicated affected-notice text and current pending counts for grouped notifications. Unrelated rescheduling templates remain unchanged. Historical stored proposals/messages are preserved for audit, but the affected workflow never displays or accepts replacement fields.
+- `src/utils/requestBatch.ts`: acknowledgement counts as a resolved item.
+
+No schema migration or financial-calculation change. Refund still creates a manual-review request; only authorized completion through the existing refund service writes its financial transaction and releases that court slot. Admin Handle sends the existing staff-assistance notification without modifying the booking.
+
+Verification for this correction:
+
+- Backend suite: **260 passed, 3 skipped, 0 failed** (263 tests). Includes HTTP acknowledgement ownership/roles, original-court preservation through rename, invalid standalone acknowledgement, group replacement rejection, duplicate acknowledgement, and concurrent acknowledgement/refund decisions.
+- Frontend build, backend typecheck and backend build: passed; the existing frontend chunk-size warning remains.
+- Focused ESLint on all production TypeScript/TSX modules changed for this correction and the related tests: passed.
+- `scripts/test-weekly-batch-browser.mjs`: passed. Desktop/tablet/390px/320px layouts, one visible apology/count, no replacement inputs/text, independent Accept/Refund/Admin Handle, unchanged original booking/payment rows, staff refund completion, duplicate completion safety, committed slot release and live member refund status.
+- `scripts/test-member-activity-browser.mjs`: passed with the updated notice/actions, refund privacy and error recovery checks.
+- `scripts/test-reviewed-rescheduling-browser.mjs`: passed, verifying standalone court/private rescheduling and coach decisions remain functional.
+- `scripts/test-booking-refunds-browser.mjs`: passed, verifying the original cash/online/private-course refund rules and financial history.
+- `git diff --check`: passed.
+
+Screenshots were inspected locally. The skipped PostgreSQL checks still require their isolated PostgreSQL environment; full physical-device/cross-browser release verification remains outstanding. No production deployment or configured-database mutation was performed for this correction.
+
+### Accept correction: self-rescheduling
+
+Accept now opens the existing replacement selector for the selected booking. Court Rentals retain price review, payment validation and explicit confirmation. Private Courses submit a replacement proposal to the assigned coach; the original session stays booked until approval. Group cards still show original booking information with a single group notice; replacement fields appear only after Accept. Refund and Admin Handle remain separate. New acknowledgement-only responses are rejected; historical acknowledged records remain intact.
+
+### Unified member rescheduling
+
+All active member entry points now render `SharedRescheduleFlow`: the Court Rental route, the Private Course dialog, standalone staff requests, notification links through the request inbox, and grouped Accept. Request actions retain Accept / Refund / Admin Handle; there is no fourth primary action. The original group cards and apology remain unchanged.
+
+The flow loads an owned rescheduling session, shows original court/date/time/coach, selects a duration-preserving replacement, automatically requests a server quote, reviews the change with `PriceDifferenceSummary`, and confirms. Returning to selection preserves date/court/time. Background booking revisions recheck quotes; stale responses and duplicate submissions are guarded. Replacement fields appear only after the member opens rescheduling.
+
+`startMemberReschedule` creates or reuses the existing request lifecycle. Self-initiated requests cannot grant staff timing exceptions: the 24-hour cutoff is checked at start, availability, quote, and confirmation, including Private Course proposals. Staff-generated requests retain their established exceptions. Unsubmitted member drafts stay out of the request inbox. Abandoned sessions expire without moving the booking or charging anything. No schema migration is required.
+
+`rentalDestinationPrice` is the common court-rate calculation for availability, member quotes, and staff adjustments (duration, peak hours, holiday overrides). Financial differences use attributable paid receipts, including discounts and previous recorded surcharges. Unknown original payments require staff reconciliation. Private Course prices, coach assignment and entitlements stay unchanged.
+
+Higher prices create `AWAITING_ADDITIONAL_PAYMENT` and retain the original booking. Authorized staff use Arrange & confirm replacement to verify and record only the surcharge atomically with the move. Member confirmations never attest payment success. Zero differences commit without payment; lower prices require explicit acknowledgement of the existing non-refundable policy. Private Courses remain proposals until assigned-coach approval. Original transaction history is preserved. Active checkout, changed prices, stale originals, expired requests and destination conflicts are revalidated server-side. Grouped staff requests now expose the existing payment-assistance completion action.
+
+Verification: `backend/tests/unified-rescheduling.test.ts` covers surcharge verification/retry, zero/lower prices, cutoff bypass prevention, rate policy, stale quotes, active checkout, abandoned sessions and simultaneous destination claims. `rescheduling-api.test.ts` covers owned session endpoints and request scope. `scripts/test-unified-rescheduling-browser.mjs` checks the real UI/API/database for all price scenarios, back navigation, failure/retry and mobile layout. Existing grouped, reviewed Private Course/coach, and attendance browser regressions exercise the shared entry points. All browser fixtures use isolated temporary SQLite databases. PostgreSQL integration tests require their separately configured test database. No production deployment is performed.
+
+Validation on this revision: `npm run lint:rescheduling`, frontend `npm run build`, and backend `npm run build` pass. Backend tests: 268 passed, 3 PostgreSQL integration tests skipped without the configured test database. The unified pricing, grouped-request/refund, and reviewed Private Course/coach browser suites pass. The broader attendance browser suite passes its member/Admin/FO rescheduling and booking-history portions, then fails at the unrelated QR generation counter assertion (`scripts/test-attendance-browser.mjs`, QR slot 1 expecting “0 check-ins”). This broader failure remains recorded; no attendance production logic was changed.

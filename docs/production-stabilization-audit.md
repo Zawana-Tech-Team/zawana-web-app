@@ -93,3 +93,57 @@ Private proposal → coach decision → availability recheck → booking + reque
 - **Blocked:** production release evidence requires staging/database/browser/mobile/provider infrastructure; this does not block the next local implementation phase.
 - **Not yet started:** Phase 1–14 implementation under this brief.
 - **Next phase:** Phase 1 navigation and Packages consolidation, preserving existing check-in behavior and role guards.
+
+## Phases 6–8 implementation report — 23 November 2026
+
+### Phase 6: package category management
+
+Implemented Admin-only create, rename, description, archive and reactivate through `backend/src/routes/packageManagement.ts` and `src/components/BadmintonCategoryField.tsx`. Existing package reauthentication and mutation auditing remain in front of these endpoints. Category IDs and codes remain immutable. Name checks normalize case/spacing and serialize across administrators through a singleton database lock. Delete means archive; no category or linked history is hard-deleted. Initial Foundation/Social/Pathway records stay intact. Additional stable uppercase codes work with package activation, QR issuance and attendance; category snapshots remain immutable in both database histories. Existing archived-category entitlements still support authorized attendance. Selection priority remains expiryDate, createdAt, then ID, with no cross-category fallback.
+
+API: GET/POST `/api/packages/badminton/categories`, PATCH/DELETE `/api/packages/badminton/categories/:id`. POST/PATCH/DELETE retain existing account-verification requirements.
+
+### Phase 7: category-based holidays
+
+Implemented explicit nullable `CourtBlock.categoryCode` assignments, optional holiday `categoryCodes`, holiday name/internal notes, individual dates or ranges, affected-session preview, edit and removal confirmation. Unclassified legacy classes remain unclassified; category-specific holidays do not guess from names. No category selection preserves the existing all-class behavior. The same recurrence rule now drives backend availability and frontend calendars. Active matching category check-ins are rejected on the holiday with no deduction; other categories are unchanged. Members with eligible affected category memberships receive notices. Mutations record an actor and before/after audit.
+
+Class assignment is available during new weekly creation and in Holiday Management. Assigning an existing class revalidates future conflicts under court locking. Scope edits and removal retain conflicting restored sessions as suspended; no bookings are recreated, moved or cancelled. Past holiday schedules are read-only. Paid package balances, validity, receipts and attendance remain unchanged.
+
+API: existing `/api/holidays/preview` and POST `/api/holidays` accept `dates`, optional `categoryCodes` (null = all), `name`, `notes`, with the returned revision required to save. GET `/api/holidays/classes`, PATCH `/api/holidays/classes/:id/category`, GET `/api/holidays/:date/removal-preview`, DELETE `/api/holidays/:date`. Admin and FO only. Legacy date-only requests remain supported.
+
+### Phase 8: active package member details
+
+Implemented contextual Active Members on package cards through `src/components/PackageMembers.tsx`. GET `/api/packages/badminton/:id/members` supports page/pageSize (maximum 100), name/phone/email search, optional categoryCode and active/expired/all filters. Active means started, unexpired, active status and a positive session balance. Contacts use the existing account, with batched legacy studentId resolution and enrollment phone fallback; missing contacts show “Not provided”. Details show the purchased package name, category, activation/expiration dates, balance and status. Queries use server pagination and batched relations; no per-member query loop. Unauthorized roles cannot retrieve contacts.
+
+### Database changes and release boundary
+
+Both schema histories include additive `20261123120000_package_category_management`: category description, class category code, holiday category scope, category mutation lock and query indexes. Existing category-validation guards now allow registered additional codes while retaining immutable snapshots; PostgreSQL uses restrictive category-code foreign keys. No historical data or balances are rewritten. These migrations have only been applied to disposable test databases. Before deployment, validate the PostgreSQL migration on staging with a verified backup. Forward recovery is preferred: archive categories or remove holiday scope through the safe restoration workflow rather than dropping new columns or resetting data. Production deployment is not authorized.
+
+### Additional member dashboard correction
+
+`src/pages/Dashboard.tsx` now uses one schedule view, graphical per-package balances, one pending-request notice and three working quick actions. Marketing cover, repeated next-court/private cards, repeated schedule/history sections and duplicate notification controls are removed from this dashboard. Check-in stays within Packages. Dashboard uses Yangon dates and shared booking revision polling; errors retain last known data and offer retry. The dashboard endpoint adds compatible `requestCount`/`requestLink` fields. Existing response fields remain available for other clients.
+
+### Verification and next phase
+
+Commands: `npm run lint:packages`, `npm run build`, backend build/test, Prisma SQLite/PostgreSQL schema validation, `node scripts/test-package-management-browser.mjs`, and `node scripts/test-holidays-browser.mjs`. The browser suites use isolated temporary SQLite databases and real APIs; they verify account reauthentication, category creation, contact search, scoped preview, confirmed restoration, unchanged balances, dashboard links and 1440/768/390/320px layouts. PostgreSQL concurrency/staging deployment and the broader supported-browser matrix remain unverified.
+
+Next recommended master phase: Phase 9 notification event/recipient/link audit, followed by Coach workflow prioritization.
+
+Final local verification: 273 backend tests passed, 3 PostgreSQL integration tests skipped; package lint and frontend/backend builds passed. Both Prisma schemas validate. Both package/dashboard and holiday browser journeys passed in Chrome; the dashboard was inspected at 320, 390, 768 and 1440 px. One initial full run hit the existing package reauthentication timestamp assertions; unchanged security tests passed on subsequent full runs. Live PostgreSQL migrations, production environments and non-Chrome device testing remain pending.
+
+## Phases 6–8 continuation and completion
+
+This follow-up closes gaps found during acceptance review rather than introducing another package or holiday system.
+
+- **Phase 6:** Category metadata saves now refresh package cards through the existing Operations refresh. Archived categories are excluded from the member sales catalog and FO activation choices, while existing paid memberships and historical records remain available. The same account reauthentication and audit remain required for category mutations.
+- **Phase 7:** Holiday edits now carry optional `sourceDates` in preview/save. Moving a holiday previews both suspension on replacement dates and restoration on previous dates. Both changes commit together under the existing court locks and revision check. Conflicting old-date classes remain suspended; bookings and payments are untouched. Moving onto another configured holiday is rejected for explicit review. Removal previews now return a revision; the UI submits it and stale removal is rejected. Old clients omitting the optional removal revision remain compatible, with conflicts always revalidated before commit. Existing archived-category classes remain eligible for holiday management. Users whose holiday coverage changes or is removed receive scoped notices; unchanged repeated settings do not produce duplicate application notices.
+- **Phase 8:** The member dialog now has a category filter, accurate scheduled/expired/exhausted statuses, and recovery when the current page disappears as records change. Admin package cards and the FO Packages page share the same paginated member dialog. FO gets a compact package directory, including archived-category memberships, without changing the activation form. Opening FO activation no longer downloads the entire enrollment list. Contacts remain available only to Admin/FO.
+
+**Files:** `backend/src/routes/holidays.ts` implements edit/removal validation, restoration and recipient notices; `backend/src/routes/packageManagement.ts` handles validated pagination and derived status; `backend/src/server.ts` restricts the member sales catalog. `HolidayManagement.tsx` adds edit context and restoration preview; `PackageMembers.tsx` adds the category filter and FO directory; `BadmintonCategoryField.tsx` and `Operations.tsx` reconcile category changes and exclude archived-category sales. Unit/API and browser regression tests cover the new paths.
+
+**Database:** No additional schema migration is needed for this continuation. After the reported availability failure, the existing package-category migration was applied to the local development SQLite database following an integrity-checked backup; booking, transaction, enrollment, attendance, category, court-block and override row counts were preserved. Production databases were not changed. PostgreSQL staging migration/concurrency validation is still pending.
+
+**API compatibility:** Holiday preview/save accept optional `sourceDates`; removal-preview returns `revision`; DELETE accepts optional `{ revision }`. Member endpoints retain the same paginated shape and validated category/status filters. No new payment or refund policy is introduced.
+
+**Continuation verification:** `npm --prefix backend test` passed 274 tests with 3 PostgreSQL integration skips and no failures. `npm run lint:packages`, frontend build and backend build passed. The package-management browser journey passed account verification, immediate category-name refresh, category/member filtering, safe holiday date movement and removal, archived-category sales exclusion, retained balances, and FO member lookup on mobile. The legacy holiday browser regression also passed. A read-only check against the running local database returned availability for 8 courts and 120 slots. Production was not deployed.
+
+The existing second-boundary flake in `backend/tests/package-security.test.ts` was corrected by aligning only the replay-test challenge's fixture timestamp with the provider authentication second; identity, stale-token and one-time-proof assertions remain strict. The test now restores its authentication-mode fixture in `finally`, preventing a failed assertion from contaminating the following test. No production authentication checks were relaxed.

@@ -11,3 +11,9 @@ export function requestScheduleMessage(schedule: { court?: string | null; date?:
   const values = [schedule.court, schedule.date, schedule.time].filter(Boolean);
   return values.length ? `${label}: ${values.join(', ')}` : '';
 }
+
+/** Affected-booking notices are acknowledgements, not replacement proposals. */
+export function affectedBookingMessage(reason: string) {
+  const cause = reason === 'EVENT' ? 'a scheduled event' : reason === 'MAINTENANCE' ? 'scheduled maintenance' : 'an operational change';
+  return `Dear Valued Customer,\n\nWe sincerely apologize for the inconvenience. Due to ${cause} at The Zawana, your existing court reservation has been affected.\n\nPlease review your affected bookings below and choose how you would like us to proceed.\n\nThank you for your understanding and cooperation.\n\nThe Zawana Team`;
+}

@@ -1,0 +1,17 @@
+ALTER TABLE "BadmintonPackageCategory" ADD COLUMN "description" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "CourtBlock" ADD COLUMN "categoryCode" TEXT;
+ALTER TABLE "CourtDateOverride" ADD COLUMN "categoryCodes" JSONB;
+CREATE INDEX "CourtBlock_categoryCode_idx" ON "CourtBlock"("categoryCode");
+CREATE INDEX "BadmintonEnrollment_packageId_status_expiryDate_idx" ON "BadmintonEnrollment"("packageId","status","expiryDate");
+CREATE TABLE "CategoryMutationLock" ("id" INTEGER NOT NULL PRIMARY KEY);
+INSERT INTO "CategoryMutationLock" ("id") VALUES (1);
+ALTER TABLE "BadmintonPackageCategory" DROP CONSTRAINT "BadmintonPackageCategory_category_valid";
+ALTER TABLE "BadmintonPackageCategory" ADD CONSTRAINT "BadmintonPackageCategory_category_valid" CHECK ("code" IS NULL OR "code" ~ '^[A-Z][A-Z0-9_]{1,39}$');
+ALTER TABLE "BadmintonEnrollment" DROP CONSTRAINT "BadmintonEnrollment_category_valid";
+ALTER TABLE "BadmintonEnrollment" ADD CONSTRAINT "BadmintonEnrollment_category_exists" FOREIGN KEY ("categoryCode") REFERENCES "BadmintonPackageCategory"("code") ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "BadmintonCheckIn" DROP CONSTRAINT "BadmintonCheckIn_category_valid";
+ALTER TABLE "BadmintonCheckIn" ADD CONSTRAINT "BadmintonCheckIn_category_exists" FOREIGN KEY ("categoryCode") REFERENCES "BadmintonPackageCategory"("code") ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "BadmintonEntryQr" DROP CONSTRAINT "BadmintonEntryQr_category_valid";
+ALTER TABLE "BadmintonEntryQr" ADD CONSTRAINT "BadmintonEntryQr_category_exists" FOREIGN KEY ("categoryCode") REFERENCES "BadmintonPackageCategory"("code") ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "BadmintonQrVisit" DROP CONSTRAINT "BadmintonQrVisit_category_valid";
+ALTER TABLE "BadmintonQrVisit" ADD CONSTRAINT "BadmintonQrVisit_category_exists" FOREIGN KEY ("categoryCode") REFERENCES "BadmintonPackageCategory"("code") ON DELETE RESTRICT ON UPDATE RESTRICT;

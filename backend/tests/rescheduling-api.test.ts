@@ -40,6 +40,13 @@ test('shared replacement availability and operational reason API preserve owners
     for (const reason of ['', 'Other', 'event']) assert.equal((await request('/requests', 'staff', { bookingId: rental.id, reason })).status, 400);
     const sent = await request('/requests', 'staff', { bookingId: rental.id, reason: 'MAINTENANCE', notes: 'Court inspection' }); assert.equal(sent.status, 201); const row = await sent.json();
     assert.equal(row.reason, 'MAINTENANCE'); const createdEvent = await db.rescheduleRequestEvent.findFirstOrThrow({ where: { requestId: row.id } }); assert.equal((createdEvent.detail as { notes: string }).notes, 'Court inspection'); assert.deepEqual(await db.booking.findUnique({ where: { id: rental.id } }), rental);
+    const context=await request(`/member/bookings/${rental.id}/session`,'member',{});assert.equal(context.status,200);assert.equal((await context.json()).id,row.id);
+    assert.equal((await request(`/member/bookings/${rental.id}/session`,'other',{})).status,404);
+    assert.equal((await request(`/member/bookings/${rental.id}/session`,'staff',{})).status,403);
+    const privateContext=await request(`/member/bookings/${course.id}/session`,'member',{});assert.equal(privateContext.status,200);
+    const privateSession=await privateContext.json();assert.equal(privateSession.booking.coachName,'Coach');assert.equal(privateSession.kind,'private_course');
+    assert.equal((await (await request('/requests')).json()).some((item:{id:string})=>item.id===privateSession.id),false,'Unsubmitted member drafts must not appear as staff requests');
+    assert.equal((await request(`/member/bookings/${course.id}/session`,'member',{requestId:row.id})).status,404);
     for (const path of [`/requests/${row.id}/availability`, `/private/${course.id}/availability`]) {
       const response = await request(`${path}?date=${date}&courtId=${court.id}`); assert.equal(response.status, 200);
       const { slots } = await response.json(); assert.equal(slots.find((slot: { time: string }) => slot.time === '10:00 AM — 11:00 AM').available, false);
@@ -47,8 +54,22 @@ test('shared replacement availability and operational reason API preserve owners
       assert.ok([403, 404].includes((await request(`${path}?date=${date}&courtId=${court.id}`, 'other')).status));
       assert.equal((await request(`${path}?date=invalid&courtId=${court.id}`)).status, 400);
     }
+    const groupA=await make('court','GROUP-HTTP-1','11:00 AM — 12:00 PM'),groupB=await make('court','GROUP-HTTP-2','12:00 PM — 1:00 PM');
+    const grouped=await request('/requests/batch','staff',{bookingIds:[groupA.id,groupB.id],reason:'EVENT'});assert.equal(grouped.status,201);const group=(await grouped.json()).requests;
+    const item=group.find((item:{bookingId:string})=>item.bookingId===groupA.id);
+    assert.equal((await request(`/requests/${item.id}/availability?date=${date}&courtId=${court.id}`)).status,200);
+    assert.equal((await request(`/requests/${item.id}/quote`,'member',{date,time:'2:00 PM — 3:00 PM',courtId:court.id})).status,200);
+    assert.equal((await request(`/requests/${item.id}/respond`,'other',{action:'ACKNOWLEDGED'})).status,404);
+    assert.equal((await request(`/requests/${item.id}/respond`,'staff',{action:'ACKNOWLEDGED'})).status,403);
+    assert.equal((await request(`/requests/${row.id}/respond`,'member',{action:'ACKNOWLEDGED'})).status,400);
+    assert.equal((await request(`/requests/${item.id}/respond`,'member',{action:'ACKNOWLEDGED'})).status,400);
+    assert.equal(await db.rescheduleRequestEvent.count({where:{requestId:item.id,status:'ACKNOWLEDGED'}}),0);
+    assert.deepEqual(await db.booking.findUnique({where:{id:groupA.id}}),groupA);
+    assert.equal((await db.bookingRescheduleRequest.findUniqueOrThrow({where:{activeKey:groupB.id}})).status,'PENDING_CUSTOMER');
+    await db.court.update({where:{id:court.id},data:{name:'Renamed court'}});
+    const preserved=await (await request('/requests')).json();assert.equal(preserved.find((item:{id:string})=>item.id===group[0].id).originalCourtName,'Court');
     await db.bookingRescheduleRequest.update({ where: { id: row.id }, data: { reason: 'Historical custom reason' } });
-    const history = await (await request('/requests')).json(); assert.equal(history[0].reason, 'Historical custom reason');
+    const history = await (await request('/requests')).json(); assert.equal(history.find((item:{id:string})=>item.id===row.id).reason, 'Historical custom reason');
     assert.deepEqual(await db.booking.findUnique({ where: { id: course.id } }), course);
   } finally { if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); }
 });

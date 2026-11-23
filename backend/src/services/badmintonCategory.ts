@@ -2,12 +2,12 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { today } from './courtPolicy.js';
 import { changeError } from './courtChanges.js';
-export const categoryCodeInput = z.enum(['FOUNDATION', 'SOCIAL', 'PATHWAY']);
+export const categoryCodeInput = z.string().trim().min(2).max(40).regex(/^[A-Z][A-Z0-9_]*$/);
 export type CategoryCode = z.infer<typeof categoryCodeInput>;
 export async function packageCategory(tx: Prisma.TransactionClient, packageId: string) {
   const pkg = await tx.badmintonPackage.findUnique({ where: { id: packageId }, include: { category: true } });
   if (!pkg || !pkg.category?.active || !categoryCodeInput.safeParse(pkg.category.code).success)
-    throw changeError('CATEGORY_REVIEW_REQUIRED', 'Assign this package to Foundation, Social, or Pathway before activation.');
+    throw changeError('CATEGORY_REVIEW_REQUIRED', 'Assign this package to an active category before activation.');
   return pkg.category!.code as CategoryCode;
 }
 export const ownerScope = (userId: string) => ({ OR: [{ userId }, { userId: null, studentId: userId }] });
@@ -20,6 +20,8 @@ export async function selectCategoryEnrollment(tx: Prisma.TransactionClient, mem
   return resolveCategoryEnrollment(tx, memberId, categoryCode, ownerScope(memberId), date);
 }
 async function resolveCategoryEnrollment(tx: Prisma.TransactionClient, memberId: string, categoryCode: CategoryCode, scope: Prisma.BadmintonEnrollmentWhereInput, date: string) {
+  const holiday=await tx.courtDateOverride.findUnique({where:{date}});
+  if(holiday?.weeklyOnly&&holiday.holidayActive&&(!Array.isArray(holiday.categoryCodes)||holiday.categoryCodes.includes(categoryCode)))throw changeError('CATEGORY_HOLIDAY','This category is on holiday today. No session was deducted.');
   // An unknown entitlement/history might already have paid for this category today. Never guess.
   if (await tx.badmintonEnrollment.findFirst({ where: { AND: [scope, { categoryCode: null, status: 'active' }] } }) ||
       await tx.badmintonCheckIn.findFirst({ where: { date, categoryCode: null, enrollment: scope } }))

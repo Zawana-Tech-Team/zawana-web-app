@@ -1,3 +1,4 @@
+import { PackageMembers, PackageMemberDirectory } from '../components/PackageMembers';
 import { BulkRefundDialog } from '../components/BulkRefundDialog';
 import { useBookingRevision } from '../hooks/useBookingRevision';
 import { DeskDialog } from '../components/court-desk/DeskDialog';
@@ -797,7 +798,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
     setLoading(true);
     try {
       const [e, p] = await Promise.all([
-        get<any[]>('/badminton/enrollments'),
+        activationOnly ? Promise.resolve([]) : get<any[]>('/badminton/enrollments'),
         get<any[]>('/packages/badminton')
       ]);
       setEnrollments(e);
@@ -1013,7 +1014,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
           >
             <option value="">Select active package</option>
             {packages
-              .filter(p => p.status === 'active')
+              .filter(p => p.status === 'active' && p.category?.active && p.category?.code)
               .map(p =>
                 <option key={p.id} value={p.id}>
                   {p.category?.name || 'Category needs review'} · {p.title} · {p.sessions} sessions · {p.validity} days · {money(p.price)}
@@ -1040,7 +1041,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
           {purchase && customerType === 'member' && !memberAccounts.length &&
             <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
               <b>No member accounts found.</b> You can still activate a walk-in package.</p>}
-          {!packages.filter(p => p.status === 'active').length &&
+          {!packages.filter(p => p.status === 'active' && p.category?.active && p.category?.code).length &&
             <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
               <b>No active packages.</b> Create or activate a badminton package in Admin Package Management.</p>}
           {actionError &&
@@ -1082,6 +1083,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
   </>;
 
   if (activationOnly) return <div className="mx-auto max-w-6xl">
+    <PackageMemberDirectory packages={packages}/>
     <div className="mb-7 max-w-xl">
       <p className="text-xs font-semibold uppercase tracking-[.18em] text-zawana-500">Package activation</p>
       <h2 className="mt-2 text-3xl font-semibold tracking-tight text-zawana-950">A fresh start, in a few steps.</h2>
@@ -1121,13 +1123,13 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
         <Card className="p-5 sm:p-7">
           <div className="mb-5 flex items-center gap-3"><span className="grid h-7 w-7 place-items-center rounded-full border border-zawana-border text-xs font-semibold text-zawana-500">2</span><h3 className="text-base font-semibold">Choose a package</h3></div>
           <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Badminton package">
-            {packages.filter(p => p.status === 'active').map(p => <button key={p.id} disabled={busy} aria-pressed={packageId === p.id} aria-label={`Select ${p.title}`} onClick={() => { setPackageId(p.id); setActionError('') }} className={`relative min-w-0 rounded-2xl border p-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${packageId === p.id ? 'border-zawana-950 bg-zawana-950/[.025] ring-1 ring-zawana-950' : 'border-zawana-border hover:border-zawana-500/50'}`}>
+            {packages.filter(p => p.status === 'active' && p.category?.active && p.category?.code).map(p => <button key={p.id} disabled={busy} aria-pressed={packageId === p.id} aria-label={`Select ${p.title}`} onClick={() => { setPackageId(p.id); setActionError('') }} className={`relative min-w-0 rounded-2xl border p-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${packageId === p.id ? 'border-zawana-950 bg-zawana-950/[.025] ring-1 ring-zawana-950' : 'border-zawana-border hover:border-zawana-500/50'}`}>
               <span className="flex items-start justify-between gap-3"><span className="text-sm font-semibold">{p.title}</span><span aria-hidden="true" className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${packageId === p.id ? 'border-zawana-950 bg-zawana-950 text-white' : 'border-zawana-border'}`}>{packageId === p.id && <Check size={12} />}</span></span>
               <span className="mt-2 block text-xs text-zawana-500">{p.category?.name || 'Category needs review'} · {p.sessions} sessions <span className="mx-1">·</span> {p.validity} days</span>
               <span className="mt-5 block text-lg font-semibold tracking-tight">{money(p.price)}</span>
             </button>)}
           </div>
-          {!packages.some(p => p.status === 'active') && <p className="py-6 text-center text-sm text-zawana-500">{loading ? 'Loading packages…' : 'No active packages available.'}</p>}
+          {!packages.some(p => p.status === 'active' && p.category?.active && p.category?.code) && <p className="py-6 text-center text-sm text-zawana-500">{loading ? 'Loading packages…' : 'No active packages available.'}</p>}
         </Card>
       </div>
       <Card className="overflow-hidden lg:sticky lg:top-6">
@@ -1189,7 +1191,7 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
               setPurchaseStudentId('');
               setWalkIn({ name: '', phone: '' });
               setCustomerType('member');
-              setPackageId(packages.find((p: any) => p.status === 'active')?.id || '');
+              setPackageId(packages.find((p: any) => p.status === 'active' && p.category?.active && p.category?.code)?.id || '');
               setPaymentMethod('Cash');
               setDiscountPercent('0');
               setMemberQuery('')
@@ -1990,7 +1992,7 @@ function BadmintonPackages() {
     void refreshPurchases()
   }, []);
 
-  return <div className="space-y-6"><BadmintonCategorySettings />
+  return <div className="space-y-6"><BadmintonCategorySettings onChanged={o.refresh} />
     {purchases.length > 0 &&
       <section>
         <div className="mb-3">
@@ -2020,7 +2022,7 @@ function BadmintonPackages() {
 
     <div className="grid gap-3 sm:grid-cols-3">{[['Packages', o.badmintonPackages.length], ['Active', o.badmintonPackages.filter(p => p.status === 'active').length], ['Coming soon', o.badmintonPackages.filter(p => p.status === 'coming_soon').length]].map(([label, value]) => <Card key={label} className="p-5"><p className="text-xs text-zawana-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p></Card>)}</div>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3 rounded-xl border bg-white px-4 sm:w-80"><Search size={16} className="shrink-0 text-zawana-500" /><input aria-label="Search packages" placeholder="Search packages" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 w-full !border-0 !bg-transparent !px-0 !shadow-none !outline-none !ring-0" /></div><Select aria-label="Package catalog status" className="min-w-40 text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="active">Active</option><option value="coming_soon">Coming soon</option><option value="inactive">Inactive</option></Select></div>
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((p: any) => <Card key={p.id} className="flex flex-col overflow-hidden p-0"><div className="flex-1 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zawana-gold/10 text-zawana-950"><PackagePlus size={18} /></span><Badge good={p.status === 'active'}>{p.status === 'coming_soon' ? 'Coming soon' : p.status}</Badge></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{p.title}</h3><p className="mt-1 text-xs text-zawana-500">{p.category?.name || 'Category needs review'}{p.category?.code ? ` · ${p.category.code}` : ''}</p><p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zawana-500">{p.description || 'Badminton session package'}</p><p className="mt-5 text-2xl font-semibold tracking-tight">{money(p.price)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zawana-500"><span>{p.sessions} sessions</span><span>{p.validity} days validity</span></div><p className="mt-3 text-xs leading-relaxed text-zawana-500"><span className="font-semibold">Available days:</span> {badmintonDaysLabel(p.availableDays)}</p><p className="mt-4 border-t border-zawana-border pt-4 text-xs leading-relaxed text-zawana-500">{p.availableFrom && p.availableUntil ? `${p.availableFrom}–${p.availableUntil} · ` : ''}{p.scheduleNotes || 'Flexible schedule'}{p.courtRules ? ` · ${p.courtRules}` : ''}</p></div><div className="flex items-center justify-between border-t border-zawana-border bg-zawana-950/[.015] px-5 py-3"><span className="text-xs text-zawana-500">Manage package</span><div className="flex gap-2"><PackageEdit item={p} kind="badminton" /><PackageDelete id={p.id} name={p.title} kind="badminton" /></div></div></Card>)}</div>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((p: any) => <Card key={p.id} className="flex flex-col overflow-hidden p-0"><div className="flex-1 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zawana-gold/10 text-zawana-950"><PackagePlus size={18} /></span><Badge good={p.status === 'active'}>{p.status === 'coming_soon' ? 'Coming soon' : p.status}</Badge></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{p.title}</h3><p className="mt-1 text-xs text-zawana-500">{p.category?.name || 'Category needs review'}{p.category?.code ? ` · ${p.category.code}` : ''}{p.category&&!p.category.active?' · Category archived':''}</p><p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zawana-500">{p.description || 'Badminton session package'}</p><p className="mt-5 text-2xl font-semibold tracking-tight">{money(p.price)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zawana-500"><span>{p.sessions} sessions</span><span>{p.validity} days validity</span></div><p className="mt-3 text-xs leading-relaxed text-zawana-500"><span className="font-semibold">Available days:</span> {badmintonDaysLabel(p.availableDays)}</p><p className="mt-4 border-t border-zawana-border pt-4 text-xs leading-relaxed text-zawana-500">{p.availableFrom && p.availableUntil ? `${p.availableFrom}–${p.availableUntil} · ` : ''}{p.scheduleNotes || 'Flexible schedule'}{p.courtRules ? ` · ${p.courtRules}` : ''}</p></div><div className="flex flex-wrap gap-3 items-center justify-between border-t border-zawana-border bg-zawana-950/[.015] px-5 py-3"><span className="text-xs text-zawana-500">Manage package</span><div className="flex flex-wrap gap-2"><PackageMembers packageId={p.id} name={p.title}/><PackageEdit item={p} kind="badminton" /><PackageDelete id={p.id} name={p.title} kind="badminton" /></div></div></Card>)}</div>
     {!shown.length && <Empty title="No matching packages" body="Try another search or create a new package." />}
   </div>
 }

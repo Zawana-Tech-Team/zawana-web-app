@@ -37,3 +37,11 @@ npx prisma generate
 For PostgreSQL use `--schema prisma/postgresql/schema.prisma` on both commands. Verification uses isolated SQLite databases; the workspace's application database was not migrated, and live PostgreSQL was not tested. Restoration after conflict resolution is explicit via Retry restoration, rather than automatically cancelling or moving any booking.
 
 Verification results: production build and both TypeScript checks passed; the full backend rerun passed 209 tests with 3 PostgreSQL-only skips. The first full run encountered the existing package-reauthentication timing assertions; the unchanged tests passed on rerun. Both the holiday browser journey and the reviewed-rescheduling regression journey passed.
+
+## Category scope (master Phase 7)
+
+The 20261123120000 migration adds explicit class category codes and nullable holiday category lists. Null retains all-class behavior. Selected categories affect only classified matching classes; original unclassified schedules remain untouched. UI now supports name/notes, ranges, scope editing, detailed preview, and confirmation before removal. Conflicting restorations stay suspended. See the phase report in `production-stabilization-audit.md` for API and deployment details.
+
+### Editing dates and reviewing restoration
+
+Use Edit holiday, select replacement dates, and review the previous dates to restore before saving. `sourceDates` identifies the dates being replaced, and is included in the same revision as the replacement scope. Conflicting restorations remain suspended. A different pre-existing holiday cannot be silently overwritten during a date move. Removal previews return a revision which the updated UI submits with DELETE; changes since the preview require review again. Archived categories remain selectable for managing their existing classes. No booking, package balance, expiry date or payment is changed by these actions.

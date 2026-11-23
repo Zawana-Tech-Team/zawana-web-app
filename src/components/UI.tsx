@@ -199,12 +199,14 @@ export function Page({
   title,
   eyebrow,
   children,
-  actions
+  actions,
+  showTrail=true
 }: {
   title: string;
   eyebrow?: string;
   children: ReactNode;
-  actions?: ReactNode
+  actions?: ReactNode;
+  showTrail?: boolean
 }) {
   const reduceMotion = useReducedMotion();
   const { t } = useLanguage();
@@ -216,7 +218,7 @@ export function Page({
       variants={pageEntrance}
       className="workspace-page mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 md:px-8 md:py-8"
     >
-      <div className="workspace-page__trail"><span>THE ART OF PERFORMANCE</span><Link to="/">Back to the arena <ArrowUpRight size={13} aria-hidden="true" /></Link></div>
+      {showTrail&&<div className="workspace-page__trail"><span>THE ART OF PERFORMANCE</span><Link to="/">Back to the arena <ArrowUpRight size={13} aria-hidden="true" /></Link></div>}
       <div className="workspace-page__heading mb-6 flex flex-col justify-between gap-4 sm:mb-8 md:flex-row md:items-end">
         <div className="min-w-0">
           {eyebrow &&

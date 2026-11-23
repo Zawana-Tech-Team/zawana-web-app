@@ -1,6 +1,6 @@
 import { addDateKeyDays } from '../utils/dateKeys.js';
-export type BlockOverride = { type: string; weeklyOnly?: boolean; holidayActive?: boolean; suspendedBlockIds?: unknown };
-export type ScheduledBlock = { id?: string; type?: string; date: string; dayOfWeek: number | null; active?: boolean | number; effectiveFrom?: string | null; effectiveUntil?: string | null; excludedDates?: unknown };
+export type BlockOverride = { type: string; weeklyOnly?: boolean; holidayActive?: boolean; suspendedBlockIds?: unknown; categoryCodes?: unknown };
+export type ScheduledBlock = { id?: string; type?: string; categoryCode?: string | null; date: string; dayOfWeek: number | null; active?: boolean | number; effectiveFrom?: string | null; effectiveUntil?: string | null; excludedDates?: unknown };
 export function blockExcludedDates(block: ScheduledBlock): string[] {
   let value = block.excludedDates;
   if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = []; } }
@@ -9,7 +9,7 @@ export function blockExcludedDates(block: ScheduledBlock): string[] {
 export function blockOccurs(block: ScheduledBlock, date: string, override: boolean | BlockOverride | null = false) {
   if (block.active === false || block.active === 0 || (block.effectiveFrom && date < block.effectiveFrom) || (block.effectiveUntil && date > block.effectiveUntil) || blockExcludedDates(block).includes(date)) return false;
   const bypassRecurring = override === true || (!!override && typeof override === 'object' && override.type === 'open' && !override.weeklyOnly);
-  if (override && typeof override === 'object' && override.weeklyOnly && block.type === 'class' && (override.holidayActive || (Array.isArray(override.suspendedBlockIds) && override.suspendedBlockIds.includes(block.id)))) return false;
+  if (override && typeof override === 'object' && override.weeklyOnly && block.type === 'class' && ((override.holidayActive && (!Array.isArray(override.categoryCodes) || override.categoryCodes.includes(block.categoryCode))) || (Array.isArray(override.suspendedBlockIds) && override.suspendedBlockIds.includes(block.id)))) return false;
   return block.date === date || (!bypassRecurring && block.dayOfWeek != null && new Date(`${date}T12:00:00Z`).getUTCDay() === block.dayOfWeek);
 }
 export function blocksShareDate(a: ScheduledBlock, b: ScheduledBlock, from: string, overrides: ReadonlyMap<string, BlockOverride> = new Map()) {

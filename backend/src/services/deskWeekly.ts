@@ -6,7 +6,8 @@ import { businessNow, formatRange, overlaps, range, today } from './courtPolicy.
 import { isDateKey } from '../utils/dateKeys.js';
 
 /** Court locks match rental creation: validate the entire recurring batch before any writes. */
-async function writeWeekly(db: Prisma.TransactionClient, actorId: string, input: { courtIds: string[]; date: string; time: string; title: string; requestKey: string }) {
+async function writeWeekly(db: Prisma.TransactionClient, actorId: string, input: { courtIds: string[]; date: string; time: string; title: string; categoryCode?: string; requestKey: string }) {
+  if(input.categoryCode&&!await db.badmintonPackageCategory.findFirst({where:{code:input.categoryCode,active:true}}))throw bookingFailure(400,'Choose an active class category.');
   const span = range(input.time);
   if (!isDateKey(input.date) || input.date < today() || !span || span.end - span.start !== 60 || span.start < 360 || span.end > 1260 || span.start % 60)
     throw bookingFailure(400, 'Choose a future dated one-hour session between 6 AM and 9 PM.');
@@ -16,7 +17,7 @@ async function writeWeekly(db: Prisma.TransactionClient, actorId: string, input:
   const dayOfWeek = new Date(`${input.date}T12:00:00Z`).getUTCDay();
   const clock = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
   const requestPrefix = createHash('sha256').update(`${actorId}:${input.requestKey}`).digest('hex');
-  const requestHash = createHash('sha256').update(JSON.stringify([ids, input.date, input.time, input.title])).digest('hex');
+  const requestHash = createHash('sha256').update(JSON.stringify([ids, input.date, input.time, input.title,...(input.categoryCode?[input.categoryCode]:[])])).digest('hex');
   const notePrefix = `Desk weekly request ${requestPrefix}:`;
   const note = `${notePrefix}${requestHash}`;
   try {
@@ -38,14 +39,14 @@ async function writeWeekly(db: Prisma.TransactionClient, actorId: string, input:
         tx.courtBlock.findMany({ where: { courtId: { in: ids }, active: true } }),
       ]);
       const overrides = new Map((await tx.courtDateOverride.findMany()).map(o => [o.date, o]));
-      const template = { date: '', type: 'class', dayOfWeek, effectiveFrom: input.date };
+      const template = { date: '', type: 'class', categoryCode:input.categoryCode, dayOfWeek, effectiveFrom: input.date };
       if (bookings.some(row => blockOccurs(template, row.date, overrides.get(row.date)) && overlaps(row.time, formatRange(span.start, span.end))) ||
           blocks.some(row => blocksShareDate(row, template, input.date, overrides) && overlaps(`${row.start} — ${row.end}`, input.time)))
         throw bookingFailure(409, 'A selected court has a conflicting current or future weekly session. No reservations were created.');
       const rows = [];
       for (const courtId of ids) rows.push(await tx.courtBlock.create({ data: {
         id: `weekly-${createHash('sha256').update(`${requestPrefix}:${courtId}`).digest('hex')}`,
-        courtId, date: '', effectiveFrom: input.date, dayOfWeek, start: clock(span.start), end: clock(span.end), title: input.title, type: 'class', active: true, note,
+        courtId, date: '', effectiveFrom: input.date, dayOfWeek, start: clock(span.start), end: clock(span.end), title: input.title, categoryCode:input.categoryCode, type: 'class', active: true, note,
       } }));
       return rows;
     }
@@ -55,10 +56,10 @@ async function writeWeekly(db: Prisma.TransactionClient, actorId: string, input:
   }
 }
 
-export async function reserveDeskWeekly(db: PrismaClient, actorId: string, input: { courtIds: string[]; date: string; time: string; title: string; requestKey: string }) {
+export async function reserveDeskWeekly(db: PrismaClient, actorId: string, input: { courtIds: string[]; date: string; time: string; title: string; categoryCode?: string; requestKey: string }) {
   return db.$transaction(tx => writeWeekly(tx, actorId, input));
 }
-export async function reserveWeeklySelections(db: PrismaClient, actorId: string, input: { selections: { courtId: string; date: string; time: string }[]; title: string; requestKey: string }) {
+export async function reserveWeeklySelections(db: PrismaClient, actorId: string, input: { selections: { courtId: string; date: string; time: string }[]; title: string; categoryCode?: string; requestKey: string }) {
   const payloadHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
   return db.$transaction(async tx => {
     const existing = await tx.deskMoveBatch.findUnique({ where: { actorId_requestKey: { actorId, requestKey: input.requestKey } } });
@@ -66,7 +67,7 @@ export async function reserveWeeklySelections(db: PrismaClient, actorId: string,
     const receipt = await tx.deskMoveBatch.create({ data: { actorId, requestKey: input.requestKey, payloadHash, reason: 'Weekly class creation', result: {} } });
     for (const id of [...new Set(input.selections.map(s => s.courtId))].sort()) await tx.$executeRaw`UPDATE "Court" SET status=status WHERE id=${id}`;
     const rows = [];
-    for (const [i, selection] of input.selections.entries()) rows.push(...await writeWeekly(tx, actorId, { ...selection, courtIds: [selection.courtId], title: input.title, requestKey: `${input.requestKey}:${i}` }));
+    for (const [i, selection] of input.selections.entries()) rows.push(...await writeWeekly(tx, actorId, { ...selection, courtIds: [selection.courtId], title: input.title, categoryCode:input.categoryCode, requestKey: `${input.requestKey}:${i}` }));
     const result = JSON.parse(JSON.stringify(rows));
     await tx.deskMoveBatch.update({ where: { id: receipt.id }, data: { result } });
     return result;

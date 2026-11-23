@@ -1,7 +1,7 @@
 import { operationalReasons } from '../domain/rescheduleReasons.js';
 import { previewRefundBatch, completeRefundBatch, completeRefund, refundDetails, listRefunds, memberRefunds, refundInput, deliverRefundNotifications } from '../services/bookingRefunds.js';
 import { removeClassOccurrences, removeWeeklyClasses } from '../services/weeklyRemoval.js';
-import { cancelStaffRequest, staffBookingDetail, createStaffRequest, createStaffRequests, listBookingRequests, customerRequestAction, quoteCustomerRequest, requestAvailability, confirmCustomerRequest } from '../services/bookingRequests.js';
+import { startMemberReschedule, cancelStaffRequest, staffBookingDetail, createStaffRequest, createStaffRequests, listBookingRequests, customerRequestAction, quoteCustomerRequest, requestAvailability, confirmCustomerRequest } from '../services/bookingRequests.js';
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
@@ -38,11 +38,15 @@ export function createReschedulingRouter(db: PrismaClient, authenticate = auth) 
   }));
   r.post('/weekly/remove', roles('admin','badminton_fo'), asyncRoute(async(req:AuthRequest,res)=>{const b=z.object({blockIds:z.array(z.string().min(1)).min(1).max(30),requestKey:z.string().uuid()}).strict().parse(req.body);res.json(await removeWeeklyClasses(db,req.user!,b.blockIds,b.requestKey));}));
   r.get('/bookings/:id/details', roles('admin', 'badminton_fo'), asyncRoute(async(req:AuthRequest,res)=>res.json(await staffBookingDetail(db,req.user!,String(req.params.id)))));
+  r.post('/member/bookings/:id/session', roles('member'), asyncRoute(async(req:AuthRequest,res)=>{
+    const body=z.object({requestId:z.string().min(1).optional()}).strict().parse(req.body);
+    res.json(await startMemberReschedule(db,req.user!,String(req.params.id),body.requestId));
+  }));
   r.get('/requests', asyncRoute(async(req:AuthRequest,res)=>res.json(await listBookingRequests(db,req.user!))));
   r.post('/requests', roles('admin','badminton_fo'), asyncRoute(async(req:AuthRequest,res)=>{const b=z.object({bookingId:z.string().min(1),reason:z.enum(operationalReasons),notes:z.string().trim().max(1000).default('')}).strict().parse(req.body);res.status(201).json(await createStaffRequest(db,req.user!,b.bookingId,b.reason,b.notes));}));
   r.post('/requests/batch', roles('admin','badminton_fo'), asyncRoute(async(req:AuthRequest,res)=>{const b=z.object({bookingIds:z.array(z.string().min(1)).min(1).max(30),requestKey:z.string().uuid().optional(),reason:z.enum(operationalReasons),notes:z.string().trim().max(1000).default('')}).strict().parse(req.body);res.status(201).json(await createStaffRequests(db,req.user!,b.bookingIds,b.reason,b.notes,b.requestKey));}));
   r.post('/requests/:id/cancel', roles('admin','badminton_fo'), asyncRoute(async(req:AuthRequest,res)=>res.json(await cancelStaffRequest(db,req.user!,String(req.params.id)))));
-  r.post('/requests/:id/respond', roles('member'), asyncRoute(async(req:AuthRequest,res)=>{const b=z.object({action:z.enum(['ADMIN_HANDLING','REFUND_REQUESTED','DECLINED'])}).strict().parse(req.body);res.json(await customerRequestAction(db,req.user!,String(req.params.id),b.action));}));
+  r.post('/requests/:id/respond', roles('member'), asyncRoute(async(req:AuthRequest,res)=>{const b=z.object({action:z.enum(['ADMIN_HANDLING','REFUND_REQUESTED','DECLINED','ACKNOWLEDGED'])}).strict().parse(req.body);res.json(await customerRequestAction(db,req.user!,String(req.params.id),b.action));}));
   const customerTarget=z.object({courtId:z.string().min(1),date:z.string(),time:z.string()}).strict();
   r.get('/requests/:id/availability', roles('member'), asyncRoute(async(req:AuthRequest,res)=>res.json(await requestAvailability(db,req.user!,String(req.params.id),String(req.query.date||''),String(req.query.courtId||'')))));
   r.post('/requests/:id/quote', roles('member'), asyncRoute(async(req:AuthRequest,res)=>res.json(await quoteCustomerRequest(db,req.user!,String(req.params.id),customerTarget.parse(req.body)))));

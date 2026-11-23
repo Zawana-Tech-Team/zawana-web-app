@@ -1,3 +1,4 @@
+import { affectedBookingMessage } from '../domain/requestMessages.js';
 import type { Notification, PrismaClient } from '@prisma/client';
 import { scheduleInstant } from './courtChanges.js';
 
@@ -14,7 +15,7 @@ export async function notificationLifecycle(db: PrismaClient, rows: Notification
     db.privateTrainingSession.findMany({ where: { id: { in: ids('gym_session') } }, select: { id: true, status: true } }),
     db.gymEnrollment.findMany({ where: { id: { in: ids('gym_enrollment') } }, select: { id: true, status: true } }),
     db.badmintonEntryQr.findMany({ where: { id: { in: ids('qr', 'badminton-qr') } }, select: { id: true, status: true, expiresAt: true, revokedAt: true } }),
-    db.bookingRequestBatch.findMany({ where: { id: { in: ids('reschedule_batch') } }, select: { id: true, requests: { select: { status: true } } } }),
+    db.bookingRequestBatch.findMany({ where: { id: { in: ids('reschedule_batch') } }, select: { id: true, reason: true, requests: { select: { status: true } } } }),
   ]);
   return rows.map(row => {
     let expiresAt = new Date(row.createdAt.getTime() + NOTIFICATION_LIFETIME_MS), done = false;
@@ -44,7 +45,7 @@ export async function notificationLifecycle(db: PrismaClient, rows: Notification
       sooner(qr?.expiresAt);
     }
     const batch = row.entityType === 'reschedule_batch' ? batches.find(batch => batch.id === row.entityId) : undefined;
-    const body = batch ? `${row.body}\n\n${batch.requests.length} booking requests · ${batch.requests.filter(item => item.status === 'PENDING_CUSTOMER').length} awaiting response. Review each booking separately.` : row.body;
-    return { ...row, body, expiresAt, activeInInbox: row.activeInInbox && !done && expiresAt > now };
+    const body = batch ? `${affectedBookingMessage(batch.reason)}\n\n${batch.requests.length} Requests · ${batch.requests.filter(item => item.status === 'PENDING_CUSTOMER').length} awaiting response.` : row.body;
+    return { ...row, title: batch ? `${batch.requests.length} ${batch.requests.length===1?'Request':'Requests'}` : row.title, body, expiresAt, activeInInbox: row.activeInInbox && !done && expiresAt > now };
   });
 }

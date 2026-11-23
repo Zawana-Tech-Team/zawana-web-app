@@ -1,3 +1,4 @@
+import { createPackageManagementRouter } from './routes/packageManagement.js';
 import { createHolidayRouter } from './routes/holidays.js';
 import { expirePrivateReschedules } from './services/privateRescheduling.js';
 import { createReschedulingRouter } from './routes/rescheduling.js';
@@ -10,7 +11,7 @@ import { notifyExpiredBadmintonPackages } from "./services/attendanceNotificatio
 import { createNotificationRouter } from "./routes/notifications.js";
 import { createPackageSecurity, recordPackageMutation } from "./services/packageSecurity.js";
 import { createPrivateCourseFinanceRouter } from './routes/privateCourseFinance.js';
-import { categoryCodeInput, packageCategory, checkInTransaction, classifyLegacyPackage } from "./services/badmintonCategory.js";
+import { packageCategory, checkInTransaction, classifyLegacyPackage } from "./services/badmintonCategory.js";
 import "dotenv/config";
 import { createBadmintonVisit } from "./services/badmintonAttendance.js";
 import { badmintonSaleFields, badmintonSaleTotals } from "./services/badmintonSale.js";
@@ -115,6 +116,7 @@ app.use(
 const packageSecurity = createPackageSecurity(prisma);
 app.use("/api/package-security", packageSecurity.router);
 app.use("/api", packageSecurity.protect);
+app.use("/api/packages/badminton", createPackageManagementRouter(prisma));
 app.use("/api/store", storeRoutes);
 app.use("/api/menu", menuRoutes);
 app.use("/api/auth", authRoutes);
@@ -2547,52 +2549,13 @@ app.get(
       await prisma.badmintonPackage.findMany({
         where: ["admin", "owner", "badminton_fo"].includes(req.user!.role)
           ? {}
-          : { status: { in: ["active", "coming_soon"] } },
+          : { status: { in: ["active", "coming_soon"] }, category:{is:{active:true,code:{not:null}}} },
         include: { category: true },
         orderBy: { title: "asc" }
       })
     )
   )
 );
-app.get(
-  "/api/packages/badminton/categories",
-  auth,
-  asyncRoute(async (req, res) =>
-    res.json(
-      await prisma.badmintonPackageCategory.findMany({
-        where: ["admin", "owner", "badminton_fo"].includes(req.user!.role) ? {} : { active: true },
-        orderBy: { name: "asc" }
-      })
-    )
-  )
-);
-app.post(
-  "/api/packages/badminton/categories",
-  auth,
-  roles("admin"),
-  asyncRoute(async (req: AuthRequest, res) => {
-    const { name, code: categoryCode } = z.object({ name: z.string().trim().min(1), code: categoryCodeInput }).strict().parse(req.body);
-    if (!name) return res.status(400).json({ message: "Category name is required." });
-    res
-      .status(201)
-      .json(
-        await checkInTransaction(prisma, async tx => {
-          const row = await tx.badmintonPackageCategory.create({ data: { name, code: categoryCode, createdBy: req.user!.id } });
-          await recordPackageMutation(tx, req.user!.id, 'badminton', null, row, res.locals.packageAuditId);
-          return row;
-        })
-      )
-  })
-);
-app.patch('/api/packages/badminton/categories/:id', auth, roles('admin'), asyncRoute(async (req, res) => {
-  const data = z.object({ name: z.string().trim().min(1).optional(), active: z.boolean().optional() }).strict().parse(req.body);
-  res.json(await checkInTransaction(prisma, async tx => {
-    const before = await tx.badmintonPackageCategory.findUniqueOrThrow({ where: { id: String(req.params.id) } });
-    const row = await tx.badmintonPackageCategory.update({ where: { id: before.id }, data });
-    await recordPackageMutation(tx, req.user!.id, 'badminton', before, row, res.locals.packageAuditId);
-    return row;
-  }));
-}));
 const badmintonPackageInput = z.object({
   title: z.string().trim().min(2).max(120),
   price: z.coerce.number().int().nonnegative(),
@@ -2610,8 +2573,8 @@ const badmintonPackageInput = z.object({
 });
 app.post('/api/packages/badminton', auth, roles('admin', 'badminton_fo'), asyncRoute(async (req, res) => {
   const data = badmintonPackageInput.parse(req.body);
-  const category = await prisma.badmintonPackageCategory.findFirst({ where: { id: data.categoryId, active: true, code: { in: ['FOUNDATION', 'SOCIAL', 'PATHWAY'] } } });
-  if (!category) return res.status(400).json({ code: 'CATEGORY_REQUIRED', message: 'Choose Foundation, Social, or Pathway.' });
+  const category = await prisma.badmintonPackageCategory.findFirst({ where: { id: data.categoryId, active: true, code: { not: null } } });
+  if (!category) return res.status(400).json({ code: 'CATEGORY_REQUIRED', message: 'Choose an active package category.' });
   res.status(201).json(await checkInTransaction(prisma, async tx => {
     const row = await tx.badmintonPackage.create({ data });
     await recordPackageMutation(tx, req.user!.id, 'badminton', null, row, res.locals.packageAuditId);
@@ -2620,8 +2583,8 @@ app.post('/api/packages/badminton', auth, roles('admin', 'badminton_fo'), asyncR
 }));
 app.patch('/api/packages/badminton/:id', auth, roles('admin', 'badminton_fo'), asyncRoute(async (req, res) => {
   const data = badmintonPackageInput.partial().parse(req.body);
-  if (data.categoryId && !await prisma.badmintonPackageCategory.findFirst({ where: { id: data.categoryId, active: true, code: { in: ['FOUNDATION', 'SOCIAL', 'PATHWAY'] } } }))
-    return res.status(400).json({ code: 'CATEGORY_REQUIRED', message: 'Choose Foundation, Social, or Pathway.' });
+  if (data.categoryId && !await prisma.badmintonPackageCategory.findFirst({ where: { id: data.categoryId, active: true, code: { not: null } } }))
+    return res.status(400).json({ code: 'CATEGORY_REQUIRED', message: 'Choose an active package category.' });
   res.json(await checkInTransaction(prisma, async tx => {
     await tx.$executeRaw`UPDATE "BadmintonPackage" SET "status"="status" WHERE "id"=${String(req.params.id)}`;
     const before = await tx.badmintonPackage.findUniqueOrThrow({ where: { id: String(req.params.id) } });
@@ -3700,6 +3663,7 @@ app.get(
   auth,
   roles("member"),
   asyncRoute(async (req: AuthRequest, res) => {
+    res.setHeader('Cache-Control','no-store');
     await expirePrivateCourseReservations();
     const dashboardDate = String(req.query.referenceDate || today());
     if (!isDateKey(dashboardDate))
@@ -3814,8 +3778,10 @@ app.get(
     ]);
     const active =
       enrollments.find(
-        e => e.status === "active" && e.expiryDate >= today() && Number(e.sessionsRemaining) > 0
+        e => e.status === "active" && e.startDate <= today() && e.expiryDate >= today() && Number(e.sessionsRemaining) > 0
       ) || null;
+    const requestScope={customerId:req.user!.id,requestedById:{not:req.user!.id},activeKey:{not:null},status:'PENDING_CUSTOMER',expiresAt:{gt:new Date()}};
+    const [requestCount,nextRequest]=await Promise.all([prisma.bookingRescheduleRequest.count({where:requestScope}),prisma.bookingRescheduleRequest.findFirst({where:requestScope,orderBy:{createdAt:'asc'},select:{id:true,batchId:true}})]);
     const checkIns = await prisma.badmintonCheckIn.findMany({
       where: { enrollment: { OR: [{ userId: req.user!.id }, { userId: null, studentId: req.user!.id }] } },
       orderBy: [{ date: 'desc' }, { time: 'desc' }], take: 100,
@@ -3838,6 +3804,8 @@ app.get(
       packages,
       notifications,
       enrollments,
+      requestCount,
+      requestLink:nextRequest?`/bookings?${nextRequest.batchId?'batch='+nextRequest.batchId:'request='+nextRequest.id}`:null,
       enrollment: active,
       enrollmentHistory: enrollments,
       checkIns,

@@ -43,6 +43,7 @@ try {
   const targetDate = day.toISOString().slice(0, 10);
   const booking = (await createCourtBooking(db, users[2], { bookings: [{ courtId: court.id, date: targetDate, time: '8:00 AM — 9:00 AM' }] })).booking;
   await db.booking.update({ where: { id: booking.id }, data: { paymentStatus: 'paid' } });
+  await db.transaction.updateMany({where:{resourceType:'booking',resourceId:booking.id},data:{status:'paid',paymentMethod:'Cash'}});
   const secondary = await db.user.create({ data: { name: 'Ko Second Member', email: 'second@attendance.test', role: 'member' } });
   await db.badmintonEnrollment.create({ data: { userId: secondary.id, studentId: secondary.id, studentName: secondary.name, phone: '', packageId: pkg.id, packageName: pkg.title, categoryCode: 'SOCIAL', sessionsTotal: 10, sessionsRemaining: 10, startDate: today(), expiryDate: '2099-01-01' } });
   const secondaryMember = { id: secondary.id, token: (await createSessionService(db).issue(db, secondary, 'database_password', [])).accessToken };

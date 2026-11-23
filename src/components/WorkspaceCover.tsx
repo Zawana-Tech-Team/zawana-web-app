@@ -110,8 +110,9 @@ const covers: Record<
 
 export default function WorkspaceCover({ role }: { role: UserRole }) {
   const { pathname } = useLocation();
+  if(role==='member')return null;
   const cover = covers[role];
-  if (pathname !== cover.root && !(role === 'member' && pathname === '/dashboard')) return null;
+  if (pathname !== cover.root) return null;
   return (
     <LocalizedTree>
       <div className="workspace-cover-wrap">

@@ -189,3 +189,7 @@ Local reproduction used CI's Node 22 and pnpm 10.30.3: both frozen lockfile chec
 These are local CI-equivalent results. GitHub Actions will verify the committed revision when it is pushed. No deployment was performed. The previously recorded macOS browser-startup limitation is outside the configured CI/build jobs.
 
 The local category preflight at this check found all 14 catalogue packages categorized and no unresolved active enrollments; two unclassified historical check-ins and one historical duplicate group remain preserved for review. No production database was inspected or changed.
+
+## Category management extension (master Phase 6)
+
+The three original codes remain the initial categories. Admin can now register additional stable uppercase codes, edit names/descriptions, archive and reactivate categories. Both database histories preserve snapshot immutability while allowing registered new codes. Archiving never removes historical references or balances. Category-specific holiday check-ins are rejected with zero deduction. Account verification continues to protect catalogue mutations. See `production-stabilization-audit.md` for the phase report and migration requirements.

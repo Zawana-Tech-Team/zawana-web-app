@@ -1,3 +1,4 @@
+import { rentalDestinationPrice } from './rentalPricing.js';
 import { paidRentalAmount } from './rentalPaymentBalance.js';
 import { createHash } from 'node:crypto';
 import type { Prisma, PrismaClient, Role, CourtBlock, Booking } from '@prisma/client';
@@ -61,7 +62,7 @@ async function plan(tx: Tx, actor: Actor, raw: MoveInput) {
       if (await tx.paymentAttempt.findFirst({ where: { resourceId: b.id, status: { in: ['INITIATING', 'PENDING'] } } })) throw fail(409, 'Resolve the existing payment checkout before moving this rental.');
       if (await tx.bookingRescheduleRequest.findFirst({where:{activeKey:b.id,status:'REFUND_REQUESTED'}})) throw fail(409,'Resolve the pending refund review before rescheduling.');
       const historyCount = await tx.bookingChangeHistory.count({ where: { bookingId: b.id } });
-      const destinationPrice = Array.from({ length: Math.ceil(duration / 60) }, (_, i) => holiday?.active ? holiday.price : court.price + (r.start + i * 60 >= 900 ? 5000 : 0)).reduce((a, b) => a + b, 0);
+      const destinationPrice = rentalDestinationPrice(court.price,r.start,duration,holiday);
       const customerRequest = await tx.bookingRescheduleRequest.findUnique({where:{activeKey:b.id}});
       const recordedPaid = customerRequest && b.paymentStatus==='paid' ? await paidRentalAmount(tx,b) : b.price;
       if(recordedPaid==null)throw fail(409,'The original paid amount needs reconciliation before this move.');
@@ -140,7 +141,7 @@ export async function confirmDeskMoves(db: PrismaClient, actor: Actor, input: Mo
       }
     } else {
       for (const [id, block] of p.updates) await tx.courtBlock.update({ where: { id }, data: { effectiveUntil: block.effectiveUntil, excludedDates: block.excludedDates ?? undefined, active: block.active } });
-      for (const t of p.targets) { const { id, sourceId, ...data } = t; await tx.courtBlock.create({ data: { ...data, excludedDates: data.excludedDates ?? [], note: `Moved from ${sourceId} · ${batch.id}` } }); }
+      for (const t of p.targets) { const { sourceId, ...data } = t; await tx.courtBlock.create({ data: { ...data, id: undefined, excludedDates: data.excludedDates ?? [], note: `Moved from ${sourceId} · ${batch.id}` } }); }
     }
     const result = json({ batchId: batch.id, rows: p.rows, surcharge: p.surcharge, payment: surchargeReceipt });
     await tx.deskMoveBatch.update({ where: { id: batch.id }, data: { result } });

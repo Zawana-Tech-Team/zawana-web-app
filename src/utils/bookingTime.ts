@@ -52,8 +52,8 @@ export function bookingHasStarted(
 }
 
 /** Mirrors backend recurrence bounds so monthly calendars agree with authoritative availability. */
-export function courtBlockOccurs(block: { id?: string; type?: string; date: string; dayOfWeek: number | null; effectiveFrom?: string | null; effectiveUntil?: string | null; excludedDates?: unknown }, date: string, override?: { weeklyOnly?: boolean; holidayActive?: boolean; suspendedBlockIds?: string[] }) {
-  if (override?.weeklyOnly && block.type === 'class' && (override.holidayActive || override.suspendedBlockIds?.includes(block.id || ''))) return false;
+export function courtBlockOccurs(block: { id?: string; type?: string; categoryCode?:string|null; date: string; dayOfWeek: number | null; effectiveFrom?: string | null; effectiveUntil?: string | null; excludedDates?: unknown }, date: string, override?: { weeklyOnly?: boolean; holidayActive?: boolean; categoryCodes?:string[]|null; suspendedBlockIds?: string[] }) {
+  if (override?.weeklyOnly && block.type === 'class' && ((override.holidayActive&&(!Array.isArray(override.categoryCodes)||override.categoryCodes.includes(block.categoryCode||''))) || override.suspendedBlockIds?.includes(block.id || ''))) return false;
   if ((block.effectiveFrom && date < block.effectiveFrom) || (block.effectiveUntil && date > block.effectiveUntil) || (Array.isArray(block.excludedDates) && block.excludedDates.includes(date))) return false;
   return block.date === date || (block.dayOfWeek != null && new Date(`${date}T12:00:00Z`).getUTCDay() === block.dayOfWeek);
 }

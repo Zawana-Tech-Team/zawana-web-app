@@ -1,0 +1,9 @@
+.reschedule-price{border:1px solid #dedfd9;border-radius:16px;padding:clamp(16px,4vw,24px);background:#fafaf7;color:#242b25}
+.reschedule-price h3{font-size:1rem;font-weight:650;margin:0 0 16px}
+.reschedule-price dl{display:grid;gap:10px;font-size:.875rem}
+.reschedule-price dl>div{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.reschedule-price dd{font-weight:600}
+.reschedule-price__label{margin-top:20px;padding-top:18px;border-top:1px solid #dedfd9;font-size:.875rem;font-weight:600}
+.reschedule-price__difference{font-size:clamp(1.8rem,7vw,2.6rem);line-height:1.2;font-weight:750;letter-spacing:-.04em;margin-top:8px;overflow-wrap:anywhere}
+.reschedule-price__policy{font-size:.8125rem;line-height:1.7;color:#596257;margin-top:14px}
+.reschedule-success{padding:16px;border-radius:12px;background:#edf5ee;font-size:.9rem;line-height:1.6}

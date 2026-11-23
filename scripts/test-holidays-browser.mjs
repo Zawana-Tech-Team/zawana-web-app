@@ -57,7 +57,7 @@ try {
   await page.getByRole('button',{name:`Court 1, ${data.date}, 1:00 PM — 2:00 PM, Available`,exact:true}).waitFor();
   await page.reload();await page.getByLabel('Operating day',{exact:true}).fill(data.date);await page.getByRole('button',{name:`Court 1, ${data.date}, 1:00 PM — 2:00 PM, Available`,exact:true}).waitFor();
   await page.getByRole('button',{name:'Holiday',exact:true}).click();await page.getByRole('button',{name:`Holiday date ${data.date} configured`,exact:true}).waitFor();
-  await page.getByRole('button',{name:'Remove holiday',exact:true}).click();await page.getByRole('status').filter({hasText:'Weekly classes restored'}).waitFor();
+  await page.getByRole('button',{name:'Remove holiday',exact:true}).click();await page.getByRole('button',{name:'Confirm holiday removal',exact:true}).click();await page.getByRole('status').filter({hasText:'Weekly classes restored'}).waitFor();
   await page.getByRole('button',{name:'Back to Court Rental',exact:true}).click();await page.locator('.court-timetable__event').filter({hasText:'Junior Academy'}).waitFor();
   assert.deepEqual(errors,[]);console.log(JSON.stringify({ok:true,checks:['dedicated holiday view','confirmation and suspension count','weekly occupancy released','reload persistence','restoration','mobile layout'],artifacts},null,2));
 }finally{await browser?.close();children.forEach(child=>child.kill());}

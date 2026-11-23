@@ -1,3 +1,4 @@
+import { rentalDestinationPrice } from './rentalPricing.js';
 import { blockOccurs } from './blockSchedule.js';
 import type { PrismaClient } from "@prisma/client";
 import { isDateKey } from "../utils/dateKeys.js";
@@ -103,9 +104,7 @@ function build(date: string, data: Awaited<ReturnType<typeof readCalendar>>) {
         startMinute: start,
         endMinute: start + 60,
         label: clock(start),
-        price: holiday
-          ? holiday.price
-          : court.price + (start >= 900 ? 5000 : 0),
+        price: rentalDestinationPrice(court.price,start,60,holiday||null),
         available: status === "available",
         status,
         reason,

@@ -1,12 +1,12 @@
-import { requestMessage, requestScheduleMessage } from '../domain/requestMessages.js';
+import { rentalDestinationPrice } from './rentalPricing.js';
+import { affectedBookingMessage, requestMessage, requestScheduleMessage } from '../domain/requestMessages.js';
 import { replacementSlots } from './rescheduleAvailability.js';
 import { paidRentalAmount } from './rentalPaymentBalance.js';
 import type { Booking, BookingRescheduleRequest, Prisma, PrismaClient } from '@prisma/client';
 import { bookingFailure as fail } from './courtBooking.js';
 import { assertDestination, digest, validateDestination, type Actor } from './deskMoves.js';
 import { range } from './courtPolicy.js';
-import { blockOccurs } from './blockSchedule.js';
-import { scheduleInstant } from './courtChanges.js';
+import { rescheduleEligibility, scheduleInstant } from './courtChanges.js';
 type Tx = Prisma.TransactionClient;
 export const requestSnapshot = (b: Booking) => ({ id: b.id, courtId: b.courtId, coachId: b.coachId, date: b.date, time: b.time, status: b.status, price: b.price, paymentStatus: b.paymentStatus });
 const asJson = (v: unknown) => JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
@@ -36,14 +36,14 @@ async function createStaffRequestInTransaction(tx: Tx, actor: Actor, bookingId: 
   const existing=await tx.bookingRescheduleRequest.findUnique({where:{activeKey:bookingId}});
   if(existing){
     const changed=Object.entries(requestSnapshot(b)).some(([key,value])=>(existing.oldSchedule as Record<string,unknown>)[key]!==value);
-    if(existing.status==='REFUND_REQUESTED'||(!changed&&existing.expiresAt>new Date()))return {request:existing,created:false};
+    if(existing.status==='REFUND_REQUESTED'||(!changed&&existing.expiresAt>new Date()&&!(existing.requestedById===existing.customerId&&existing.response==null)))return {request:existing,created:false};
     const status=existing.expiresAt<=new Date()?'EXPIRED':'CANCELLED';
     await tx.bookingRescheduleRequest.update({where:{id:existing.id},data:{status,activeKey:null}});
     if(existing.privateProposalId)await tx.privateRescheduleRequest.updateMany({where:{id:existing.privateProposalId,status:'PENDING'},data:{status:'EXPIRED',pendingKey:null,reviewedAt:new Date(),reviewReason:'Previous staff request closed.'}});
     await requestEvent(tx,existing.id,actor.id,status,{replacedByNewRequest:true});
   }
-  const row=await tx.bookingRescheduleRequest.create({data:{bookingId,activeKey:bookingId,customerId:b.userId,requestedById:actor.id,kind:b.kind,reason,oldSchedule:requestSnapshot(b),oldPaid:await paidRentalAmount(tx,b),expiresAt:new Date(Date.now()+7*86400000)}});
-  await requestEvent(tx,row.id,actor.id,row.status,{reason,notes,message:requestMessage(reason),original:requestSnapshot(b)});
+  const row=await tx.bookingRescheduleRequest.create({data:{bookingId,activeKey:bookingId,customerId:b.userId,requestedById:actor.id,kind:b.kind,reason,oldSchedule:notify?requestSnapshot(b):{...requestSnapshot(b),courtName:b.court?.name||null},oldPaid:await paidRentalAmount(tx,b),expiresAt:new Date(Date.now()+7*86400000)}});
+  await requestEvent(tx,row.id,actor.id,row.status,{reason,notes,message:notify?requestMessage(reason):affectedBookingMessage(reason),...(!notify?{messageVersion:'AFFECTED_NOTICE_V1'}:{}),original:requestSnapshot(b)});
   if (notify) await tx.notification.create({data:{userId:b.userId,audience:'member',title:'Reschedule Request',body:`${requestMessage(reason)}\n\n${requestScheduleMessage({court:b.court?.name,date:b.date,time:b.time})}`,link:`/bookings?request=${row.id}`,type:'reschedule',entityType:'reschedule_request',entityId:row.id}});
   return {request:row,created:true};
 }
@@ -93,7 +93,7 @@ export async function createStaffRequests(db: PrismaClient, actor: Actor, bookin
       await tx.bookingRequestBatch.create({ data: { id, senderId: actor.id, recipientId, reason } });
       await tx.bookingRescheduleRequest.updateMany({ where: { id: { in: children.map(row => row.id) } }, data: { batchId: id } });
       for (const child of children) child.batchId = id;
-      await tx.notification.create({ data: { userId: recipientId, audience: 'member', title: `${children.length} reschedule request${children.length === 1 ? '' : 's'}`, body: requestMessage(reason), link: `/bookings?batch=${id}`, type: 'reschedule', entityType: 'reschedule_batch', entityId: id } });
+      await tx.notification.create({ data: { userId: recipientId, audience: 'member', title: `${children.length} ${children.length===1?'Request':'Requests'}`, body: affectedBookingMessage(reason), link: `/bookings?batch=${id}`, type: 'reschedule', entityType: 'reschedule_batch', entityId: id } });
     }
     const createdCount = results.filter(result => result.created).length;
     const result = {requests:results.map(result => result.request),createdCount,existingCount:results.length-createdCount};
@@ -116,7 +116,40 @@ export async function listBookingRequests(db:PrismaClient,actor:Actor,bookingId?
   if(row.privateProposalId)await tx.privateRescheduleRequest.updateMany({where:{id:row.privateProposalId,status:'PENDING'},data:{status:'EXPIRED',pendingKey:null,reviewedAt:new Date(),reviewReason:expired?'Staff request expired.':'Original booking changed.'}});
   await requestEvent(tx,row.id,row.requestedById,status,{origin:'system',reason:expired?'Request lifetime ended':'Original booking changed'});
  });
- return db.bookingRescheduleRequest.findMany({where:scope,include:{batch:true,booking:{select:{code:true,title:true,date:true,time:true,courtId:true,kind:true,status:true,paymentStatus:true,court:{select:{id:true,name:true,floor:true}},coach:{select:{name:true}},user:{select:{name:true,...(actor.role==='member'?{}:{phone:true})}}}},events:{orderBy:{createdAt:'asc'}}},orderBy:{updatedAt:'desc'}});
+ const rows = await db.bookingRescheduleRequest.findMany({where:scope,include:{batch:true,booking:{select:{code:true,title:true,date:true,time:true,courtId:true,kind:true,status:true,paymentStatus:true,court:{select:{id:true,name:true,floor:true}},coach:{select:{name:true}},user:{select:{name:true,...(actor.role==='member'?{}:{phone:true})}}}},events:{orderBy:{createdAt:'asc'}}},orderBy:{updatedAt:'desc'}});
+ const originalCourtIds = [...new Set(rows.filter(row => row.batchId).map(row => (row.oldSchedule as {courtId?:string}).courtId).filter((id):id is string=>!!id))];
+ const names = new Map((originalCourtIds.length ? await db.court.findMany({where:{id:{in:originalCourtIds}},select:{id:true,name:true}}) : []).map(court=>[court.id,court.name]));
+ // Opening a member flow creates an auditable draft, not an incoming staff request.
+ return rows.filter(row=>row.requestedById!==row.customerId||row.response!=null).map(row=>{
+   const original = row.oldSchedule as {courtId?:string;courtName?:string};
+   return {...row,originalCourtName:row.batchId?(original.courtName||names.get(original.courtId||'')||null):null};
+ });
+}
+/** Member entry points reuse the request lifecycle, without granting staff timing exceptions. */
+export async function startMemberReschedule(db:PrismaClient,actor:Actor,bookingId:string,requestId?:string){
+ if(actor.role!=='member')throw fail(403,'Only members may open self-rescheduling.');
+ await listBookingRequests(db,actor,bookingId);
+ return db.$transaction(async tx=>{
+  await tx.$executeRaw`UPDATE "Booking" SET date=date WHERE id=${bookingId}`;
+  const booking=await tx.booking.findUnique({where:{id:bookingId},include:{court:{select:{name:true}},coach:{select:{name:true}}}});
+  if(!booking||booking.userId!==actor.id||!['court','private_course'].includes(booking.kind))throw fail(404,'Booking not found.');
+  let row=await tx.bookingRescheduleRequest.findUnique({where:requestId?{id:requestId}:{activeKey:bookingId}});
+  if(requestId&&(!row||row.bookingId!==bookingId||row.customerId!==actor.id))throw fail(404,'Request not found.');
+  if(row)await own(tx,actor,row.id);
+  else{
+   const policy=rescheduleEligibility(booking);
+   if(!policy.eligible)throw fail(409,policy.message);
+   if(booking.paymentStatus==='refunded')throw fail(409,'Refunded bookings cannot be rescheduled.');
+   row=await tx.bookingRescheduleRequest.create({data:{bookingId,activeKey:bookingId,customerId:actor.id,requestedById:actor.id,kind:booking.kind,reason:'Member self-reschedule',oldSchedule:{...requestSnapshot(booking),courtName:booking.court?.name||null},oldPaid:await paidRentalAmount(tx,booking),expiresAt:new Date(Math.min(Date.now()+7*86400000,scheduleInstant(booking.date,booking.time).getTime()))}});
+   await requestEvent(tx,row.id,actor.id,row.status,{origin:'member',bookingUnchanged:true});
+  }
+  enforceMemberTiming(row,booking);
+  if(booking.kind==='private_course'&&await tx.privateRescheduleRequest.findFirst({where:{pendingKey:bookingId}}))throw fail(409,'A proposal is already awaiting your coach. Withdraw it from Requests before choosing another session.');
+  return {id:row.id,bookingId,kind:row.kind,reason:row.reason,status:row.status,original:row.oldSchedule,booking:{code:booking.code,title:booking.title,price:booking.price,courtName:booking.court?.name,coachName:booking.coach?.name},staffRequested:row.requestedById!==actor.id};
+ });
+}
+function enforceMemberTiming(row:{requestedById:string;customerId:string},booking:Booking){
+ if(row.requestedById===row.customerId){const policy=rescheduleEligibility(booking);if(!policy.eligible)throw fail(409,policy.message);}
 }
 async function own(tx:Tx,actor:Actor,id:string){
  const row=await tx.bookingRescheduleRequest.findUnique({where:{id},include:{booking:true}});
@@ -126,13 +159,20 @@ async function own(tx:Tx,actor:Actor,id:string){
  if(Object.entries(requestSnapshot(row.booking)).some(([key,value])=>(row.oldSchedule as Record<string,unknown>)[key]!==value))throw fail(409,'The original booking changed. Ask staff to review the request.');
  return row;
 }
-export async function customerRequestAction(db:PrismaClient,actor:Actor,id:string,action:'ADMIN_HANDLING'|'REFUND_REQUESTED'|'DECLINED'){
+export async function customerRequestAction(db:PrismaClient,actor:Actor,id:string,action:'ADMIN_HANDLING'|'REFUND_REQUESTED'|'DECLINED'|'ACKNOWLEDGED'){
  return db.$transaction(async tx=>{
   const initial=await tx.bookingRescheduleRequest.findUnique({where:{id},select:{bookingId:true}});
   if(!initial)throw fail(404,'Request not found.');
   await tx.$executeRaw`UPDATE "Booking" SET date=date WHERE id=${initial.bookingId}`;
   await tx.$executeRaw`UPDATE "BookingRescheduleRequest" SET status=status WHERE id=${id}`;
+  const acknowledged = await tx.bookingRescheduleRequest.findUnique({where:{id}});
+  if (action === 'ACKNOWLEDGED' && acknowledged?.status === 'ACKNOWLEDGED') {
+    if (actor.role !== 'member' || acknowledged.customerId !== actor.id) throw fail(404,'Request not found.');
+    return acknowledged;
+  }
   const row=await own(tx,actor,id);
+  if (action === 'ACKNOWLEDGED') throw fail(400,'Accept requires selecting and confirming a replacement session.');
+  if (row.batchId && action === 'DECLINED') throw fail(400,'Choose Accept, Refund or Admin Handle for this notice.');
   if (row.status === action) return row;
   if (action === 'DECLINED') {
     if (row.privateProposalId) await tx.privateRescheduleRequest.updateMany({ where: { id: row.privateProposalId, status: 'PENDING' }, data: { status: 'WITHDRAWN', pendingKey: null, reviewedAt: new Date(), reviewedById: actor.id, reviewReason: 'Customer declined the staff request.' } });
@@ -154,19 +194,23 @@ export async function customerRequestAction(db:PrismaClient,actor:Actor,id:strin
 }
 export type CustomerTarget={courtId:string;date:string;time:string};
 async function quote(tx:Tx,actor:Actor,id:string,target:CustomerTarget){
- const row=await own(tx,actor,id),b=row.booking,span=range(b.time)!;validateDestination(target,span.end-span.start);
+ const row=await own(tx,actor,id);
+ enforceMemberTiming(row,row.booking);
+ if(row.booking.paymentStatus==='refunded')throw fail(409,'Refunded bookings cannot be rescheduled.');
+ if(await tx.paymentAttempt.findFirst({where:{resourceId:row.bookingId,status:{in:['INITIATING','PENDING']}}}))throw fail(409,'Resolve the existing payment checkout before rescheduling.');
+ const b=row.booking,span=range(b.time)!;validateDestination(target,span.end-span.start);
  if(scheduleInstant(b.date,b.time)<=new Date())throw fail(409,'This session has started. Please request staff assistance or refund review.');
  if(b.courtId===target.courtId&&b.date===target.date&&b.time===target.time)throw fail(400,'Choose a different session.');
  const court=await assertDestination(tx,target,[b.id],b.kind==='private_course'?b.coachId||undefined:undefined);
  const holiday=await tx.holidayRate.findUnique({where:{date:target.date}});
  const paid=await paidRentalAmount(tx,b);
- const newPrice=b.kind==='private_course'?b.price:Array.from({length:Math.ceil((span.end-span.start)/60)},(_,i)=>holiday?.active?holiday.price:court.price+(range(target.time)!.start+i*60>=900?5000:0)).reduce((a,b)=>a+b,0);
+ const newPrice=b.kind==='private_course'?b.price:rentalDestinationPrice(court.price,range(target.time)!.start,span.end-span.start,holiday);
  const difference=b.kind==='private_course'?0:paid==null||b.paymentStatus!=='paid'?null:newPrice-paid;
- return {row,booking:b,target,newPrice,paidAmount:paid,priceDifference:difference,revision:digest({original:requestSnapshot(b),target,newPrice,paid,status:row.status,updatedAt:row.updatedAt}),courtName:court.name};
+ return {row,booking:b,target,newPrice,paidAmount:paid,priceDifference:difference,revision:digest({original:requestSnapshot(b),target,newPrice,paid,status:row.status,updatedAt:row.updatedAt,history:await tx.bookingChangeHistory.count({where:{bookingId:b.id}})}),courtName:court.name};
 }
 export async function quoteCustomerRequest(db:PrismaClient,actor:Actor,id:string,target:CustomerTarget){return db.$transaction(async tx=>{const q=await quote(tx,actor,id,target);return {revision:q.revision,newPrice:q.newPrice,paidAmount:q.paidAmount,priceDifference:q.priceDifference,courtName:q.courtName};});}
 export async function requestAvailability(db:PrismaClient,actor:Actor,id:string,date:string,courtId:string){
- return db.$transaction(async tx => { const row = await own(tx, actor, id); return replacementSlots(tx, row.booking, date, courtId); });
+ return db.$transaction(async tx => { const row = await own(tx, actor, id); enforceMemberTiming(row,row.booking); return replacementSlots(tx, row.booking, date, courtId); });
 }
 export async function confirmCustomerRequest(db:PrismaClient,actor:Actor,id:string,target:CustomerTarget,revision:string,acknowledged:boolean){
  return db.$transaction(async tx=>{
@@ -182,7 +226,7 @@ export async function confirmCustomerRequest(db:PrismaClient,actor:Actor,id:stri
   const status=needsStaff?q.priceDifference==null?'ADMIN_HANDLING':'AWAITING_ADDITIONAL_PAYMENT':'COMPLETED';
   if(!needsStaff){await tx.booking.update({where:{id:q.booking.id},data:{courtId:target.courtId,date:target.date,time:target.time,title:q.courtName,price:Math.max(q.booking.price,q.paidAmount||0)}});await tx.bookingChangeHistory.create({data:{bookingId:q.booking.id,action:'CUSTOMER_REQUEST_RESCHEDULED',requestedById:actor.id,previous:JSON.stringify(requestSnapshot(q.booking)),current:JSON.stringify({target,priceAcknowledged:acknowledged,priceDifference:q.priceDifference}),reason:q.row.reason||'Customer accepted staff reschedule request'}});}
   const result=await tx.bookingRescheduleRequest.update({where:{id},data:{status,response:'RESCHEDULE',proposed:target,newPrice:q.newPrice,priceDifference:q.priceDifference,oldPaid:q.paidAmount,priceAcknowledged:acknowledged,...(!needsStaff?{activeKey:null,completedAt:new Date()}:{})}});
-  await requestEvent(tx,id,actor.id,status,{target,paid:q.paidAmount,newPrice:q.newPrice,difference:q.priceDifference,acknowledged});await requestStaffNotice(tx,id,status==='COMPLETED'?'Customer rescheduled booking':'Reschedule needs payment assistance',`${q.booking.code} · ${target.date} · ${target.time}`);
+  await requestEvent(tx,id,actor.id,status,{target,paid:q.paidAmount,newPrice:q.newPrice,difference:q.priceDifference,acknowledged});if(!needsStaff)await tx.notification.create({data:{userId:actor.id,title:'Booking rescheduled',body:`${q.courtName} · ${target.date} · ${target.time}`,link:'/bookings',type:'booking',entityType:'booking',entityId:q.booking.id}});await requestStaffNotice(tx,id,status==='COMPLETED'?'Customer rescheduled booking':'Reschedule needs payment assistance',`${q.booking.code} · ${target.date} · ${target.time}`);
   return result;
  },{maxWait:10000,timeout:20000});
 }

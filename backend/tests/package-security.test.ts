@@ -88,6 +88,8 @@ test('package reauthentication and notification recipient security', async t => 
     });
     await t.test('passwordless proof requires same identity, fresh auth and cannot authorize another mutation', async () => {
       await db.user.update({ where: { id: fo.id }, data: { firebaseUid: 'federated-fo', passwordHash: null } });
+      const previousMode=env.databaseAuthEnabled;
+      try {
       env.databaseAuthEnabled = false;
       const id = await challenge(fo);
       providerClaims = { uid: 'someone-else', auth_time: Math.floor(Date.now() / 1000), firebase: { sign_in_provider: 'google.com' } };
@@ -98,8 +100,11 @@ test('package reauthentication and notification recipient security', async t => 
       await db.authAbuseCounter.deleteMany({ where: { key: { startsWith: `package-reauth:${fo.id}:` } } });
       assert.equal((await request(fo, '/packages/badminton', payload, 'POST', { challengeId: id, identityToken: 'verified-by-provider' })).status, 201);
       const second = await challenge(fo, { ...payload, price: 20000 });
+      // Isolate one-time proof consumption from freshness: provider auth_time has second precision.
+      // Without a fixed issuance second this assertion can instead hit the stale-proof guard.
+      await db.packageSecurityChallenge.update({where:{id:second},data:{createdAt:new Date(providerClaims.auth_time*1000)}});
       assert.equal((await request(fo, '/packages/badminton', { ...payload, price: 20000 }, 'POST', { challengeId: second, identityToken: 'verified-by-provider' })).data.code, 'REAUTH_REQUIRED');
-      env.databaseAuthEnabled = true;
+      } finally { env.databaseAuthEnabled = previousMode; }
     });
     await t.test('persistent attempt limiting and concurrent one-time consumption', async () => {
       await db.authAbuseCounter.deleteMany({ where: { key: { startsWith: `package-reauth:${admin.id}:` } } });

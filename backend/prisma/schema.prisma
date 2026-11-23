@@ -192,6 +192,8 @@ model Court {
 }
 
 model CourtBlock {
+  @@index([categoryCode])
+  categoryCode String?
   effectiveFrom String?
   effectiveUntil String?
   excludedDates Json?
@@ -213,6 +215,7 @@ model CourtBlock {
 }
 
 model CourtDateOverride {
+  categoryCodes Json?
   weeklyOnly Boolean @default(false)
   holidayActive Boolean @default(false)
   suspendedBlockIds Json?
@@ -658,6 +661,7 @@ model PaymentAttempt {
 }
 
 model BadmintonPackageCategory {
+  description String @default("")
   code String? @unique
   id        String @id @default(cuid())
   name      String @unique
@@ -669,6 +673,7 @@ model BadmintonPackageCategory {
 }
 
 model BadmintonEnrollment {
+  @@index([packageId, status, expiryDate])
   categoryQrRedemptions BadmintonQrRedemption[]
   categoryCode String?
   @@index([userId, categoryCode, status, expiryDate])
@@ -1255,4 +1260,9 @@ model BookingRefund {
   notificationDeliveredAt DateTime?
   @@unique([employeeUserId,requestKey])
   @@index([customerId,processedAt])
+}
+
+// Serializes catalogue name checks across administrators without changing historical display names.
+model CategoryMutationLock {
+  id Int @id
 }

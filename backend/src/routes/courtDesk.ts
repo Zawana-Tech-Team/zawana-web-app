@@ -29,10 +29,10 @@ export function createCourtDeskRouter(db: PrismaClient, expire: () => Promise<vo
   }));
   router.post('/weekly', asyncRoute(async (req: AuthRequest, res) => {
     if (req.body.selections) {
-      const input = z.object({ selections: z.array(z.object({ courtId: z.string().min(1), date: z.string(), time: z.string() }).strict()).min(1).max(30), title: z.string().trim().min(1).max(120), requestKey: z.string().uuid() }).strict().parse(req.body);
+      const input = z.object({ selections: z.array(z.object({ courtId: z.string().min(1), date: z.string(), time: z.string() }).strict()).min(1).max(30), title: z.string().trim().min(1).max(120), categoryCode:z.string().min(2).max(40).optional(), requestKey: z.string().uuid() }).strict().parse(req.body);
       res.status(201).json(await reserveWeeklySelections(db, req.user!.id, input)); return;
     }
-    const input = z.object({ courtIds: z.array(z.string().min(1)).min(1).max(20), date: z.string(), time: z.string(), title: z.string().trim().min(1).max(120), requestKey: z.string().uuid() }).strict().parse(req.body);
+    const input = z.object({ courtIds: z.array(z.string().min(1)).min(1).max(20), date: z.string(), time: z.string(), title: z.string().trim().min(1).max(120), categoryCode:z.string().min(2).max(40).optional(), requestKey: z.string().uuid() }).strict().parse(req.body);
     res.status(201).json(await reserveDeskWeekly(db, req.user!.id, input));
   }));
   router.post('/rentals', asyncRoute(async (req: AuthRequest, res) => {

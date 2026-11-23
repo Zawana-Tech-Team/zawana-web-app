@@ -55,7 +55,7 @@ export async function proposePrivateReschedule(db: PrismaClient, actor: Actor, b
     if (staffRequest && !explicitScope && Object.entries(snapshot(b)).some(([key,value]) => (staffRequest!.oldSchedule as Record<string,unknown>)[key] !== value)) staffRequest = null;
     if (target.staffRequestId && !explicitScope) throw fail(403, 'This staff request does not authorize a response.');
     if (staffRequest && Object.entries(snapshot(b)).some(([key,value]) => (staffRequest.oldSchedule as Record<string,unknown>)[key] !== value)) throw fail(409, 'The original booking changed. Ask staff to review.');
-    if (!policy.eligible && !explicitScope) throw fail(409, policy.message);
+    if (!policy.eligible && (!explicitScope || explicitScope.requestedById === actor.id)) throw fail(409, policy.message);
     if (scheduleInstant(b.date, b.time) <= new Date()) throw fail(409, 'The original session has started.');
     if (!b.coachId || !b.coach?.userId || b.coach.status !== 'active' || b.paymentStatus === 'refunded') throw fail(409, 'This course needs staff review before rescheduling.');
     const duration = range(b.time)!; validateDestination(target, duration.end - duration.start);
