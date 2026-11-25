@@ -39,6 +39,10 @@ try {
   const legacy = await db.badmintonEnrollment.create({ data: { studentId: 'WALKIN-REVIEW', studentName: 'Legacy holder', phone: '', packageId: legacyPkg.id, packageName: legacyPkg.title, startDate: '2020-01-01', expiryDate: '2099-01-01', sessionsTotal: 10, sessionsRemaining: 7 } });
   await db.badmintonCheckIn.create({ data: { enrollmentId: legacy.id, date: '2020-01-02', time: '09:00', sessionsUsed: 1 } });
   const court = await db.court.create({ data: { name: '2F SOP Court', type: 'Standard', surface: 'Indoor', features: [], price: 20000 } });
+  const weekday = new Date(`${today()}T12:00:00Z`).getUTCDay();
+  for (const [categoryCode, title, start, end] of [['SOCIAL', 'Social weekly class', '09:00', '10:00'], ['FOUNDATION', 'Foundation weekly class', '10:00', '11:00']]) {
+    await db.courtBlock.create({ data: { courtId: court.id, date: '', dayOfWeek: weekday, categoryCode, title, start, end, effectiveFrom: today() } });
+  }
   const day = new Date(`${today()}T12:00:00Z`); day.setUTCDate(day.getUTCDate() + 4);
   const targetDate = day.toISOString().slice(0, 10);
   const booking = (await createCourtBooking(db, users[2], { bookings: [{ courtId: court.id, date: targetDate, time: '8:00 AM — 9:00 AM' }] })).booking;
@@ -46,8 +50,13 @@ try {
   await db.transaction.updateMany({where:{resourceType:'booking',resourceId:booking.id},data:{status:'paid',paymentMethod:'Cash'}});
   const secondary = await db.user.create({ data: { name: 'Ko Second Member', email: 'second@attendance.test', role: 'member' } });
   await db.badmintonEnrollment.create({ data: { userId: secondary.id, studentId: secondary.id, studentName: secondary.name, phone: '', packageId: pkg.id, packageName: pkg.title, categoryCode: 'SOCIAL', sessionsTotal: 10, sessionsRemaining: 10, startDate: today(), expiryDate: '2099-01-01' } });
+  // The attendance-profile scenario has already used Aye's Social category today.
+  // A fresh member exercises successful QR redemption without bypassing that guard.
+  const qrUser=await db.user.create({data:{name:'QR Scan Member',email:'qr-scan@attendance.test',role:'member'}});
+  for(const [target,categoryCode,total] of [[pkg,'SOCIAL',10],[foundationPkg,'FOUNDATION',12]] as const)await db.badmintonEnrollment.create({data:{userId:qrUser.id,studentId:qrUser.id,studentName:qrUser.name,phone:'',packageId:target.id,packageName:target.title,categoryCode,sessionsTotal:total,sessionsRemaining:total,startDate:today(),expiryDate:'2099-01-01'}});
+  const qrMember={id:qrUser.id,token:(await createSessionService(db).issue(db,qrUser,'database_password',[])).accessToken};
   const secondaryMember = { id: secondary.id, token: (await createSessionService(db).issue(db, secondary, 'database_password', [])).accessToken };
   const tokens = await Promise.all(users.map(async user => ({ role: user.role, token: (await createSessionService(db).issue(db, user, 'database_password', [])).accessToken })));
-  writeFileSync(process.env.ATTENDANCE_QA_FIXTURE_PATH, JSON.stringify({ tokens, secondaryMember, memberId: users[2].id, date: today(), targetDate, bookingId: booking.id }));
+  writeFileSync(process.env.ATTENDANCE_QA_FIXTURE_PATH, JSON.stringify({ tokens, secondaryMember, qrMember, memberId: users[2].id, date: today(), targetDate, bookingId: booking.id }));
   }
 } finally { await db.$disconnect(); }

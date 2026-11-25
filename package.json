@@ -17,7 +17,9 @@
     "test:cinematic:browser": "node scripts/test-cinematic-browser.mjs",
     "test:responsive:browser": "node scripts/test-responsive-browser.mjs",
     "test:gym:browser": "node scripts/test-gym-browser.mjs",
-    "test:content:browser": "node scripts/test-content-browser.mjs"
+    "test:content:browser": "node scripts/test-content-browser.mjs",
+    "lint:stabilization": "node tooling/gym/node_modules/eslint/bin/eslint.js --config eslint.stabilization.config.mjs .",
+    "test:stabilization": "node scripts/verify-stabilization.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
@@ -36,7 +38,7 @@
     "recharts": "latest",
     "tailwindcss": "latest",
     "three": "^0.186.1",
-    "vite": "latest"
+    "vite": "^8.3.8"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.6",
@@ -44,5 +46,15 @@
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
     "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.13.6",
+    "re2js": "^2.8.7"
+  },
+  "pnpm": {
+    "overrides": {
+      "@grpc/grpc-js": "^1.13.6",
+      "re2js": "^2.8.7"
+    }
   }
 }

@@ -1,0 +1,38 @@
+.staff-requests{--request-line:#e2e7dd;--request-muted:#6b7664;margin:24px 0}
+.staff-requests-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.staff-requests-heading h2{display:flex;align-items:center;gap:10px;font-size:24px;font-weight:650;letter-spacing:-.035em}
+.staff-requests-heading h2>span{font-size:13px;font-weight:550;letter-spacing:0;color:var(--request-muted);border:1px solid var(--request-line);border-radius:8px;min-width:30px;padding:3px 8px;text-align:center;background:white}
+.staff-requests-tools{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.staff-requests-tools input{flex:1;min-width:200px}
+.staff-requests-tools input,.staff-requests-tools select{min-height:48px;border:1px solid var(--request-line);border-radius:10px;background:white;padding:12px;font-size:12px}
+.staff-requests-tools select{width:auto;max-width:100%}
+.staff-request-group{border:1px solid var(--request-line);border-radius:16px;background:white;overflow:hidden}
+.staff-request-group+section{margin-top:16px}
+.staff-request-group>header{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 18px;background:#fafbf8;border-bottom:1px solid var(--request-line)}
+.staff-request-group>header h3{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.staff-request-group>header>span{font-size:11px;color:var(--request-muted);white-space:nowrap}
+.staff-request-group ul{list-style:none;padding:0;margin:0}
+.staff-request-group li{display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,.8fr) minmax(110px,auto) auto;align-items:center;gap:16px;padding:18px}
+.staff-request-group li+li{border-top:1px solid var(--request-line)}
+.staff-request-booking{min-width:0}
+.staff-request-booking strong{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.staff-request-booking p,.staff-request-session p{font-size:12px;line-height:1.8;color:#58664f;overflow-wrap:anywhere}
+.staff-request-booking p{margin-top:4px}
+.staff-request-session{min-width:0}
+.staff-request-session p{display:flex;align-items:center;gap:7px}
+.staff-request-session p+p{margin-top:4px;color:var(--request-muted)}
+.staff-request-session svg,.staff-request-group .booking-history-status svg{flex-shrink:0}
+.staff-request-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;max-width:250px}
+.staff-request-actions button{min-height:44px;font-size:12px}
+.staff-request-notice{padding:12px 20px;border-top:1px solid var(--request-line)}
+.staff-request-notice summary{cursor:pointer;min-height:44px;align-content:center;font-size:12px;color:#637357}
+.staff-request-notice p{font-size:12px;line-height:1.9;white-space:pre-line;margin:8px 0 12px}
+.staff-requests-empty{padding:36px 20px;border:1px solid var(--request-line);background:white;border-radius:14px;text-align:center;color:var(--request-muted);font-size:13px}
+.staff-requests-empty h3{font-size:16px;font-weight:550;color:#405139;margin-bottom:8px}
+.staff-requests-error{padding:16px;border-radius:12px;background:#fff0ee;color:#994f47;font-size:13px;display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+.staff-requests :focus-visible{outline:2px solid #b09a46;outline-offset:3px}
+.staff-request-group li>.booking-history-status{display:inline-flex;align-items:center;justify-self:start;max-width:100%;gap:6px;padding:6px 9px;border:1px solid #e3e7dd;border-radius:7px;background:#f1f4ed;color:#5d6d53;font-size:11px;font-weight:500;line-height:1.6}
+.staff-request-group li>.booking-history-status[data-tone=pending],.staff-request-group li>.booking-history-status[data-tone=attention]{background:#faf4e7;border-color:#eadebf;color:#805f23}
+.staff-request-group li>.booking-history-status[data-tone=success]{background:#edf5ef;color:#48624e;border-color:#dce7dd}
+@media(max-width:1100px){.staff-request-group li{grid-template-columns:minmax(0,1fr) minmax(140px,1fr) auto}.staff-request-actions{grid-column:1/-1;justify-content:flex-start;max-width:none}}
+@media(max-width:600px){.staff-request-group li{grid-template-columns:minmax(0,1fr);padding:16px;gap:12px}.staff-request-actions{grid-column:1;justify-content:flex-start}.staff-requests-tools input,.staff-requests-tools select{width:100%;flex-basis:100%;min-width:0}.staff-request-group>header{padding:14px 16px}}

@@ -1,0 +1,70 @@
+.admin-refund-dialog{--refund-line:#e0e6da;--refund-muted:#6f7c65;max-width:520px!important}
+.admin-bulk-refund-dialog{max-width:660px!important}
+.desk-dialog.admin-refund-dialog .desk-dialog__title{font-size:20px;font-weight:650;letter-spacing:-.025em;overflow-wrap:anywhere}
+.desk-dialog.admin-refund-dialog .desk-reservation-dialog__header{padding:12px 18px;align-items:center}
+.desk-dialog.admin-refund-dialog .desk-reservation-dialog__body{padding:14px 18px}
+.desk-dialog.admin-refund-dialog .desk-reservation-dialog__footer{padding:10px 18px}
+.admin-refund-dialog .desk-dialog__close{min-height:44px;min-width:44px;margin:-6px -8px -6px 0}
+.refund-booking-card{padding:0 0 12px;border-bottom:1px solid var(--refund-line);min-width:0;color:#526449;margin-bottom:14px}
+.refund-booking-card>header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px}
+.refund-booking-card>header>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.refund-booking-card>header strong{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.refund-booking-card>header a{display:inline-flex;align-items:center;gap:5px;min-height:44px;font-size:11px;color:var(--refund-muted);text-decoration:underline;text-underline-offset:3px}
+.refund-booking-card>header>span{font-size:10px;color:var(--refund-muted);overflow-wrap:anywhere}
+.admin-refund-dialog .refund-booking-card>h3{font-size:15px;font-weight:600;letter-spacing:-.02em;line-height:1.5;overflow-wrap:anywhere}
+.refund-booking-schedule{display:flex;gap:4px 14px;flex-wrap:wrap;margin-top:5px}
+.refund-booking-schedule>span{display:flex;gap:6px;align-items:center;font-size:12px;line-height:1.7}
+.refund-booking-schedule svg{color:#839572;flex-shrink:0;width:13px;height:13px}
+.refund-paid{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px}
+.refund-paid>span{font-size:11px;color:var(--refund-muted)}
+.refund-paid>strong{font-size:13px;font-weight:550;font-variant-numeric:tabular-nums}
+.refund-fields{display:grid;gap:12px;margin:0;padding:0;border:0;min-width:0}
+.refund-fields label{display:grid;gap:5px;font-size:11px;color:#526449;font-weight:500;min-width:0}
+.admin-refund-dialog .refund-fields input:not([type=checkbox]),.admin-refund-dialog .refund-fields select,.admin-refund-dialog .refund-fields textarea{width:100%;min-width:0;min-height:44px;border:1px solid var(--refund-line);border-radius:8px;padding:9px 10px;background:white;font-size:13px;font-weight:400}
+.admin-refund-dialog .refund-fields textarea{resize:vertical;height:60px;min-height:60px;line-height:1.6}
+.refund-field-grid{display:grid;align-items:start;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.admin-refund-dialog .refund-fields .refund-amount-field>input{font-size:19px;font-weight:600;letter-spacing:-.02em;min-height:44px;font-variant-numeric:tabular-nums}
+.refund-value{display:flex;align-items:baseline;justify-content:space-between;gap:7px 14px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--refund-line);margin:0 0 14px;color:#526449}
+.refund-value>span{display:flex;align-items:center;gap:6px;font-size:12px;color:#6d7f5f}
+.refund-value>strong{font-size:22px;font-weight:600;letter-spacing:-.03em;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.refund-value>p{flex-basis:100%;font-size:12px;line-height:1.6;color:#6d7f5f}
+.refund-caption{font-size:11px;font-weight:400;color:var(--refund-muted);line-height:1.6;overflow-wrap:anywhere}
+.refund-booking-card>.refund-caption{margin-top:5px}
+.refund-hint,.refund-confirmation{display:flex;gap:7px;align-items:start;font-size:11px;font-weight:400;color:var(--refund-muted);line-height:1.7}
+.refund-hint>svg,.refund-confirmation>svg{flex-shrink:0;margin-top:2px;width:14px;height:14px}
+.refund-confirmation{padding:10px 12px;border-radius:8px;background:#fcf6eb;color:#8a6c38;margin-top:14px}
+.refund-warning{padding:10px 12px;background:#fcf6eb;color:#8a6c38;font-size:11px;line-height:1.7;border-radius:8px;margin:12px 0}
+.refund-error{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px;background:#fff0ee;color:#994e42;font-size:12px;line-height:1.7;border-radius:8px;margin:12px 0}
+.refund-loading{padding:24px 12px;color:var(--refund-muted);font-size:13px;text-align:center}
+.refund-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:14px 0}
+.refund-facts dt{font-size:11px;color:var(--refund-muted);margin-bottom:4px}
+.refund-facts dd{font-size:12px;color:#526449;line-height:1.7;overflow-wrap:anywhere;white-space:pre-wrap}
+.refund-disclosure{border-top:1px solid var(--refund-line);padding-top:2px;margin-top:12px}
+.refund-disclosure>summary,.refund-staff-edit>summary{display:flex;align-items:center;width:fit-content;min-height:44px;cursor:pointer;font-size:11px;color:var(--refund-muted)}
+.refund-staff-edit>summary{text-decoration:underline;text-underline-offset:3px}
+.refund-staff-edit[open]>label{margin-top:5px}
+.refund-receipts{display:grid;gap:10px;padding:5px 0}
+.refund-receipts dt{font-size:12px;color:#526449}
+.refund-receipts dd{font-size:11px;color:var(--refund-muted);margin-top:3px;overflow-wrap:anywhere}
+.admin-refund-dialog :focus-visible{outline:2px solid var(--color-zawana-gold);outline-offset:3px}
+.refund-bulk-list{list-style:none;padding:0;margin:0;display:grid}
+.refund-bulk-list>li{position:relative;border-bottom:1px solid var(--refund-line);padding:12px 0 14px 30px;min-width:0}
+.refund-bulk-list>li:first-child{padding-top:0}
+.refund-bulk-list .refund-booking-card{border:0;padding:0;margin:0}
+.refund-fields .refund-select{position:absolute;left:0;top:1px;display:flex;align-items:center;gap:0;min-height:44px;min-width:24px;margin:0;cursor:pointer}
+.refund-bulk-list>li:first-child>.refund-select{top:-11px}
+.refund-select>span{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.refund-select>input{width:18px;height:18px;flex-shrink:0;accent-color:var(--color-zawana-gold)}
+.refund-bulk-list .refund-field-grid{margin-top:10px}
+.admin-refund-dialog .refund-fields .refund-bulk-amount>input{font-size:17px;font-weight:550;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.refund-bulk-review-value{display:flex;align-items:baseline;justify-content:space-between;gap:7px 12px;flex-wrap:wrap;margin-top:10px}
+.refund-bulk-review-value>span{font-size:11px;color:var(--refund-muted)}
+.refund-bulk-review-value>strong{font-size:17px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.refund-bulk-review-value>p{flex-basis:100%;font-size:11px;color:var(--refund-muted);overflow-wrap:anywhere}
+.refund-result-summary{font-size:12px;line-height:1.7;color:#526449;padding:10px;background:#f1f6eb;border-radius:8px;margin-bottom:12px}
+.refund-result-completed{display:flex;gap:7px;align-items:center;font-size:12px;line-height:1.7;color:#526c43;margin-top:10px}
+.refund-fields>.refund-value,.refund-fields>.refund-warning{margin:0}
+@media(max-width:650px){.refund-facts{grid-template-columns:minmax(0,1fr)}.admin-refund-dialog .desk-dialog__actions{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.admin-refund-dialog .desk-dialog__actions>button{min-width:0;min-height:44px;white-space:normal}.admin-refund-dialog .desk-dialog__actions>button:last-child:nth-child(3),.admin-refund-dialog .desk-dialog__actions>button:only-child{grid-column:1/-1}}
+@media(max-width:360px){.refund-bulk-list .refund-field-grid{grid-template-columns:minmax(0,1fr)}}
+
+.refund-batch-method{max-width:220px}.refund-batch-receipts{display:grid;gap:12px;padding:6px 0}.refund-batch-receipts strong{font-size:11px;font-weight:550;color:#526449}.refund-batch-receipts p{font-size:12px;line-height:1.7;color:var(--refund-muted);margin-top:5px}.refund-batch-receipts small{display:block;font-size:10px;overflow-wrap:anywhere}

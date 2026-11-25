@@ -1,194 +1,73 @@
-import { DialogSurface } from '../components/Interactions';
+import { SegmentedControl } from '../components/Interactions';
+import { DeskDialog } from '../components/court-desk/DeskDialog';
 import { mediaImageSrc } from '../components/ImageUpload';
-import { badmintonDaysLabel } from '../components/BadmintonAvailableDays';
+import { badmintonDaysLabel, badmintonWeekdays } from '../components/BadmintonAvailableDays';
 import { startPayment } from '../services/paymentFlow';
 import { categoryLabel } from '../components/BadmintonCategoryField';
 import { bookingClock } from '../utils/bookingTime';
-import '../components/member-premium.css';
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useBookingRevision } from '../hooks/useBookingRevision';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, X, CalendarDays, ArrowRight } from 'lucide-react';
-import { Badge, Button, Card, Empty, Page } from '../components/UI';
+import { ArrowUpRight, Check, Minus, Package, RotateCw } from 'lucide-react';
+import { Button, Page } from '../components/UI';
 import { get, post } from '../api';
+import './membership.css';
 
-export function Membership() {
-  const [packages, setPackages] = useState<any[]>([]);
-  const [enrollments, setEnrollments] = useState<any[]>([]);
-  const [checkIns, setCheckIns] = useState<any[]>([]);
-  const [purchases, setPurchases] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState('');
-  const [selectedId, setSelectedId] = useState('');
-  const activationInFlight = useRef(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const retryKeys = useRef(new Map<string, string>());
-
-  const load = useCallback(async () => {
-    const data = await get<any>('/member/dashboard');
-    setPackages(data.packages || []);
-    setEnrollments(data.enrollments || data.enrollmentHistory || []);
-    setCheckIns(data.checkIns || []);
-    setPurchases(data.purchases || []);
-  }, []);
-
-  useEffect(() => {
-    load()
-      .catch((e: any) => setError(e.message || 'Could not load badminton packages.'))
-      .finally(() => setLoading(false));
-  }, [load]);
-
-  const buy = async (id: string) => {
-    if (activationInFlight.current || selectedId !== id) return;
-    activationInFlight.current = true;
-    setBusyId(id);
-    setError('');
-    try {
-      const pending = purchases.find(purchase => purchase.packageId === id && ['PENDING', 'AWAITING_PAYMENT'].includes(purchase.status));
-      if (pending) { await startPayment('/payments/confirm', { resourceType: 'badminton_package', resourceId: pending.id }); await load(); setNotice('Manual/simulated payment confirmed. Your package is active.'); setSelectedId(''); return; }
-      const key = retryKeys.current.get(id) || crypto.randomUUID(); retryKeys.current.set(id, key);
-      const result = await post<any>(`/member/badminton-packages/${id}/purchase`, { confirmed: true, requestKey: key });
-      await load();
-      retryKeys.current.delete(id);
-      setSelectedId('');
-      setNotice(
-        `${result.enrollment?.packageName || 'Your badminton package'} is active after simulated payment confirmation (no external charge). ${result.enrollment?.sessionsRemaining ?? ''} sessions are ready to use.`
-      );
-    } catch (e: any) {
-      setError(e.message || 'Package request could not be created. Please try again.');
-    } finally {
-      activationInFlight.current = false;
-      setBusyId('');
-    }
-  };
-
-  const shown = packages;
-  const pendingFor = (id: string) =>
-    purchases.find(p => p.packageId === id && ['PENDING', 'AWAITING_PAYMENT'].includes(p.status));
-  const selected = packages.find(p => p.id === selectedId);
-  const closeDetails = () => { if (!activationInFlight.current) setSelectedId(''); };
-
-  return <Page title="Badminton packages" eyebrow="Sessions & membership">
-    <div className="member-refined"><p className="mb-4 text-xs text-zawana-500">Temporary manual/simulated payment confirmation. No external charge is made.</p>
-    {notice &&
-      <p
-        role="status"
-        className="mb-4 rounded-xl bg-emerald-50 p-4 text-sm font-bold text-emerald-800"
-      >
-        {notice}
-      </p>}
-    {error && !selected &&
-      <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">
-        {error}
-      </p>}
-    {loading ?
-      <Card className="h-40 animate-pulse bg-zawana-950/5" /> :
-      <>
-        {enrollments.length > 0 && <section className="mb-8"><div className="mb-4"><h2 className="text-xl font-semibold">Your packages</h2><p className="mt-1 text-sm text-zawana-500">Each package keeps its own balance. Check-in uses the eligible package in that category expiring soonest.</p></div><div className="grid gap-4 md:grid-cols-2">{enrollments.map(enrollment => {
-          const date = bookingClock().date;
-          const status = enrollment.expiryDate < date ? 'Expired' : enrollment.sessionsRemaining <= 0 ? 'Exhausted' : enrollment.startDate > date ? 'Pending' : enrollment.status === 'active' ? 'Active' : enrollment.status;
-          const visits = checkIns.filter(c => c.enrollmentId === enrollment.id);
-          return <Card key={enrollment.id} className="p-5 sm:p-6"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-medium uppercase tracking-widest text-zawana-500">{categoryLabel(enrollment.categoryCode)}</p><h3 className="mt-2 text-lg font-semibold">{enrollment.packageName}</h3></div><Badge good={status === 'Active'}>{status}</Badge></div><div className="mt-6 flex items-end justify-between gap-4"><p className="text-3xl font-semibold">{enrollment.sessionsRemaining}<span className="text-sm font-normal text-zawana-500"> / {enrollment.sessionsTotal} left</span></p><Link className="text-xs font-semibold underline underline-offset-4" to="/attendance">Attendance history</Link></div><progress className="mt-4 h-1.5 w-full accent-emerald-800" aria-label={`${enrollment.packageName} remaining sessions`} max={Math.max(1, enrollment.sessionsTotal)} value={Math.max(0, enrollment.sessionsRemaining)} /><dl className="mt-4 grid grid-cols-2 gap-4 text-xs"><div><dt className="text-zawana-500">Starts</dt><dd className="mt-1">{enrollment.startDate}</dd></div><div><dt className="text-zawana-500">Expires</dt><dd className="mt-1">{enrollment.expiryDate}</dd></div></dl>{!enrollment.categoryCode && <p className="mt-4 text-xs text-amber-800">The front desk needs to assign this package’s category before check-in.</p>}{visits.length > 0 && <details className="mt-4 border-t pt-3 text-xs"><summary className="cursor-pointer text-zawana-500">Recent session history</summary>{visits.slice(0, 5).map(c => <p className="mt-2 flex justify-between gap-3" key={c.id}><span>{c.date} · {c.time}</span><span>{c.sessionsUsed} session{c.sessionsUsed === 1 ? '' : 's'} · {c.status}</span></p>)}</details>}{status === 'Active' && enrollment.categoryCode && <Link to="/check-in" className="mt-5 inline-block text-sm font-semibold">Scan to check in →</Link>}</Card>;
-        })}</div></section>}
-
-        {purchases.length > 0 &&
-          <Card className="mb-6 p-5">
-            <h2 className="text-lg font-black">Package purchase history</h2>
-            <div className="mt-3 divide-y divide-zawana-950/8">
-              {purchases.map(p =>
-                <div
-                  key={p.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
-                >
-                  <div>
-                    <b>{p.packageName}</b>
-                    <p className="mt-1 text-xs text-zawana-500">
-                      {p.code} · {new Date(p.createdAt).toLocaleDateString()} · {Number(p.price).toLocaleString()} MMK</p>
-                  </div>
-                  <Badge good={p.status === 'ACTIVE' || p.status === 'PAID'}>
-                    {p.status === 'ACTIVE' ? 'Activated' : p.status}
-                  </Badge>
-                </div>
-              )}
-            </div>
-          </Card>}
-        <div className="mb-5">
-          <h2 className="text-xl font-black">Available badminton packages</h2>
-          <p className="mt-1 text-sm text-zawana-500">Find days that work for you, then view the details before activating a package.</p>
-        </div>
-        {shown.length ?
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {shown.map(p => {
-              const comingSoon = p.status === 'coming_soon';
-              return <Card key={p.id} className="package-offer flex h-full flex-col p-6">
-                {p.imageUrl &&
-                  <img
-                    src={mediaImageSrc(p.imageUrl)}
-                    alt=""
-                    className="mb-4 h-36 w-full rounded-xl object-cover"
-                  />}
-                <div className="flex items-center justify-between">
-                  <span className="grid h-11 w-11 place-items-center rounded-2xl bg-zawana-accent/15">
-                    <Trophy />
-                  </span>
-                  {comingSoon ?
-                    <Badge>Coming Soon</Badge> :
-                    <Badge good>{p.sessions} sessions</Badge>}
-                </div>
-                <h3 className="mt-4 text-xl font-black">{p.title}</h3><p className="mt-1 text-xs text-zawana-500">{p.category?.name || 'Category needs review'}</p>
-                <div className="mt-4 rounded-xl bg-zawana-950/[.035] p-3">
-                  <p className="flex items-center gap-2 text-xs font-semibold text-zawana-500"><CalendarDays size={14} aria-hidden="true" />Available days</p>
-                  <p className="mt-2 text-sm font-medium">{badmintonDaysLabel(p.availableDays)}</p>
-                </div>
-                <p className="mt-5 text-2xl font-black">
-                  {Number(p.price).toLocaleString()} <span className="text-sm text-zawana-500">MMK</span>
-                </p>
-                <p className="mt-2 text-sm text-zawana-500">Valid for {p.validity} days{p.availableFrom && p.availableUntil
-                    ? ` · ${p.availableFrom}–${p.availableUntil}`
-                    : ''}
-                </p>
-                <div className="mt-auto pt-5">
-                  <Button variant="secondary" className="w-full" aria-label={`View details for ${p.title}`} onClick={() => { setError(''); setSelectedId(p.id); }}>
-                    View details <ArrowRight size={15} aria-hidden="true" />
-                  </Button>
-                </div>
-              </Card>;
-            })}
-          </div> :
-          <Empty
-            title="No badminton packages available"
-            body="There are no active packages listed right now."
-          />}
-      </>}
-    {selected && <DialogSurface title={`${selected.title} details`} onClose={closeDetails} className="flex max-h-[calc(100dvh-2rem)] w-full max-w-xl flex-col overflow-hidden bg-white">
-      <header className="flex shrink-0 items-start justify-between gap-4 border-b p-5 sm:p-6">
-        <div><p className="text-xs font-medium uppercase tracking-widest text-zawana-500">{selected.category?.name || 'Badminton package'}</p><h2 className="mt-2 text-xl font-semibold">{selected.title}</h2></div>
-        <Button variant="ghost" disabled={!!busyId} aria-label="Close package details" onClick={closeDetails}><X size={18} /></Button>
-      </header>
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-5 sm:p-6">
-        {selected.imageUrl && <img src={mediaImageSrc(selected.imageUrl)} alt={selected.title} className="h-44 w-full rounded-xl object-cover" />}
-        {selected.status === 'coming_soon' && <Badge>Coming Soon</Badge>}
-        <p className="text-3xl font-semibold">{Number(selected.price).toLocaleString()} <span className="text-sm font-normal text-zawana-500">MMK</span></p>
-        <dl className="grid grid-cols-2 gap-4 rounded-xl bg-zawana-950/[.035] p-4 text-sm">
-          <div><dt className="text-xs text-zawana-500">Sessions</dt><dd className="mt-1 font-semibold">{selected.sessions} sessions</dd></div>
-          <div><dt className="text-xs text-zawana-500">Validity</dt><dd className="mt-1 font-semibold">{selected.validity} days</dd></div>
-          <div className="col-span-2"><dt className="text-xs text-zawana-500">Available days</dt><dd className="mt-1 font-semibold">{badmintonDaysLabel(selected.availableDays)}</dd></div>
-          {(selected.availableFrom || selected.availableUntil) && <div className="col-span-2"><dt className="text-xs text-zawana-500">Available times</dt><dd className="mt-1">{selected.availableFrom || 'Not specified'} – {selected.availableUntil || 'Not specified'}</dd></div>}
-        </dl>
-        {selected.description && <section><h3 className="text-sm font-semibold">About this package</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zawana-500">{selected.description}</p></section>}
-        {selected.scheduleNotes && <section><h3 className="text-sm font-semibold">Schedule notes</h3><p className="mt-2 whitespace-pre-wrap text-sm text-zawana-500">{selected.scheduleNotes}</p></section>}
-        {selected.courtRules && <section><h3 className="text-sm font-semibold">Court rules</h3><p className="mt-2 whitespace-pre-wrap text-sm text-zawana-500">{selected.courtRules}</p></section>}
-        {selected.status !== 'coming_soon' && <p className="text-xs leading-relaxed text-zawana-500">Activation starts your package immediately. Payment confirmation is currently manual/simulated; no external charge is made.</p>}
-        {!selected.category?.code && selected.status !== 'coming_soon' && <p className="text-sm text-amber-800">This package needs a category assigned before it can be activated. Please contact the front desk.</p>}
-        {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      </div>
-      <footer className="flex shrink-0 flex-col gap-2 border-t bg-white p-4 sm:p-5">
-        {selected.status === 'coming_soon' ? <Link to="/contact" className="rounded-xl bg-zawana-950 px-4 py-3 text-center text-sm font-semibold text-white">Contact Admin</Link> : <Button className="w-full" loading={busyId === selected.id} disabled={!!busyId || !selected.category?.code} onClick={() => buy(selected.id)}>
-          {busyId === selected.id ? 'Activating package…' : pendingFor(selected.id) ? 'Confirm manual payment' : `Activate package · ${Number(selected.price).toLocaleString()} MMK`}
-        </Button>}
-        <Button variant="ghost" disabled={!!busyId} onClick={closeDetails}>Back to packages</Button>
-      </footer>
-    </DialogSurface>}
-    </div>
-  </Page>;
+type Offer={id:string;title:string;status:string;sessions:number;validity:number;price:number;description:string;availableDays?:string[];availableFrom?:string;availableUntil?:string;scheduleNotes?:string;courtRules?:string;imageUrl?:string;category?:{name:string;code:string;active:boolean}|null};
+type Enrollment={id:string;packageId:string;packageName:string;categoryCode:string|null;status:string;startDate:string;expiryDate:string;sessionsRemaining:number;sessionsTotal:number};
+type Purchase={id:string;packageId:string;status:string};
+type Quote={revision:string;packageName:string;newSessions:number;carriedSessions:number;totalSessions:number;price:number;startDate:string;expiryDate:string};
+const dateLabel=(date:string)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(`${date}T12:00:00`));
+function PackageDays({days}:{days?:string[]}){
+ const unrestricted=!badmintonWeekdays.some(day=>days?.includes(day));
+ return <div className="membership-store-days"><p>Available days{unrestricted&&<span>Every day</span>}</p><ul aria-label="Weekly package availability">{badmintonWeekdays.map(day=>{
+  const available=unrestricted||!!days?.includes(day);
+  return <li key={day} data-available={available} aria-label={`${day}: ${available?'Available':'Unavailable'}`}><span>{day}</span>{available?<Check size={12} strokeWidth={2.5} aria-hidden="true"/>:<Minus size={12} aria-hidden="true"/>}</li>;
+ })}</ul></div>;
+}
+export function Membership(){
+ const [tab,setTab]=useState<'active'|'store'>('active'),[packages,setPackages]=useState<Offer[]>([]),[enrollments,setEnrollments]=useState<Enrollment[]>([]),[purchases,setPurchases]=useState<Purchase[]>([]);
+ const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[selected,setSelected]=useState<Offer|null>(null),[renewal,setRenewal]=useState<Enrollment|null>(null),[quote,setQuote]=useState<Quote|null>(null),[quoting,setQuoting]=useState(false),[retry,setRetry]=useState(0);
+ const lock=useRef(false),keys=useRef(new Map<string,string>()),generation=useRef(0),quoteGeneration=useRef(0);
+ const revision=useBookingRevision();
+ const invalidate=useCallback(()=>{++generation.current;},[]);
+ const load=useCallback(async()=>{const version=++generation.current;const data=await get<{packages:Offer[];enrollments:Enrollment[];purchases:Purchase[]}>('/member/dashboard');if(version===generation.current){setPackages(data.packages||[]);setEnrollments(data.enrollments||[]);setPurchases(data.purchases||[]);}},[]);
+ useEffect(()=>{let live=true;void load().then(()=>{if(live)setError('');}).catch(()=>{if(live)setError('Your packages could not refresh. Please try again.');}).finally(()=>{if(live)setLoading(false);});return()=>{live=false;invalidate();};},[load,revision,retry,invalidate]);
+ const today=bookingClock().date;
+ const active=enrollments.filter(row=>row.status==='active'&&row.startDate<=today&&row.expiryDate>=today&&row.sessionsRemaining>0);
+ const store=packages.filter(row=>row.status==='active'&&row.category?.active!==false&&!!row.category?.code);
+ const keyFor=(id:string)=>{let key=keys.current.get(id);if(!key){key=crypto.randomUUID();keys.current.set(id,key);}return key;};
+ const close=()=>{if(lock.current)return;++quoteGeneration.current;setSelected(null);setRenewal(null);setQuote(null);setError('');};
+ const reviewRenewal=async(row:Enrollment)=>{if(lock.current)return;const version=++quoteGeneration.current;setRenewal(row);setQuote(null);setError('');setQuoting(true);try{const result=await get<Quote>(`/member/badminton-enrollments/${encodeURIComponent(row.id)}/renewal`);if(version===quoteGeneration.current)setQuote(result);}catch(failure){if(version===quoteGeneration.current)setError(failure instanceof Error?failure.message:'Renewal could not be loaded.');}finally{if(version===quoteGeneration.current)setQuoting(false);}};
+ const confirm=async()=>{
+  if(lock.current||(!selected&&!quote)||quoting)return;lock.current=true;setBusy(true);setError('');
+  try{
+   if(renewal&&quote){await post(`/member/badminton-enrollments/${encodeURIComponent(renewal.id)}/renew`,{confirmed:true,requestKey:keyFor(`renew:${renewal.id}`),revision:quote.revision});setNotice(`Package renewed. ${quote.carriedSessions} sessions carried over; ${quote.totalSessions} sessions ready to use.`);}
+   else if(selected){const pending=purchases.find(row=>row.packageId===selected.id&&['PENDING','AWAITING_PAYMENT'].includes(row.status));if(pending)await startPayment('/payments/confirm',{resourceType:'badminton_package',resourceId:pending.id});else await post(`/member/badminton-packages/${selected.id}/purchase`,{confirmed:true,requestKey:keyFor(`buy:${selected.id}`)});setNotice(`${selected.title} is active and ready to use.`);}
+   await load();if(selected)keys.current.delete(`buy:${selected.id}`);setSelected(null);setRenewal(null);setQuote(null);setTab('active');
+  }catch(failure){setError(failure instanceof Error?failure.message:'Could not save your package. Please retry.');if(renewal&&(failure as {status?:number}).status===409)setQuote(null);}
+  finally{lock.current=false;setBusy(false);}
+ };
+ const modal=selected||renewal;
+ const ownedSelected=selected?active.find(row=>row.packageId===selected.id):undefined;
+ return <Page title="Membership" eyebrow="Your badminton packages"><div className="membership-page">
+  <SegmentedControl label="Membership sections" value={tab} onChange={setTab} options={[{value:'active',label:'Active Packages'},{value:'store',label:'Package Store'}]}/>
+  {notice&&<p role="status" className="membership-success">{notice}</p>}
+  {error&&!modal&&<p role="alert" className="membership-error">{error}<button onClick={()=>setRetry(value=>value+1)}>Retry</button></p>}
+  {loading?<div role="status" className="membership-loading">Loading your packages…</div>:tab==='active'?<section aria-label="Active packages">
+   <div className="membership-section-heading"><p>Your sessions, ready to use.</p><div><Link to="/attendance">Check-in history <ArrowUpRight size={14} aria-hidden="true"/></Link>{active.length>0&&<Link to="/check-in" className="membership-check-in">Scan to check in</Link>}</div></div>
+   {active.length?<div className="membership-grid">{active.map(row=><article className="membership-active-card" key={row.id}>
+    <header><div><p>{categoryLabel(row.categoryCode)}</p><h2>{row.packageName}</h2></div><span className="membership-status">Active</span></header>
+    <div className="membership-balance"><div role="img" aria-label={`${row.sessionsRemaining} of ${row.sessionsTotal} sessions remaining`} className="membership-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="43" className="membership-ring-track"/><circle cx="50" cy="50" r="43" className="membership-ring-fill" pathLength="100" strokeDasharray={`${Math.min(100,row.sessionsRemaining/Math.max(1,row.sessionsTotal)*100)} 100`}/></svg><strong>{row.sessionsRemaining}</strong></div><div><p>Sessions left</p><span>Valid until {dateLabel(row.expiryDate)}</span></div></div>
+    <Button variant="secondary" className="w-full" disabled={busy} onClick={()=>void reviewRenewal(row)}><RotateCw size={15} aria-hidden="true"/>Renew package</Button>
+   </article>)}</div>:<div className="membership-empty"><Package size={32} strokeWidth={1.3} aria-hidden="true"/><h2>No active packages</h2><p>Choose a package to start your next sessions.</p><Button onClick={()=>setTab('store')}>Browse packages</Button></div>}
+  </section>:<section aria-label="Package store"><div className="membership-section-heading"><p>Choose the sessions that suit you.</p></div>{store.length?<div className="membership-grid">{store.map(row=><article className="membership-store-card" key={row.id}>
+   {row.imageUrl&&<img src={mediaImageSrc(row.imageUrl)} alt=""/>}<p className="membership-category">{row.category?.name}</p><h2>{row.title}</h2><p className="membership-offer-facts">{row.sessions} sessions <span>·</span> {row.validity} days</p><PackageDays days={row.availableDays}/><p className="membership-price">{row.price.toLocaleString()} <small>MMK</small></p><Button variant="secondary" className="w-full" aria-label={`View details for ${row.title}`} onClick={()=>{setError('');setSelected(row);}}>View details <ArrowUpRight size={14} aria-hidden="true"/></Button>
+  </article>)}</div>:<div className="membership-empty"><Package size={32} aria-hidden="true"/><h2>No packages available</h2><p>Please check again later.</p></div>}</section>}
+  {modal&&<DeskDialog title={renewal?'Renew package':`${selected!.title} details`} heading={renewal?renewal.packageName:selected!.title} eyebrow={renewal?'Package renewal':selected?.category?.name||'Badminton package'} onClose={close} closeLabel="Close package details" cancelLabel="Back to packages" busy={busy} className="membership-dialog" summary={(quote||selected)&&<div className="membership-payment"><span>{renewal?'Renewal total':'Package price'}</span><strong>{(quote?.price??selected!.price).toLocaleString()} <small>MMK</small></strong></div>} actions={<Button loading={busy} disabled={busy||quoting||!!renewal&&!quote} onClick={()=>{if(ownedSelected){close();setTab('active');}else void confirm();}}>{busy?'Saving…':renewal?'Confirm renewal':ownedSelected?'View active package':'Activate package'}</Button>}>
+   {renewal?(quoting?<p role="status">Checking your balance…</p>:quote?<><div className="membership-renewal-equation"><div><span>Carried over</span><strong>{quote.carriedSessions}</strong></div><b aria-hidden="true">+</b><div><span>New sessions</span><strong>{quote.newSessions}</strong></div><b aria-hidden="true">=</b><div><span>Ready to use</span><strong>{quote.totalSessions}</strong></div></div><p className="membership-renewal-period">Valid {dateLabel(quote.startDate)} – {dateLabel(quote.expiryDate)}</p><p className="membership-dialog-note">Renewal starts a new validity period today. Your unused eligible sessions move into this package.</p></>:null):<><p className="membership-dialog-facts">{selected!.sessions} sessions · {selected!.validity} days</p><p className="membership-dialog-days"><strong>Available days</strong><span>{badmintonDaysLabel(selected!.availableDays)}</span>{(selected!.availableFrom||selected!.availableUntil)&&<span>{selected!.availableFrom} – {selected!.availableUntil}</span>}</p>{selected!.description&&<p className="membership-description">{selected!.description}</p>}{selected!.scheduleNotes&&<p className="membership-dialog-note">{selected!.scheduleNotes}</p>}{selected!.courtRules&&<p className="membership-dialog-note">{selected!.courtRules}</p>}</>}
+   {error&&<p role="alert" className="membership-error">{error}</p>}{renewal&&!quote&&!quoting&&<Button variant="secondary" onClick={()=>void reviewRenewal(renewal)}>Refresh renewal</Button>}
+   <p className="membership-simulation">Payment is simulated. No money is charged.</p>
+  </DeskDialog>}
+ </div></Page>;
 }

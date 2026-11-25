@@ -1,4 +1,9 @@
+import { createBadmintonCheckInRosterRouter } from './routes/badmintonCheckInRoster.js';
+import { deactivateBadmintonEnrollments, quoteBadmintonRenewal, renewBadmintonPackage, memberRenewalInput } from './services/badmintonRenewals.js';
+import { createAdminDashboardRouter } from './routes/adminDashboard.js';
+import { notifyBadmintonStaff } from './services/notificationEvents.js';
 import { createPackageManagementRouter } from './routes/packageManagement.js';
+import { completeElapsedBookings } from './services/bookingCompletion.js';
 import { createHolidayRouter } from './routes/holidays.js';
 import { expirePrivateReschedules } from './services/privateRescheduling.js';
 import { createReschedulingRouter } from './routes/rescheduling.js';
@@ -40,7 +45,7 @@ import { checkGymSchedule } from "./services/gymSessions.js";
 import { auth, roles } from "./middleware/auth.js";
 import type { AuthRequest } from "./types/auth.js";
 import { env } from "./config/env.js";
-import { confirmManualPayment, operationId } from "./services/manualPayments.js";
+import { confirmManualPayment, operationId, fingerprint } from "./services/manualPayments.js";
 import { createManualPaymentRouter } from "./routes/manualPayments.js";
 import { prisma } from "./lib/prisma.js";
 import { toSafeAppUser } from "./services/userSerializer.js";
@@ -99,6 +104,8 @@ app.use(
     }
   })
 );
+app.use('/api/admin/dashboard',createAdminDashboardRouter(prisma));
+app.use('/api/badminton/check-in-students',createBadmintonCheckInRosterRouter(prisma));
 app.use("/api/staff/private-courses", createPrivateCourseFinanceRouter(prisma, expirePrivateCourseReservations));
 app.use('/api/holidays', createHolidayRouter(prisma));
 app.use('/api/rescheduling', createReschedulingRouter(prisma));
@@ -165,6 +172,8 @@ const publicApiUrl = () => env.publicApiUrl.replace(/\/$/, "");
 const clientUrl = () => env.clientUrls[0].replace(/\/$/, "");
 
 async function expirePrivateCourseReservations() {
+  await completeElapsedBookings(prisma);
+  await deactivateBadmintonEnrollments(prisma);
   const now = new Date();
   const expired = await prisma.booking.findMany({
     where: {
@@ -1028,14 +1037,14 @@ app.get(
     };
     if (!hasPage)
       return res.json(
-        await prisma.user.findMany({ where, select, orderBy: { createdAt: "desc" }, take: 100 })
+        await prisma.user.findMany({ where, select, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 100 })
       );
     const [total, data, members, staff, active] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
         select,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip: (page - 1) * limit,
         take: limit
       }),
@@ -1887,7 +1896,7 @@ app.get(
         select: {
           date: true,
           dayOfWeek: true,
-          effectiveFrom: true, effectiveUntil: true, excludedDates: true, id: true, type: true,
+          effectiveFrom: true, effectiveUntil: true, excludedDates: true, id: true, type: true, categoryCode: true,
           start: true,
           end: true,
           courtId: true,
@@ -2223,8 +2232,12 @@ app.patch(
         return res.json(await prisma.booking.findUniqueOrThrow({ where: { id: existing.id } }));
       }
       if (!["admin", "badminton_fo"].includes(req.user!.role) || !["completed", "COMPLETED"].includes(b.status) ||
-          !["confirmed", "CONFIRMED"].includes(existing.status))
+          !["confirmed", "CONFIRMED", "completed", "COMPLETED"].includes(existing.status))
         return res.status(409).json({ message: "Use the dedicated court workflow. Terminal reservations cannot be reactivated." });
+      await completeElapsedBookings(prisma);
+      const completed = await prisma.booking.findUniqueOrThrow({where:{id:existing.id}});
+      if (!['completed','COMPLETED'].includes(completed.status)) return res.status(409).json({message:'Sessions complete automatically after their scheduled end time.'});
+      return res.json(completed);
     }
     res.json(await prisma.booking.update({where:{id:String(req.params.id)},data:{status:b.status}}));
   })
@@ -2653,15 +2666,8 @@ function addDaysIso(start: string, days: number) {
 }
 
 async function refreshEnrollmentStatus(enrollment: any) {
-  if (enrollment.status !== "expired" && enrollment.expiryDate < today()) {
-    await rawExec(
-      prisma,
-      `UPDATE "BadmintonEnrollment" SET status='expired' WHERE id=?`,
-      enrollment.id
-    );
-    enrollment.status = 'expired';
-  }
-  return enrollment;
+ if(!['active','inactive'].includes(enrollment.status)||(enrollment.status==='active'&&(enrollment.expiryDate<today()||enrollment.sessionsRemaining<=0))){await prisma.badmintonEnrollment.update({where:{id:enrollment.id},data:{status:'inactive'}});enrollment.status='inactive';}
+ return enrollment;
 }
 
 app.get(
@@ -2872,99 +2878,17 @@ app.post(
     res.json(await confirmManualPayment(prisma, req.user!, 'badminton_package', String(req.params.id), body.method));
   })
 );
-app.post(
-  "/api/badminton/enrollments/:id/renew",
-  auth,
-  roles("admin", "badminton_fo"),
-  paymentOperation(prisma),
-  asyncRoute(async (req, res) => {
-    const b = z
-        .object({ packageId: z.string().min(1), ...badmintonSaleFields })
-        .parse(req.body),
-      staff = (req as AuthRequest).user!;
-    const current = await prisma.badmintonEnrollment.findUnique({
-      where: { id: String(req.params.id) }
-    });
-    if (!current) return res.status(404).json({ message: "Package holder not found." });
-    if (!current.userId)
-      return res
-        .status(409)
-        .json({
-          message: "This legacy package is not linked to a member account and cannot be renewed."
-        });
-    const [member, pkg] = await Promise.all([
-      prisma.user.findFirst({ where: { id: current.userId, role: "member", active: true } }),
-      prisma.badmintonPackage.findFirst({ where: { id: b.packageId, status: "active" } })
-    ]);
-    if (!member)
-      return res.status(409).json({ message: "This member account is no longer active." });
-    if (!pkg) return res.status(400).json({ message: "Active badminton package not found." });
-    const start = today(),
-      expiry = addDaysIso(start, pkg.validity);
-    const enrollment = await prisma.$transaction(async tx => {
-      const purchase = await tx.badmintonPackagePurchase.create({
-        data: {
-          code: code("BP"),
-          userId: member.id,
-          packageId: pkg.id,
-          packageName: pkg.title,
-          price: badmintonSaleTotals(pkg.price, b.discountPercent).finalAmount,
-          paymentMethod: b.paymentMethod,
-          status: "PAID",
-          paidAt: new Date()
-        }
-      });
-      const row = await tx.badmintonEnrollment.create({
-        data: {
-          studentId: member.id,
-          userId: member.id,
-          studentName: member.name,
-          phone: member.phone || "",
-          packageId: pkg.id,
-          packageName: pkg.title,
-          categoryCode: await packageCategory(tx, pkg.id),
-          sessionsTotal: pkg.sessions,
-          sessionsRemaining: pkg.sessions,
-          startDate: start,
-          expiryDate: expiry,
-          status: "active",
-          renewalCount: current.renewalCount + 1,
-          purchaseId: purchase.id
-        }
-      });
-      await tx.user.update({ where: { id: member.id }, data: { membership: pkg.title } });
-      await tx.transaction.create({
-        data: {
-          userId: member.id,
-          date: today(),
-          customer: member.name,
-          business: "Badminton",
-          item: `Package renewal · ${pkg.title}`,
-          resourceType: "badminton_enrollment", resourceId: row.id, confirmationMode: b.paymentMethod === "Cash" ? "MANUAL" : "SIMULATED", confirmedById: staff.id, ...operationMetadata(res),
-          ...badmintonSaleTotals(pkg.price, b.discountPercent),
-          paymentMethod: b.paymentMethod,
-          staff: staff.name,
-          status: "paid"
-        }
-      });
-      await tx.notification.create({
-        data: {
-          userId: member.id,
-          title: "Badminton package renewed",
-          body: `${pkg.title} is active with ${pkg.sessions} sessions through ${expiry}.`,
-          link: "/membership",
-          audience: "member",
-          type: "package",
-          icon: "package",
-          entityType: "package",
-          entityId: pkg.id
-        }
-      });
-      return row;
-    });
-    res.json(enrollment);
-  })
-);
+app.get('/api/member/badminton-enrollments/:id/renewal',auth,roles('member'),asyncRoute(async(req:AuthRequest,res)=>{
+ res.setHeader('Cache-Control','no-store');res.json(await quoteBadmintonRenewal(prisma,req.user!,String(req.params.id)));
+}));
+app.post('/api/member/badminton-enrollments/:id/renew',auth,roles('member'),asyncRoute(async(req:AuthRequest,res)=>{
+ const input=memberRenewalInput.parse(req.body),id=String(req.params.id);
+ res.json(await renewBadmintonPackage(prisma,req.user!,id,{revision:input.revision,requestKey:operationId(req.user!.id,input.requestKey),requestHash:fingerprint(['MEMBER_PACKAGE_RENEWAL',id,input]),paymentMethod:'Manual (simulated)',discountPercent:0}));
+}));
+app.post('/api/badminton/enrollments/:id/renew',auth,roles('admin','badminton_fo'),paymentOperation(prisma),asyncRoute(async(req:AuthRequest,res)=>{
+ const input=z.object({packageId:z.string().min(1),...badmintonSaleFields}).parse(req.body),operation=operationMetadata(res);
+ res.json(await renewBadmintonPackage(prisma,req.user!,String(req.params.id),{...input,requestKey:operation.requestKey,requestHash:operation.requestHash}));
+}));
 app.get(
   "/api/badminton/enrollments/:id/check-ins",
   auth,
@@ -3756,7 +3680,7 @@ app.get(
         }
       }),
       prisma.badmintonPackage.findMany({
-        where: { status: { in: ["active", "coming_soon"] } },
+        where: { status: "active", category:{is:{active:true}} },
         include: { category: true },
         orderBy: { title: "asc" }
       }),
@@ -4214,7 +4138,7 @@ app.post(
             userId: booking.userId,
             title: "Coach declined your private course",
             body: `Unfortunately, ${coach.name} is unavailable for ${booking.title} · ${booking.date} · ${booking.time}. ${booking.paymentStatus === 'paid' ? 'Payment was already received. Contact the desk for refund or rebooking review.' : 'The reservation has been released; you will not be charged.'}`,
-            link: "/private-course",
+            link: `/bookings?kind=private_course&q=${encodeURIComponent(booking.code)}`,
             audience: "member",
             type: "booking",
             icon: "x-circle",
@@ -4226,8 +4150,9 @@ app.post(
           await tx.bookingChangeHistory.create({ data: { bookingId: booking.id, action: 'PAID_COURSE_DECLINED', requestedById: req.user!.id,
             previous: 'PENDING_COACH_CONFIRMATION', current: 'COACH_DECLINED', reason: 'Coach declined after desk payment. Refund or rebooking requires separate staff review; no automatic refund issued.' } });
           await tx.notification.createMany({ data: ['admin', 'badminton_fo'].map(audience => ({ userId: null, audience, title: 'Paid course needs desk review',
-            body: `${booking.code} was declined after payment. Review refund or rebooking.`, link: audience === 'admin' ? '/admin/course-finance' : '/badminton-fo/course-finance', type: 'booking', entityId: booking.id })) });
+            body: `${booking.code} was declined after payment. Review refund or rebooking.`, link: audience === 'admin' ? `/admin/court-rentals?history=1&kind=private_course&booking=${booking.id}` : `/badminton-fo/bookings?history=1&kind=private_course&booking=${booking.id}`, type: 'booking', entityId: booking.id })) });
         }
+        await notifyBadmintonStaff(tx,`course-decision:${id}:decline`,'Coach declined a private course',`${booking.code} · Original payment records are unchanged.`,`?booking=${id}`,'booking',id,'private-bookings');
         return tx.booking.findUniqueOrThrow({
           where: { id },
           include: { court: true, coach: true }
@@ -4318,7 +4243,7 @@ app.post(
           userId: booking.userId,
           title: booking.paymentStatus === 'paid' ? 'Coach approved your paid private course' : "Coach confirmed your private course",
           body: `${coach.name} accepted ${booking.title} for ${booking.date} · ${booking.time}. ${paymentExpiresAt ? `Complete payment by ${paymentExpiresAt.toLocaleString("en-US", { timeZone: businessTimeZone })}.` : 'Payment is already recorded and your session is approved.'}`,
-          link: "/bookings",
+          link: `/bookings?kind=private_course&q=${encodeURIComponent(booking.code)}`,
           audience: "member",
           type: "booking",
           icon: "check-circle",
@@ -4327,6 +4252,7 @@ app.post(
           entityId: booking.id
         }
       });
+      await notifyBadmintonStaff(tx,`course-decision:${id}:accept`,'Coach accepted a private course',`${booking.code} · ${booking.date} · ${booking.time}`,`?booking=${id}`,'booking',id,'private-bookings');
       return tx.booking.findUniqueOrThrow({ where: { id }, include: { court: true, coach: true } });
     });
     res.json(result);
@@ -4372,24 +4298,10 @@ app.post(
       return res.status(404).json({ message: "Private course booking not found." });
     if (!booking.coach || booking.coach.userId !== req.user!.id)
       return res.status(403).json({ message: "This booking belongs to another coach." });
-    if (booking.status !== "CONFIRMED")
-      return res.status(409).json({ message: "Only paid and confirmed courses can be completed." });
-    if (booking.date > today())
-      return res.status(409).json({ message: "This course is scheduled for a future date." });
-    const updated = await prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: "COMPLETED" }
-    });
-    await prisma.notification.create({
-      data: {
-        userId: booking.userId,
-        title: "Private course completed",
-        body: `${booking.title} on ${booking.date} has been marked complete.`,
-        link: "/bookings",
-        audience: "member",
-        type: "booking"
-      }
-    });
+    await completeElapsedBookings(prisma);
+    const updated = await prisma.booking.findUniqueOrThrow({where:{id:booking.id}});
+    if (!['completed','COMPLETED'].includes(updated.status))
+      return res.status(409).json({message:'Sessions complete automatically after their scheduled end time.'});
     res.json(updated);
   })
 );

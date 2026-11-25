@@ -1,4 +1,18 @@
-import { PackageMembers, PackageMemberDirectory } from '../components/PackageMembers';
+import { useOperationalActions } from '../context/OperationalActionsContext';
+import { ActionRequiredIndicator, PendingActionCounter } from '../components/operational-actions/OperationalActionUI';
+import { BadmintonCheckInWorkspace } from '../components/badminton/BadmintonCheckInWorkspace';
+import { BadmintonDashboard } from '../components/badminton/BadmintonDashboard';
+import { StaffBookingHistoryList } from '../components/StaffBookingHistoryList';
+import { CourtSelectionManager, type CourtSelectionEntry } from '../components/court-desk/CourtSelectionManager';
+import { AdminFinance } from '../components/AdminFinance';
+import { ContentManagement } from '../components/ContentManagement';
+import { BadmintonPackageDialog } from '../components/BadmintonPackageDialog';
+import '../components/badminton-package-management.css';
+import { HistoryPagination } from '../components/member-booking/HistoryPagination';
+import { CoachWorkspace } from '../components/coach/CoachWorkspace';
+import { CoachBookingDecision } from '../components/coach/CoachBookingDecision';
+import { BookingStatusBadge, bookingStatusLabel } from '../components/BookingStatusBadge';
+import { PackageMembers } from '../components/PackageMembers';
 import { BulkRefundDialog } from '../components/BulkRefundDialog';
 import { useBookingRevision } from '../hooks/useBookingRevision';
 import { DeskDialog } from '../components/court-desk/DeskDialog';
@@ -11,12 +25,11 @@ import { HolidayManagement } from '../components/court-desk/HolidayManagement';
 import { PrivateRescheduleInbox } from '../components/PrivateRescheduling';
 import { DeskMoveDialog, type MoveSource } from '../components/court-desk/DeskMoveDialog';
 import { DeskBatchBookingDialog, deskSelectionKey, type DeskSelection } from '../components/court-desk/DeskBatchBookingDialog';
-import { BadmintonAvailableDays, badmintonDaysLabel } from '../components/BadmintonAvailableDays';
 import BadmintonTransactions from '../components/badminton/BadmintonTransactions';
-import BadmintonNotifications from '../components/badminton/BadmintonNotifications';
+import { StaffNotificationInbox } from '../components/StaffNotificationInbox';
 import { usePaymentRevision } from '../hooks/usePaymentRevision';
 import { startPayment } from '../services/paymentFlow';
-import { BadmintonCategoryField, BadmintonCategorySettings, categoryLabel } from '../components/BadmintonCategoryField';
+import { BadmintonCategorySettings, categoryLabel } from '../components/BadmintonCategoryField';
 import { courtReschedulePath } from '../types/courtChanges';
 import { CourtChangeDialog } from "../components/CourtChangeDialog";
 import { CourtTimetable, type DeskBlock, type DeskStatus } from '../components/court-desk/CourtTimetable';
@@ -24,7 +37,6 @@ import { courtFloor } from '../components/court-desk/timetable';
 import { emptyDeskPayment } from '../components/court-desk/DeskPaymentFields';
 import { DeskPrivateCourseDialog } from '../components/court-desk/DeskPrivateCourseDialog';
 import { shiftDateKey } from '../utils/bookingDates';
-import { QrDesk } from '../components/QrDesk';
 import { bookingClock, bookingHasStarted, courtBlockOccurs } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
 import { SegmentedControl, useDialog } from '../components/Interactions';
@@ -33,7 +45,7 @@ import { motionTokens } from '../design/motion';
 import { Select } from '../components/Select';
 import { Children, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Plus,
@@ -58,7 +70,6 @@ import {
   MoreHorizontal,
   Trash2,
   Edit3,
-  Eye,
   XCircle,
   RotateCcw,
   LockKeyhole,
@@ -72,8 +83,7 @@ import { useOperations } from '../context/OperationsContext';
 
 import { useAuth } from '../context/AuthContext';
 
-import type { UserRole, Appointment, CourtBooking, Transaction, ContentItem } from '../types';
-import { publicImageSrc, publicationDate } from '../utils/publicContent';
+import type { UserRole, Appointment, CourtBooking, Transaction } from '../types';
 
 import { get, post, patch, put, del } from '../api';
 
@@ -314,7 +324,7 @@ async function printReceipt(
 }
 
 export default function OperationsPage({ role }: { role: UserRole }) {
-  const { pathname } = useLocation();
+  const { pathname,search } = useLocation();
   const o = useOperations();
 
   const { user } = useAuth();
@@ -322,7 +332,10 @@ export default function OperationsPage({ role }: { role: UserRole }) {
   const [query, setQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState('');
-  const [rentalTab, setRentalTab] = useState('availability');
+  const [rentalHolidayView, setRentalHolidayView] = useState(false);
+  useEffect(() => { setRentalHolidayView(false); }, [pathname, search]);
+  const rentalTab = staffBookingView(new URLSearchParams(search), 'availability');
+  const bookingTab = rentalTab === 'availability' ? 'bookings' : rentalTab;
   const [noticeType, setNoticeType] = useState<'success' | 'error' | 'info'>('success');
 
   const [cart, setCart] = useState<{ id: string; name: string; price: number; qty: number }[]>([]);
@@ -383,7 +396,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   const titleMap: Record<string, string> = {
     dashboard: 'Dashboard',
-    'badminton-packages': 'Badminton Package Management',
+    'badminton-packages': 'Badminton packages',
     'gym-packages': 'Gym Package Management',
     coaches: 'Coach Management',
     courts: 'Court Rental Management',
@@ -419,8 +432,8 @@ export default function OperationsPage({ role }: { role: UserRole }) {
   const commonTop = () => <AnimatePresence>{notice && <Toast message={notice} type={noticeType} onClose={() => setNotice('')} />}</AnimatePresence>;
 
   if (view === 'notifications')
-    return <Page title={title} eyebrow={role.replace('_', ' ')}>
-      {role === 'badminton_fo' ? <BadmintonNotifications /> : <NotificationCenter role={role} />}
+    return <Page title={title} eyebrow={role.replace('_', ' ')} showTrail={!['admin','badminton_fo'].includes(role)}>
+      {['admin','badminton_fo'].includes(role) ? <StaffNotificationInbox /> : <NotificationCenter role={role} />}
     </Page>;
 
   if ((isAdmin || role === 'owner') && view === 'dashboard')
@@ -461,19 +474,16 @@ export default function OperationsPage({ role }: { role: UserRole }) {
 
   if ((isAdmin || role === 'owner') && view === 'finance')
     return <Page title={title} eyebrow="All Businesses">
-      <Finance />
+      <AdminFinance />
     </Page>;
 
-  if (isAdmin && view === 'cms')
-    return <Page title={title} eyebrow="Community & Achievements">
-      <>
-        {commonTop()}
-        <CMS notify={notify} />
-      </>
-    </Page>;
+  if (isAdmin && view === 'cms') return <ContentManagement />;
+
+  if (isAdmin && view === 'badminton-categories')
+    return <Page title="Package categories" eyebrow="Badminton"><BadmintonCategorySettings onChanged={o.refresh}/></Page>;
 
   if (isAdmin && view === 'badminton-packages')
-    return <Page title={title} eyebrow="Badminton">
+    return <Page title={title} eyebrow="Badminton" actions={<Button onClick={()=>setShowForm(true)}><Plus size={16} aria-hidden="true"/>New package</Button>}>
       <>
         {commonTop()}
         <PackageManager
@@ -493,11 +503,10 @@ export default function OperationsPage({ role }: { role: UserRole }) {
       <CoachManager />
     </Page>;
 
-  if (isAdmin && view === 'court-rentals')
-    return <Page title="Court Rentals & Time Setup" eyebrow="Badminton" actions={<Link to="/admin/courts"><Button variant="secondary"><Wrench size={15} /> Manage courts</Button></Link>}>
+  if ((isAdmin && view === 'court-rentals') || (isBad && view === 'courts'))
+    return <Page title={rentalHolidayView?'Holiday Management':staffBookingTitles[rentalTab]} eyebrow={isBad ? "Badminton FO" : "Badminton"} actions={isAdmin&&!rentalHolidayView&&['availability','bookings'].includes(rentalTab)&&<Link to="/admin/courts"><Button variant="secondary"><Wrench size={15} /> Manage courts</Button></Link>}>
       {commonTop()}
-      <div className="mb-6"><SegmentedControl label="Court rental view" value={rentalTab} onChange={setRentalTab} options={[{ value: 'availability', label: 'Availability & times' }, { value: 'bookings', label: 'Booking history' }]} /></div>
-      {rentalTab === 'availability' ? <CourtDesk notify={notify} /> : <BookingQueue notify={notify} />}
+      <StaffBookingWorkspace notify={notify} withAvailability hideNavigation={rentalHolidayView} onHolidayChange={setRentalHolidayView}/>
     </Page>;
 
   if (isAdmin && view === 'courts')
@@ -514,48 +523,22 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     </Page>;
 
   if (isBad && view === 'dashboard')
-    return <Page title="Badminton Operations" eyebrow="Front Office">
+    return <Page title="Badminton desk" eyebrow="Front Office" showTrail={false}>
       {commonTop()}
-      <FOStats business="badminton" />
-      <BookingQueue notify={notify} />
+      <BadmintonDashboard/>
     </Page>;
 
   if (isBad && view === 'bookings')
-    return <Page title={title} eyebrow="Badminton FO">
+    return <Page title={staffBookingTitles[bookingTab]} eyebrow="Badminton FO">
       {commonTop()}
-      <BookingQueue notify={notify} />
+      <StaffBookingWorkspace notify={notify} />
     </Page>;
 
-  if (isBad && view === 'courts')
-    return <Page title="Court Rental Desk" eyebrow="Badminton FO">
-      <>
-        {commonTop()}
-        <div className="mb-6"><SegmentedControl label="Court rental view" value={rentalTab} onChange={setRentalTab} options={[{ value: 'availability', label: 'Availability & times' }, { value: 'bookings', label: 'Booking history' }]} /></div>
-        {rentalTab === 'availability' ? <CourtDesk notify={notify} /> : <BookingQueue notify={notify} />}
-      </>
-    </Page>;
+  if (isBad && view === 'packages')
+    return <Page title="Packages" eyebrow="Badminton FO">{commonTop()}<BadmintonCheckIn notify={notify} activationOnly/></Page>;
 
-  if (isBad && (view === 'packages' || view === 'check-in'))
-    return <Page title="Packages" eyebrow="Badminton FO">
-      {commonTop()}
-      <nav aria-label="Package sections" className="mb-6 flex flex-wrap gap-2">
-        {[
-          { to: '/badminton-fo/packages', label: 'Active Packages' },
-          { to: '/badminton-fo/packages/check-in', label: 'Scan Check-in' },
-        ].map(section => <NavLink key={section.to} to={section.to} end
-          className={({ isActive }) => `inline-flex min-h-11 items-center rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold ${isActive ? 'bg-zawana-950 text-white' : 'border border-zawana-border bg-white text-zawana-600 hover:bg-zawana-gold-soft'}`}>
-          {section.label}
-        </NavLink>)}
-      </nav>
-      {view === 'check-in' ? <>
-        <h2 className="mb-4 text-lg font-semibold">Scan Check-in</h2>
-        <QrDesk />
-        <BadmintonCheckIn key="check-in" notify={notify} />
-      </> : <>
-        <h2 className="mb-4 text-lg font-semibold">Active Packages</h2>
-        <BadmintonCheckIn key="active-packages" notify={notify} activationOnly />
-      </>}
-    </Page>;
+  if (isBad && view === 'check-in')
+    return <Page title="Check-in" eyebrow="Badminton FO" showTrail={false}><BadmintonCheckInWorkspace/></Page>;
 
   if (isBad && view === 'transactions')
     return <Page title="Finance" eyebrow="Badminton FO">
@@ -718,7 +701,7 @@ export default function OperationsPage({ role }: { role: UserRole }) {
     return <Page title={isDoctor ? 'Doctor Dashboard' : 'Coach Dashboard'} eyebrow="Professional Portal">
       <>
         {commonTop()}
-        <Professional role={role} />
+        {isCoach?<CoachWorkspace/>:<Professional role={role}/>}
       </>
     </Page>;
 
@@ -1083,7 +1066,6 @@ function BadmintonCheckIn({ notify, activationOnly = false }: { notify: (s: stri
   </>;
 
   if (activationOnly) return <div className="mx-auto max-w-6xl">
-    <PackageMemberDirectory packages={packages}/>
     <div className="mb-7 max-w-xl">
       <p className="text-xs font-semibold uppercase tracking-[.18em] text-zawana-500">Package activation</p>
       <h2 className="mt-2 text-3xl font-semibold tracking-tight text-zawana-950">A fresh start, in a few steps.</h2>
@@ -1552,15 +1534,6 @@ function OperationalAlerts() {
 
 function FOStats({ business }: { business: string }) {
   const o = useOperations();
-  const badminton = business === 'badminton';
-  const [data, setData] = useState<any>(null),
-    [error, setError] = useState('');
-  useEffect(() => {
-    if (badminton)
-      get<any>('/dashboard')
-        .then(setData)
-        .catch((e: any) => setError(e.message || 'Could not load Badminton operations.'))
-  }, [badminton]);
   const rev = o.transactions
     .filter(
       t =>
@@ -1571,49 +1544,6 @@ function FOStats({ business }: { business: string }) {
     .reduce((a, t) => a + t.finalAmount, 0);
   const active = o.memberships.filter(m => m.status === 'active').length;
   const count = o.memberships.filter(m => m.status === 'pending').length;
-  if (badminton)
-    return <div className="mb-6">
-      {error &&
-        <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </p>}
-      {!data ?
-        <div className="grid animate-pulse gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {[1, 2, 3, 4, 5].map(n =>
-            <Card key={n} className="h-24 bg-zawana-950/5" />
-          )}
-        </div> :
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <Stat label="Today's revenue" value={money(data.revenueToday)} />
-            <Stat label="Today's bookings" value={data.bookingsToday} />
-            <Stat label="Upcoming bookings" value={data.bookingsUpcoming} />
-            <Stat
-              label="Active packages"
-              value={data.activePackages}
-              sub={`${data.walkIns} walk-in customers`}
-            />
-            <Stat
-              label="Today's check-ins"
-              value={data.checkInsToday}
-              sub={`${data.availableCourts} courts currently available`}
-            />
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link to="/badminton-fo/packages/check-in">
-              <Button>
-                <PackagePlus size={15} /> Activate package</Button>
-            </Link>
-            <Link to="/badminton-fo/courts">
-              <Button variant="secondary">
-                <CalendarDays size={15} /> Court availability</Button>
-            </Link>
-            <Link to="/badminton-fo/bookings">
-              <Button variant="secondary">All court bookings</Button>
-            </Link>
-          </div>
-        </>}
-    </div>;
   return <div className="mb-6 grid gap-4 sm:grid-cols-3">
     <Stat label="Today's revenue" value={money(rev)} />
     <Stat label="Pending memberships" value={count} />
@@ -1699,18 +1629,57 @@ function courtBookingRow(b: any) {
   }
 }
 
+type StaffBookingView = 'availability' | 'bookings' | 'requests' | 'refunds';
+const staffBookingTitles: Record<StaffBookingView, string> = { availability: 'Court rentals', bookings: 'Booking history', requests: 'Requests', refunds: 'Refund requests' };
+function staffBookingView(params: URLSearchParams, fallback: StaffBookingView): StaffBookingView {
+  const activity = params.get('activity');
+  if (activity && ['availability', 'bookings', 'requests', 'refunds'].includes(activity)) return activity as StaffBookingView;
+  if (params.has('request') || params.has('batch')) return 'requests';
+  return params.get('history') === '1' ? 'bookings' : fallback;
+}
+
+function StaffBookingWorkspace({ notify, withAvailability=false, hideNavigation=false, onHolidayChange }: {
+  notify: (message: string, type?: 'success' | 'error' | 'info') => void;
+  withAvailability?: boolean; hideNavigation?: boolean; onHolidayChange?: (open: boolean) => void;
+}) {
+  const { user } = useAuth();
+  const { counts } = useOperationalActions();
+  const [params, setParams] = useSearchParams();
+  const requestedView = staffBookingView(params, withAvailability ? 'availability' : 'bookings');
+  const active = !withAvailability && requestedView === 'availability' ? 'bookings' : requestedView;
+  const selectView = (value: StaffBookingView) => {
+    const next = new URLSearchParams(params);
+    next.set('activity', value);
+    if (value === 'availability') next.delete('history'); else next.set('history', '1');
+    if (value !== 'requests') { next.delete('request'); next.delete('batch'); }
+    setParams(next);
+  };
+  return <div className={`staff-booking-workspace ${user&&['admin','badminton_fo'].includes(user.role)?'staff-booking-workspace--admin':''}`}>
+    {!hideNavigation && <div className="staff-booking-workspace__tabs"><SegmentedControl label={withAvailability ? 'Court rental view' : 'Booking activity'} value={active} onChange={selectView} options={[
+      ...(withAvailability ? [{ value: 'availability' as const, label: 'Availability & times' }] : []),
+      { value: 'bookings', label: <>Booking history<PendingActionCounter count={counts.total} label="Booking history"/></> }, { value: 'requests', label: <>Requests<PendingActionCounter count={counts.requests} label="Requests"/></> }, { value: 'refunds', label: <>Refund requests<PendingActionCounter count={counts.refunds} label="Refund requests"/></> },
+    ]}/></div>}
+    {active === 'availability' && <CourtDesk notify={notify} onHolidayChange={onHolidayChange}/>}
+    {active === 'bookings' && <BookingQueue notify={notify}/>}
+    {active === 'requests' && <BookingRequestInbox staff adminTab={!!user&&['admin','badminton_fo'].includes(user.role)}/>}
+    {active === 'refunds' && <div className="staff-booking-workspace__refunds"><RefundInbox adminTab={!!user&&['admin','badminton_fo'].includes(user.role)} emptyMessage="No refund requests yet."/></div>}
+  </div>;
+}
+
 function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'error' | 'info') => void }) {
   const revision = useBookingRevision();
-  const [historyKind, setHistoryKind] = useState('court');
+  const [routeParams,setRouteParams]=useSearchParams();const bookingId=routeParams.get('booking');
+  const [historyKind, setHistoryKind] = useState(()=>routeParams.get('kind')==='private_course'?'private_course':'court');
   const [historyDetail, setHistoryDetail] = useState<any>(null);
   const showHistory = (row: any) => row.kind === 'court' ? setChangeBooking(row.id) : setHistoryDetail(row);
   const [changeBooking, setChangeBooking] = useState<string | null>(null);
   const { user } = useAuth();
+  const { counts: actionCounts } = useOperationalActions();
   const o = useOperations();
+  const [loading, setLoading] = useState(true), [reload, setReload] = useState(0);
   const [rows, setRows] = useState<any[]>([]),
     [page, setPage] = useState(1),
     [pageInfo, setPageInfo] = useState<any>({ total: 0, totalPages: 0 }),
-    [busy, setBusy] = useState(''),
     [error, setError] = useState('');
   const [filters, setFilters] = useState({
     q: '',
@@ -1724,9 +1693,11 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
   });
   useEffect(() => {
     let live = true;
+    setLoading(true);setError('');setRows([]);
     const timer = window.setTimeout(
       () => {
         const params = new URLSearchParams({ page: String(page), limit: '20', kind: historyKind });
+        if(bookingId)params.set('booking',bookingId);
         for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
         const request = historyKind === 'weekly' ? get<any[]>('/court-blocks').then(blocks => {
           const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -1742,49 +1713,40 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
         }) : get<any>(`/bookings?${params}`);
         request.then(r => {
             if (!live) return;
+            const lastPage = Math.max(1,r.pagination?.totalPages || 0);
+            if(page>lastPage){setPage(lastPage);return;}
             setRows(
               (r.data || []).map((row: any) => historyKind === 'weekly' ? row : courtBookingRow(row))
             );
             setPageInfo(r.pagination || { total: 0, totalPages: 0 });
             setError('')
           })
-          .catch((e: any) => { if (live) setError(e.message || 'Could not load court bookings.'); })
+          .catch((e: any) => { if (live) setError(e.message || 'Could not load court bookings.'); }).finally(() => { if(live)setLoading(false); })
       },
       filters.q ? 250 : 0
     );
     return () => { live = false; window.clearTimeout(timer); };
-  }, [page, filters, historyKind, revision]);
+  }, [page, filters, historyKind, revision,bookingId,reload]);
   const setFilter = (key: string, value: string) => {
     setPage(1);
     setFilters(f => ({ ...f, [key]: value }))
   };
-  const update = async (b: any, status: 'cancelled' | 'completed') => {
-    setBusy(b.id);
-    setError('');
-    try {
-      await o.updateCourtBooking(b.id, status);
-      notify(`Booking ${status}.`);
-      const params = new URLSearchParams({ page: String(page), limit: '20', kind: historyKind });
-      for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
-      const r = await get<any>(`/bookings?${params}`);
-      setRows((r.data || []).map(courtBookingRow));
-      setPageInfo(r.pagination)
-    } catch (e: any) {
-      const message = e.message || 'Could not update booking.';
-      setError(message);
-      notify(message, 'error')
-    } finally {
-      setBusy('')
-    }
-  };
-  return <div className="desk-history">
-    <RefundInbox />
-    <BookingRequestInbox staff />
+  const hasFilters = Object.values(filters).some(Boolean);
+  const clearFilters = () => { setPage(1);setFilters({q:'',from:'',to:'',status:'',paymentStatus:'',courtId:'',timeFrom:'',timeTo:''}); };
+  return <div className="desk-history desk-history-organized">
+    {bookingId&&<div className="mb-4 flex flex-wrap items-center gap-3 text-sm"><span>Showing the linked booking</span><Button variant="secondary" onClick={()=>{const next=new URLSearchParams(routeParams);next.delete('booking');setRouteParams(next,{replace:true});}}>Show all bookings</Button></div>}
     {changeBooking && <CourtChangeDialog bookingId={changeBooking} onClose={() => setChangeBooking(null)} onChanged={() => { setFilters(f => ({ ...f })); notify('Booking updated.'); }} />}
 
-    {historyDetail && <DeskDialog title="Booking history details" heading={historyDetail.title} size="compact" onClose={()=>setHistoryDetail(null)} cancelLabel="Close" closeLabel="Close history details" bodyClassName="space-y-4"><p className="text-sm font-medium">{historyDetail.customer}</p><dl className="desk-history-facts"><div><dt>Court</dt><dd>{historyDetail.court}</dd></div><div><dt>Schedule</dt><dd>{historyDetail.date} · {historyDetail.time}</dd></div><div><dt>Status</dt><dd>{historyDetail.status}</dd></div>{historyKind!=='weekly'&&<div><dt>Payment</dt><dd>{historyDetail.paymentStatus} · {money(historyDetail.price)}</dd></div>}</dl>{historyKind==='weekly'&&<p className="desk-note">Recurring schedule record. Weekly classes do not create individual rental or payment history records.</p>}</DeskDialog>}
+    {historyDetail && <DeskDialog title="Booking history details" heading={historyDetail.title} eyebrow={historyDetail.kind!=='weekly'?historyDetail.code:undefined} size="compact" onClose={()=>setHistoryDetail(null)} cancelLabel="Close" closeLabel="Close history details" bodyClassName="space-y-4">
+      <BookingStatusBadge status={historyDetail.status}/>
+      {historyDetail.kind!=='weekly'&&<p className="text-sm font-medium">{historyDetail.customer}</p>}
+      <section className="staff-history-detail-session" aria-label="Booked session"><CalendarDays size={20} aria-hidden="true"/><div><strong>{historyDetail.date}</strong><p>{historyDetail.time}</p><p>{historyDetail.court}</p></div></section>
+      {historyDetail.coach&&<p className="text-sm text-zawana-500">Coach · {historyDetail.coach.name}</p>}
+      {historyDetail.kind!=='weekly'&&<dl className="desk-history-facts"><div><dt>Payment</dt><dd>{money(historyDetail.price)} · {historyDetail.paymentStatus}</dd></div></dl>}
+    </DeskDialog>}
 
-    <div className="mb-4"><SegmentedControl label="Booking history type" value={historyKind} onChange={value => { setRows([]); setPage(1); setFilters(f => ({ ...f, status: '', paymentStatus: '' })); setHistoryKind(value); }} options={[{ value: 'court', label: 'Court Rentals' }, { value: 'private_course', label: 'Private Courses' }, { value: 'weekly', label: 'Weekly Classes' }]} /></div>
+
+    <div className="desk-history-toolbar"><SegmentedControl label="Booking history type" value={historyKind} onChange={value => { setRows([]); setPage(1); setFilters(f => ({ ...f, status: '', paymentStatus: '' })); setHistoryKind(value); }} options={[{ value: 'court', label: <>Court Rentals<PendingActionCounter count={actionCounts.court} label="Court rentals"/></> }, { value: 'private_course', label: <>Private Courses<PendingActionCounter count={actionCounts.private_course} label="Private courses"/></> }, { value: 'weekly', label: 'Weekly Classes' }]} /><div className="desk-history-tools"><div>{hasFilters&&<Button variant="ghost" onClick={clearFilters}>Clear filters</Button>}<Button variant="secondary" disabled={loading} onClick={()=>setReload(value=>value+1)}>Refresh bookings</Button></div></div></div>
     <div className="desk-history-filters mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <input
         aria-label="Search bookings"
@@ -1808,13 +1770,12 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
           'AWAITING_PAYMENT'
         ]).map(s =>
           <option key={s} value={s}>
-            {s.replaceAll('_', ' ')}
+            {bookingStatusLabel(s)}
           </option>
         )}
       </Select>
-      <Select
+      {historyKind !== 'weekly' && <Select
         aria-label="Payment status"
-        disabled={historyKind === 'weekly'}
         className="rounded-xl border p-3"
         value={filters.paymentStatus}
         onChange={e => setFilter('paymentStatus', e.target.value)}
@@ -1825,7 +1786,7 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
             {s}
           </option>
         )}
-      </Select>
+      </Select>}
       <Select
         aria-label="Court"
         className="rounded-xl border p-3"
@@ -1838,7 +1799,8 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
             {c.name}
           </option>)}
       </Select>
-      <input
+      <details className="desk-history-advanced"><summary>Date &amp; time filters{filters.from||filters.to||filters.timeFrom||filters.timeTo?' · Active':''}</summary><div className="desk-history-date-fields">
+      <label>Specific date<input
         aria-label="Specific date"
         type="date"
         className="rounded-xl border p-3"
@@ -1847,130 +1809,46 @@ function BookingQueue({ notify }: { notify: (s: string, type?: 'success' | 'erro
           setPage(1);
           setFilters(f => ({ ...f, from: e.target.value, to: e.target.value }))
         }}
-      />
-      <input
+      /></label>
+      <label>From date<input
         aria-label="From date"
         type="date"
         className="rounded-xl border p-3"
         value={filters.from}
         onChange={e => setFilter('from', e.target.value)}
-      />
-      <input
+      /></label>
+      <label>To date<input
         aria-label="To date"
         type="date"
         className="rounded-xl border p-3"
         value={filters.to}
         onChange={e => setFilter('to', e.target.value)}
-      />
-      <input
+      /></label>
+      <label>Time from<input
         aria-label="Time from"
         type="time"
         className="rounded-xl border p-3"
         value={filters.timeFrom}
         onChange={e => setFilter('timeFrom', e.target.value)}
-      />
-      <input
+      /></label>
+      <label>Time to<input
         aria-label="Time to"
         type="time"
         className="rounded-xl border p-3"
         value={filters.timeTo}
         onChange={e => setFilter('timeTo', e.target.value)}
-      />
+      /></label></div></details>
     </div>
     {error &&
       <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">
-        {error}
+        {error} <Button variant="secondary" onClick={()=>setReload(value=>value+1)}>Retry bookings</Button>
       </p>}
-    <div className="hidden md:block">
-      <Table
-        headers={['Customer', 'Court', 'Date', 'Time', 'Price', 'Payment', 'Status', 'Action']}
-      >
-        {rows.map(b =>
-          <tr key={b.id}>
-            <Cell>
-              <b>{b.customer}</b>
-              <p className="text-xs text-zawana-500">{b.code || b.id}</p>
-            </Cell>
-            <Cell>{b.court}</Cell>
-            <Cell>{b.date}</Cell>
-            <Cell>{b.time}</Cell>
-            <Cell>{money(b.price)}</Cell>
-            <Cell>
-              <Badge>{b.paymentStatus}</Badge>
-            </Cell>
-            <Cell>
-              <Badge>{String(b.status).replaceAll('_', ' ')}</Badge>
-            </Cell>
-            <Cell>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => showHistory(b)}>Details & history</Button>
-                {b.kind === 'court' && String(b.status).toLowerCase() === 'confirmed' && <Link to={courtReschedulePath(b.id, user?.role)}><Button variant="secondary">Reschedule</Button></Link>}
-                {b.kind === 'court' && !['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
-                  <Button
-                    variant="danger"
-                    className="px-3 py-2"
-                    disabled={busy === b.id}
-                    onClick={() => setChangeBooking(b.id)}
-                  >Cancel</Button>}
-                {b.kind === 'court' && String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
-                  <Button
-                    variant="secondary"
-                    className="px-3 py-2"
-                    disabled={busy === b.id}
-                    onClick={() => void update(b, 'completed')}
-                  >Complete</Button>}
-              </div>
-            </Cell>
-          </tr>
-        )}
-      </Table>
-    </div>
-    <div className="space-y-3 md:hidden">
-      {rows.map(b =>
-        <Card key={b.id} className="p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <b>{b.customer}</b>
-              <p className="text-xs text-zawana-500">{b.code || b.id}</p>
-            </div>
-            <Badge>{String(b.status).replaceAll('_', ' ')}</Badge>
-          </div>
-          <p className="mt-3 text-sm font-bold">
-            {b.court} · {b.time}
-          </p>
-          <p className="mt-1 text-xs text-zawana-500">
-            {b.date} · {money(b.price)} · {b.paymentStatus}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => showHistory(b)}>Details & history</Button>
-                {b.kind === 'court' && String(b.status).toLowerCase() === 'confirmed' && <Link to={courtReschedulePath(b.id, user?.role)}><Button variant="secondary">Reschedule</Button></Link>}
-            {b.kind === 'court' && !['cancelled', 'completed'].includes(String(b.status).toLowerCase()) &&
-              <Button
-                variant="danger"
-                className="min-h-11 px-4"
-                disabled={busy === b.id}
-                onClick={() => setChangeBooking(b.id)}
-              >Cancel</Button>}
-            {b.kind === 'court' && String(b.status).toLowerCase() === 'confirmed' && b.date <= today &&
-              <Button
-                variant="secondary"
-                className="min-h-11 px-4"
-                disabled={busy === b.id}
-                onClick={() => void update(b, 'completed')}
-              >Complete</Button>}
-          </div>
-        </Card>)}
-    </div>
-    {!rows.length && !error &&
+    {loading?<div role="status" className="desk-history-loading">Loading booking history…</div>:rows.length>0?<StaffBookingHistoryList rows={rows} onDetails={showHistory} onCancel={setChangeBooking} reschedulePath={id=>courtReschedulePath(id,user?.role)}/>:null}
+    {!loading && !rows.length && !error &&
       <div className="mt-4">
-        <Empty title="No matching court bookings" body="Try changing the search or filters." />
+        <Empty title={hasFilters?'No bookings match these filters':historyKind==='weekly'?'No weekly classes recorded':historyKind==='private_course'?'No private-course bookings yet':'No court rentals recorded'} body={hasFilters?'Clear filters to see all records in this category.':'Choose another booking category or refresh to check for new records.'} />
       </div>}
-    <Pagination
-      page={page}
-      totalPages={pageInfo.totalPages || 0}
-      total={pageInfo.total || 0}
-      onPage={setPage}
-    />
+    <HistoryPagination page={page} totalPages={pageInfo.totalPages||0} total={pageInfo.total||0} pageSize={20} noun="records" label="Staff booking history pagination" disabled={loading} onPage={setPage}/>
   </div>
 }
 
@@ -1992,9 +1870,9 @@ function BadmintonPackages() {
     void refreshPurchases()
   }, []);
 
-  return <div className="space-y-6"><BadmintonCategorySettings onChanged={o.refresh} />
+  return <div className="badminton-package-management space-y-6">
     {purchases.length > 0 &&
-      <section>
+      <details className="package-legacy-records"><summary>Legacy purchase records</summary>
         <div className="mb-3">
           <h2 className="text-lg font-black">Legacy pending purchase records</h2>
           <p className="text-sm text-zawana-500">These requests were created before immediate package activation. They remain in history and cannot be manually approved.</p>
@@ -2018,11 +1896,11 @@ function BadmintonPackages() {
             </tr>
           )}
         </Table>
-      </section>}
+      </details>}
 
-    <div className="grid gap-3 sm:grid-cols-3">{[['Packages', o.badmintonPackages.length], ['Active', o.badmintonPackages.filter(p => p.status === 'active').length], ['Coming soon', o.badmintonPackages.filter(p => p.status === 'coming_soon').length]].map(([label, value]) => <Card key={label} className="p-5"><p className="text-xs text-zawana-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p></Card>)}</div>
+
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3 rounded-xl border bg-white px-4 sm:w-80"><Search size={16} className="shrink-0 text-zawana-500" /><input aria-label="Search packages" placeholder="Search packages" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 w-full !border-0 !bg-transparent !px-0 !shadow-none !outline-none !ring-0" /></div><Select aria-label="Package catalog status" className="min-w-40 text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="active">Active</option><option value="coming_soon">Coming soon</option><option value="inactive">Inactive</option></Select></div>
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((p: any) => <Card key={p.id} className="flex flex-col overflow-hidden p-0"><div className="flex-1 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zawana-gold/10 text-zawana-950"><PackagePlus size={18} /></span><Badge good={p.status === 'active'}>{p.status === 'coming_soon' ? 'Coming soon' : p.status}</Badge></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{p.title}</h3><p className="mt-1 text-xs text-zawana-500">{p.category?.name || 'Category needs review'}{p.category?.code ? ` · ${p.category.code}` : ''}{p.category&&!p.category.active?' · Category archived':''}</p><p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zawana-500">{p.description || 'Badminton session package'}</p><p className="mt-5 text-2xl font-semibold tracking-tight">{money(p.price)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zawana-500"><span>{p.sessions} sessions</span><span>{p.validity} days validity</span></div><p className="mt-3 text-xs leading-relaxed text-zawana-500"><span className="font-semibold">Available days:</span> {badmintonDaysLabel(p.availableDays)}</p><p className="mt-4 border-t border-zawana-border pt-4 text-xs leading-relaxed text-zawana-500">{p.availableFrom && p.availableUntil ? `${p.availableFrom}–${p.availableUntil} · ` : ''}{p.scheduleNotes || 'Flexible schedule'}{p.courtRules ? ` · ${p.courtRules}` : ''}</p></div><div className="flex flex-wrap gap-3 items-center justify-between border-t border-zawana-border bg-zawana-950/[.015] px-5 py-3"><span className="text-xs text-zawana-500">Manage package</span><div className="flex flex-wrap gap-2"><PackageMembers packageId={p.id} name={p.title}/><PackageEdit item={p} kind="badminton" /><PackageDelete id={p.id} name={p.title} kind="badminton" /></div></div></Card>)}</div>
+    <div className="package-management-grid">{shown.map((p:any)=><Card key={p.id} className="package-management-card"><div className="category-card-heading"><span className="package-management-icon"><PackagePlus size={20}/></span><Badge good={p.status==='active'}>{p.status==='coming_soon'?'Coming soon':p.status}</Badge></div><h3>{p.title}</h3><p className="package-management-category">{p.category?.name||'Category needs review'}{p.category&&!p.category.active?' · Archived':''}</p><p className="package-management-price">{money(p.price)}</p><div className="package-management-facts"><span>{p.sessions} sessions</span><span>{p.validity} days</span></div><div className="package-management-days" aria-label={`Available days for ${p.title}`}>{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=><span key={day} data-available={!p.availableDays?.length||p.availableDays.includes(day)}>{day}</span>)}</div>{(p.description||p.scheduleNotes||p.courtRules||p.availableFrom||p.availableUntil)&&<details className="package-management-details"><summary>Package details</summary>{p.description&&<p>{p.description}</p>}{(p.availableFrom||p.availableUntil)&&<p>{p.availableFrom||'Any time'} – {p.availableUntil||'Any time'}</p>}{p.scheduleNotes&&<p>{p.scheduleNotes}</p>}{p.courtRules&&<p>{p.courtRules}</p>}</details>}<div className="package-management-actions"><PackageMembers packageId={p.id} name={p.title}/><PackageEdit item={p} kind="badminton"/><PackageDelete id={p.id} name={p.title} kind="badminton"/></div></Card>)}</div>
     {!shown.length && <Empty title="No matching packages" body="Try another search or create a new package." />}
   </div>
 }
@@ -2093,13 +1971,12 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
     >
       <Edit3 size={15} />
     </button>
-    <AnimatePresence>{open &&
-      <OpsModal
+    <AnimatePresence>{open && (kind==='badminton'?<BadmintonPackageDialog editing value={form} onChange={changes=>setForm((current:any)=>({...current,...changes}))} busy={saving} uploadBusy={uploadBusy} onUploadBusy={setUploadBusy} onClose={()=>{if(!saving&&!uploadBusy)setOpen(false);}} onSave={()=>save()} error={saveError} legacyReview={classifyLegacy} onLegacyReview={user?.role==='admin'?setClassifyLegacy:undefined}/>:<OpsModal
         title={`Edit ${kind} package`}
         subtitle="Update pricing, sessions, validity and status."
         onClose={() => { if (!saving && !uploadBusy) setOpen(false); }}
       >
-        {kind === 'badminton' && <div className="mb-5 space-y-3"><BadmintonCategoryField value={form.categoryId} onChange={categoryId => setForm({ ...form, categoryId })} />{user?.role === 'admin' && <label className="flex items-start gap-3 text-xs leading-relaxed"><input type="checkbox" checked={classifyLegacy} onChange={e => setClassifyLegacy(e.target.checked)} /><span>I reviewed this package’s legacy records. Apply this category to its unclassified enrollments and matching attendance history. Existing classified categories and session balances stay unchanged.</span></label>}</div>}{saveError && <p role="alert" className="mb-4 text-sm text-red-700">{saveError}</p>}<h4 className="mb-3 font-bold">Package Information</h4><div className="grid gap-4 md:grid-cols-2">
+        {saveError && <p role="alert" className="mb-4 text-sm text-red-700">{saveError}</p>}<h4 className="mb-3 font-bold">Package Information</h4><div className="grid gap-4 md:grid-cols-2">
           <label>Title<input
               value={form.title || ''}
               onChange={e => setForm({ ...form, title: e.target.value })}
@@ -2111,22 +1988,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
               onChange={e => setForm({ ...form, price: e.target.value })}
             />
           </label>
-          {kind === 'badminton' ?
-            <>
-              <h4 className="md:col-span-2 font-bold">Package Configuration</h4><label>Sessions<input
-                  type="number"
-                  value={form.sessions ?? ''}
-                  onChange={e => setForm({ ...form, sessions: e.target.value })}
-                />
-              </label>
-              <label>Validity days<input
-                  type="number"
-                  value={form.validity ?? ''}
-                  onChange={e => setForm({ ...form, validity: e.target.value })}
-                />
-              </label>
-              <div className="md:col-span-2"><BadmintonAvailableDays value={form.availableDays} onChange={availableDays => setForm({ ...form, availableDays })} disabled={saving} /></div>
-            </> :
+
             <>
               <label>Duration days<input
                   type="number"
@@ -2146,8 +2008,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
                   onChange={e => setForm({ ...form, benefits: e.target.value })}
                 />
               </label>
-            </>}
-          {kind === "badminton" && <div className="md:col-span-2"><ImageUpload label="Package image" value={form.imageUrl} onChange={imageUrl => setForm({ ...form, imageUrl })} onBusyChange={setUploadBusy} /></div>}
+            </>
           <label className="md:col-span-2">Description<textarea
               value={form.description || ''}
               onChange={e => setForm({ ...form, description: e.target.value })}
@@ -2158,7 +2019,6 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
               onChange={e => setForm({ ...form, status: e.target.value })}
             >
               <option value="active">Active</option>
-              {kind === 'badminton' && <option value="coming_soon">Coming Soon</option>}
               <option value="inactive">Inactive</option>
             </Select>
           </label>
@@ -2168,7 +2028,7 @@ function PackageEdit({ item, kind }: { item: any; kind: 'badminton' | 'gym' }) {
           <Button disabled={saving || uploadBusy} onClick={save}>
             <Check size={15} /> Save changes</Button>
         </div>
-      </OpsModal>}</AnimatePresence>
+      </OpsModal>)}</AnimatePresence>
   </>
 }
 
@@ -2228,6 +2088,8 @@ function PackageManager({
   const o = useOperations();
   const [uploadBusy, setUploadBusy] = useState(false);
   const [packageSaving, setPackageSaving] = useState(false);
+  const [packageError,setPackageError] = useState('');
+  useEffect(()=>{if(showForm)setPackageError('');},[showForm]);
   const [categoryId, setCategoryId] = useState('');
   const [name, setName] = useState(''),
     [price, setPrice] = useState(''),
@@ -2248,7 +2110,7 @@ function PackageManager({
     if (!name.trim() || !price || (kind === 'badminton' && (!categoryId || !Number.isInteger(+number) || +number < 1 || !Number.isInteger(+validity) || +validity < 1))) {
       notify('Please enter a package title, category and price.');
       return }
-    setPackageSaving(true);
+    setPackageSaving(true);setPackageError('');
     try {
       if (kind === 'badminton')
         await o.addBadmintonPackage({
@@ -2291,18 +2153,18 @@ function PackageManager({
       setShowForm(false);
       notify(`${kind === 'badminton' ? 'Badminton' : 'Gym'} package created.`)
     } catch (e: any) {
-      notify(e.message || 'Could not save package.')
+      setPackageError(e.message || 'Could not save package.');notify(e.message || 'Could not save package.')
     } finally { setPackageSaving(false); }
   };
 
   return <div>
     <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <p className="max-w-xl text-sm leading-relaxed text-zawana-500">Manage session packages, prices and access rules in one place.</p>
-      <Button onClick={() => setShowForm(true)}>
-        <Plus size={16} /> New package</Button>
+      <p className="max-w-xl text-sm leading-relaxed text-zawana-500">Manage packages and student access.</p>
+      {kind!=='badminton'&&<Button onClick={() => {setPackageError('');setShowForm(true);}}>
+        <Plus size={16} /> New package</Button>}
+      {kind==='badminton'&&<Link className="package-category-link" to="/admin/badminton-categories">Manage categories</Link>}
     </div>
-    <AnimatePresence>{showForm &&
-      <OpsModal
+    <AnimatePresence>{showForm && (kind==='badminton'?<BadmintonPackageDialog value={{title:name,price,sessions:number,validity,categoryId,description,availableDays,imageUrl,availableFrom,availableUntil,scheduleNotes,courtRules}} onChange={changes=>{if(changes.title!==undefined)setName(changes.title);if(changes.price!==undefined)setPrice(String(changes.price));if(changes.sessions!==undefined)setNumber(String(changes.sessions));if(changes.validity!==undefined)setValidity(String(changes.validity));if(changes.categoryId!==undefined)setCategoryId(changes.categoryId);if(changes.description!==undefined)setDescription(changes.description);if(changes.availableDays!==undefined)setAvailableDays(changes.availableDays);if(changes.imageUrl!==undefined)setImageUrl(changes.imageUrl||'');if(changes.availableFrom!==undefined)setAvailableFrom(changes.availableFrom);if(changes.availableUntil!==undefined)setAvailableUntil(changes.availableUntil);if(changes.scheduleNotes!==undefined)setScheduleNotes(changes.scheduleNotes);if(changes.courtRules!==undefined)setCourtRules(changes.courtRules);}} busy={packageSaving} uploadBusy={uploadBusy} onUploadBusy={setUploadBusy} onClose={()=>{if(!uploadBusy&&!packageSaving)setShowForm(false);}} onSave={()=>save()} error={packageError}/>:<OpsModal
         title={`Create ${kind} package`}
         subtitle="Set session access, pricing and availability for your members."
         onClose={() => { if (!uploadBusy && !packageSaving) setShowForm(false); }}
@@ -2325,37 +2187,7 @@ function PackageManager({
             value={description}
             onChange={e => setDescription(e.target.value)}
           />
-          {kind === 'badminton' ?
-            <><BadmintonCategoryField value={categoryId} onChange={setCategoryId} />
-<h4 className="md:col-span-2 font-bold">Package Configuration</h4><label className="block space-y-2 text-sm">Sessions<input className="w-full" type="number" min={1} step={1} value={number} onChange={e => setNumber(e.target.value)} /></label>
-<label className="block space-y-2 text-sm">Validity days<input className="w-full" type="number" min={1} step={1} value={validity} onChange={e => setValidity(e.target.value)} /></label>
-              <div className="md:col-span-2">
-                <BadmintonAvailableDays value={availableDays} onChange={setAvailableDays} disabled={packageSaving} />
-              </div>
-              <input
-                type="time"
-                aria-label="Available from"
-                value={availableFrom}
-                onChange={e => setAvailableFrom(e.target.value)}
-              />
-              <input
-                type="time"
-                aria-label="Available until"
-                value={availableUntil}
-                onChange={e => setAvailableUntil(e.target.value)}
-              />
-              <input
-                placeholder="Schedule notes"
-                value={scheduleNotes}
-                onChange={e => setScheduleNotes(e.target.value)}
-              />
-              <input
-                placeholder="Court rules"
-                value={courtRules}
-                onChange={e => setCourtRules(e.target.value)}
-              />
-              <div className="md:col-span-2"><h4 className="mb-3 font-bold">Package Image</h4><ImageUpload label="Package image" value={imageUrl} onChange={value => setImageUrl(value || '')} onBusyChange={setUploadBusy} /></div>
-            </> :
+
             <>
               <input
                 type="number"
@@ -2375,14 +2207,14 @@ function PackageManager({
                 value={benefits}
                 onChange={e => setBenefits(e.target.value)}
               />
-            </>}
+            </>
 
         </div>
         <div className="sticky -bottom-4 z-10 -mx-4 mt-6 flex justify-end gap-2 border-t bg-white px-4 py-4 sm:-bottom-6 sm:-mx-6 sm:px-6">
           <Button variant="secondary" disabled={uploadBusy || packageSaving} loading={packageSaving} onClick={save}>
             <Plus size={15} /> Create</Button>
         </div>
-      </OpsModal>}</AnimatePresence>
+      </OpsModal>)}</AnimatePresence>
     {kind === 'badminton' ? <BadmintonPackages /> : <GymEnrollments />}
   </div>
 }
@@ -3345,168 +3177,6 @@ function StudentManager({
   </div>
 }
 
-function Finance() {
-  const paymentRevision = usePaymentRevision();
-  const [business, setBusiness] = useState('');
-  const [page, setPage] = useState(1);
-  const [rows, setRows] = useState<any[]>([]);
-  const [pageInfo, setPageInfo] = useState<any>({ total: 0, totalPages: 0 });
-  const [summary, setSummary] = useState<any>({ gross: 0, discounts: 0, net: 0, refunds: 0 });
-  const [error, setError] = useState('');
-  const [filters, setFilters] = useState({
-    from: '',
-    to: '',
-    status: '',
-    paymentMethod: '',
-    q: ''
-  });
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => {
-        const p = new URLSearchParams({ page: String(page), limit: '20' });
-        if (business) p.set('business', business);
-        for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
-        get<any>(`/transactions?${p}`)
-          .then(r => {
-            setRows(r.data || []);
-            setPageInfo(r.pagination || { total: 0, totalPages: 0 });
-            setSummary(r.summary || { gross: 0, discounts: 0, net: 0, refunds:0 });
-            setError('')
-          })
-          .catch((e: any) => setError(e.message || 'Could not load finance transactions.'))
-      },
-      filters.q ? 250 : 0
-    );
-    return () => window.clearTimeout(timer)
-  }, [page, business, filters, paymentRevision]);
-  const setFilter = (key: string, value: string) => {
-    setPage(1);
-    setFilters(f => ({ ...f, [key]: value }))
-  };
-  return <div>
-    <RefundInbox />
-    <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-      <input
-        aria-label="Search transactions"
-        className="rounded-xl border p-3"
-        placeholder="Search customer, item or ID"
-        value={filters.q}
-        onChange={e => setFilter('q', e.target.value)}
-      />
-      <input
-        aria-label="From date"
-        type="date"
-        className="rounded-xl border p-3"
-        value={filters.from}
-        onChange={e => setFilter('from', e.target.value)}
-      />
-      <input
-        aria-label="To date"
-        type="date"
-        className="rounded-xl border p-3"
-        value={filters.to}
-        onChange={e => setFilter('to', e.target.value)}
-      />
-      <Select
-        aria-label="Transaction status"
-        className="rounded-xl border p-3"
-        value={filters.status}
-        onChange={e => setFilter('status', e.target.value)}
-      >
-        <option value="">All statuses</option>
-        {['paid', 'pending', 'refunded', 'cancelled'].map(s =>
-          <option key={s}>{s}</option>
-        )}
-      </Select>
-      <Select
-        aria-label="Payment method"
-        className="rounded-xl border p-3"
-        value={filters.paymentMethod}
-        onChange={e => setFilter('paymentMethod', e.target.value)}
-      >
-        <option value="">All payment types</option>
-        {['Cash', 'Manual (simulated)', 'Pay Later', 'Temporarily disabled'].map(s =>
-          <option key={s}>{s}</option>
-        )}
-      </Select>
-    </div>
-    <SegmentedControl label="Finance business" value={business} className="mb-5 w-fit"
-      onChange={value => { setBusiness(value); setPage(1); }}
-      options={['', 'Gym', 'Badminton', 'Clinic', 'Store', 'Cafe', 'Academy'].map(value => ({ value, label: value || 'All businesses' }))} />
-    {error &&
-      <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
-        {error}
-      </p>}
-    <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <Stat label="Gross · filtered total" value={money(summary.gross)} />
-      <Stat label="Discounts · filtered total" value={money(summary.discounts)} />
-      <Stat label="Refunds · filtered total" value={money(summary.refunds || 0)} />
-      <Stat label="Net · filtered total" value={money(summary.net)} />
-    </div>
-    <div className="hidden md:block">
-      <Table
-        headers={[
-          'ID',
-          'Date',
-          'Customer',
-          'Business',
-          'Item',
-          'Amount',
-          'Discount',
-          'Final',
-          'Payment',
-          'Staff'
-        ]}
-      >
-        {rows.map(t =>
-          <tr key={t.id}>
-            <Cell>{t.id}</Cell>
-            <Cell>{t.date}</Cell>
-            <Cell>{t.customer}</Cell>
-            <Cell>
-              <Badge>{t.business}</Badge>
-            </Cell>
-            <Cell>{t.item}</Cell>
-            <Cell>{money(t.amount)}</Cell>
-            <Cell>{money(t.discount)}</Cell>
-            <Cell>
-              <b>{money(t.finalAmount)}</b>
-            </Cell>
-            <Cell>{t.paymentMethod}{t.status === "paid" && t.confirmationMode && t.confirmationMode !== "LEGACY" && <p className="mt-1 text-[10px] text-zawana-500">{t.confirmationMode === "SIMULATED" ? "Simulated confirmation" : "Manually confirmed"}</p>}</Cell>
-            <Cell>{t.staff}</Cell>
-          </tr>
-        )}
-      </Table>
-    </div>
-    <div className="space-y-3 md:hidden">
-      {rows.map(t =>
-        <Card key={t.id} className="p-4">
-          <div className="flex justify-between gap-2">
-            <b>{t.customer}</b>
-            <b>{money(t.finalAmount)}</b>
-          </div>
-          <p className="mt-2 text-sm">{t.item}</p>
-          <p className="mt-1 text-xs text-zawana-500">
-            {t.date} · {t.business} · {t.paymentMethod} · {t.status}
-          </p>
-          <p className="mt-1 text-[10px] text-zawana-400">
-            {t.id} · {t.staff}
-          </p>
-        </Card>)}
-    </div>
-    {!rows.length && !error &&
-      <div className="mt-4">
-        <Empty title="No matching transactions" body="Try another date range or filter." />
-      </div>}
-    <Pagination
-      page={page}
-      totalPages={pageInfo.totalPages || 0}
-      total={pageInfo.total || 0}
-      onPage={setPage}
-    />
-  </div>
-}
-
 function Transactions({ business }: { business: Transaction['business'] }) {
   const paymentRevision = usePaymentRevision();
   const [rows, setRows] = useState<any[]>([]),
@@ -3637,245 +3307,6 @@ function Transactions({ business }: { business: Transaction['business'] }) {
   </div>
 }
 
-function CMS({ notify }: { notify: (s: string) => void }) {
-  const o = useOperations();
-  const [editing, setEditing] = useState<ContentItem | null>(null);
-  const [deleting, setDeleting] = useState<ContentItem | null>(null);
-  const [open, setOpen] = useState(false);
-  const [publishingId, setPublishingId] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [imageUploading, setImageUploading] = useState(false);
-  const [kindFilter, setKindFilter] = useState('all');
-  const emptyForm: Omit<ContentItem, 'id'> = {
-    kind: 'achievement',
-    category: 'Milestones',
-    body: '',
-    title: '',
-    description: '',
-    image: '',
-    googleFormLink: '',
-    status: 'draft',
-    publishDate: gymToday()
-  };
-  const [form, setForm] = useState(emptyForm);
-  const contentToday = gymToday();
-
-  const start = (item?: ContentItem, kind: ContentItem['kind'] = 'achievement') => {
-    setEditing(item || null);
-    setForm(
-      item
-        ? { ...emptyForm, ...item }
-        : { ...emptyForm, kind }
-    );
-    setOpen(true);
-  };
-  const isLive = (item: ContentItem) =>
-    item.status === 'published' && Boolean(item.publishDate) && item.publishDate <= contentToday;
-  const isScheduled = (item: ContentItem) =>
-    item.status === 'published' && Boolean(item.publishDate) && item.publishDate > contentToday;
-  const save = async () => {
-    if (saving || imageUploading) return;
-    if (!form.title.trim()) {
-      notify('Content title is required.');
-      return }
-    setSaving(true);
-    try {
-      if (editing)
-        await o.updateContent(editing.id, {
-          title: form.title,
-          kind: form.kind,
-          category: form.category,
-          body: form.body,
-          description: form.description,
-          image: form.image,
-          googleFormLink: form.googleFormLink,
-          status: form.status,
-          publishDate: form.publishDate || contentToday
-        });
-      else await o.addContent({ ...form, publishDate: form.publishDate || contentToday });
-      notify(editing ? 'Content updated.' : 'Content created.');
-      setOpen(false);
-    } catch (e: any) {
-      notify(e.message || 'Could not save content.')
-    } finally {
-      setSaving(false);
-    }
-  };
-  const remove = async () => {
-    if (!deleting) return;
-    try {
-      await o.deleteContent(deleting.id);
-      notify(deleting.title + ' deleted.');
-      setDeleting(null);
-    } catch (e: any) {
-      notify(e.message || 'Delete failed.')
-    }
-  };
-  const publish = async (item: ContentItem) => {
-    setPublishingId(item.id);
-    try {
-      await o.publishContent(item.id);
-      notify(item.title + (item.kind === 'achievement' ? ' is live on the achievements page.' : ' is live on the homepage.'));
-    } catch (e: any) {
-      notify(e.message || 'Publish failed.')
-    } finally {
-      setPublishingId('')
-    }
-  };
-
-  return <div>
-    <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-      <div>
-        <p className="max-w-xl text-sm text-zawana-500">Publish achievement articles or community updates. Achievement stories appear on their own public page.</p>
-        <p className="mt-1 text-xs text-zawana-400">Future publish dates are scheduled. Use Publish now to show an item immediately.</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={() => start(undefined, 'community')}><Plus size={16} /> Community update</Button>
-        <Button onClick={() => start()}><Plus size={16} /> New achievement</Button>
-      </div>
-    </div>
-    <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Filter content type">
-      {[['all', 'All content'], ['achievement', 'Achievements'], ['community', 'Community']].map(([value, label]) =>
-        <Button key={value} variant={kindFilter === value ? 'primary' : 'secondary'} aria-pressed={kindFilter === value} onClick={() => setKindFilter(value)}>{label}</Button>)}
-      <Link to="/achievements" className="ml-auto inline-flex items-center gap-2 text-sm font-semibold"><Eye size={16} /> View achievements</Link>
-    </div>
-    <Table headers={['Content', 'Status', 'Publish date', 'Destination', 'Actions']}>
-      {o.content.filter(c => kindFilter === 'all' || c.kind === kindFilter).map(c => {
-        const live = isLive(c);
-        const scheduled = isScheduled(c);
-        const dateLabel = c.publishDate
-          ? publicationDate(c.publishDate)
-          : 'No date';
-        return <tr key={c.id}>
-          <Cell>
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-16 overflow-hidden rounded-xl bg-zawana-900">
-                {c.image &&
-                  <img src={publicImageSrc(c.image)} alt={c.title} className="h-full w-full object-cover" />}
-              </div>
-              <div>
-                <b>{c.title}</b>
-                <p className="mt-1 text-xs font-semibold text-zawana-500">{c.kind === 'achievement' ? `Achievement · ${c.category}` : 'Community update'}</p>
-                <p className="max-w-sm truncate text-xs text-zawana-500">{c.description}</p>
-              </div>
-            </div>
-          </Cell>
-          <Cell>
-            <Badge good={live}>{live ? 'Live' : scheduled ? 'Scheduled' : 'Draft'}</Badge>
-          </Cell>
-          <Cell>{dateLabel}</Cell>
-          <Cell>
-            {c.kind === 'achievement' ? 'Achievements page' : 'Homepage / community'}
-            <p className="mt-1 text-xs text-zawana-500">{live ? 'Public' : scheduled ? 'Scheduled for ' + dateLabel : 'Hidden draft'}</p>
-          </Cell>
-          <Cell>
-            <div className="flex flex-wrap gap-2">
-              <button
-                className="rounded-xl p-2 hover:bg-zawana-900"
-                onClick={() => start(c)}
-                title="Edit"
-                aria-label={'Edit ' + c.title}
-              >
-                <Edit3 size={15} />
-              </button>
-              {live && c.kind === 'achievement' && <Link to={`/achievements/${c.id}`} className="rounded-xl p-2 hover:bg-zawana-900" aria-label={`View ${c.title}`}><Eye size={15} /></Link>}
-              <button
-                className="rounded-xl p-2 text-red-600 hover:bg-red-50"
-                onClick={() => setDeleting(c)}
-                title="Delete"
-                aria-label={'Delete ' + c.title}
-              >
-                <Trash2 size={15} />
-              </button>
-              {!live &&
-                <Button
-                  className="px-3 py-2"
-                  disabled={Boolean(publishingId)}
-                  onClick={() => publish(c)}
-                >
-                  {publishingId === c.id ? 'Publishing…' : 'Publish now'}
-                </Button>}
-            </div>
-          </Cell>
-        </tr>
-      })}
-    </Table>
-    {!o.content.some(c => kindFilter === 'all' || c.kind === kindFilter) && <Empty title="Your next story starts here" body="Create an achievement to celebrate your players, or a community update for the homepage." />}
-    <AnimatePresence>{open &&
-      <OpsModal
-        title={editing ? 'Edit content' : 'Create a new story'}
-        subtitle="Save a draft, publish today, or choose a future date to schedule your story. Dates use Yangon time."
-        onClose={() => { if (!saving && !imageUploading) setOpen(false); }}
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="text-sm font-semibold">Post type
-          <Select aria-label="Post type" value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value as ContentItem['kind'] })}>
-            <option value="achievement">Achievement article</option><option value="community">Community update</option>
-          </Select></label>
-          <label className="text-sm font-semibold">Category
-          <Select aria-label="Story category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value as ContentItem['category'] })}>
-            {['Milestones', 'Tournaments', 'Academy', 'Community'].map(category => <option key={category} value={category}>{category}</option>)}
-          </Select></label>
-          <label className="text-sm font-semibold md:col-span-2">Title
-          <input className="mt-2 w-full" aria-label="Story title" maxLength={180}
-            placeholder="Give your story a title"
-            value={form.title || ''}
-            onChange={e => setForm({ ...form, title: e.target.value })}
-          /></label>
-          <div className="md:col-span-2"><ImageUpload label="Story cover image" value={form.image} onBusyChange={setImageUploading} onChange={url => setForm(current => ({ ...current, image: url || '' }))} /></div>
-          <label className="text-sm font-semibold">Or use an image URL / path
-          <input className="mt-2 w-full" aria-label="Cover image URL" placeholder="https://… or /facilities/…"
-            value={form.image || ''}
-            onChange={e => setForm({ ...form, image: e.target.value })}
-          /></label>
-          <label className="text-sm font-semibold">Registration / more information (optional)
-          <input className="mt-2 w-full" aria-label="More information URL" type="url" placeholder="https://…"
-            value={form.googleFormLink || ''}
-            onChange={e => setForm({ ...form, googleFormLink: e.target.value })}
-          /></label>
-          <label className="text-sm font-semibold md:col-span-2">{form.kind === 'achievement' ? 'Summary' : 'Description'}
-          <textarea className="mt-2 w-full" aria-label="Story summary" rows={3} maxLength={3000} placeholder="A short introduction for readers"
-            value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-          </label>
-          {form.kind === 'achievement' && <label className="text-sm font-semibold md:col-span-2">Full article
-            <textarea className="mt-2 w-full" aria-label="Full article" rows={12} maxLength={100000} placeholder="Tell the full story…"
-              value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} />
-            <span className="mt-1 block text-xs font-normal text-zawana-500">Plain text. Leave a blank line between paragraphs. A summary and full article are required to publish.</span>
-          </label>}
-          <label className="text-sm font-semibold">Publication status
-          <Select
-            aria-label="Content status"
-            value={form.status || 'draft'}
-            onChange={e => setForm({ ...form, status: e.target.value as ContentItem['status'] })}
-          >
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-          </Select></label>
-          <label className="text-sm font-semibold text-zawana-600">Publish date
-     <input
-              className="mt-2 w-full"
-              type="date"
-              aria-label="Publish date"
-              value={form.publishDate || ''}
-              onChange={e => setForm({ ...form, publishDate: e.target.value })}
-            />
-            <span className="mt-1 block text-xs font-normal text-zawana-400">Published {form.kind === 'achievement' ? 'articles appear on the achievements page' : 'updates appear on the homepage'} on this date.</span>
-          </label>
-        </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" disabled={saving || imageUploading} onClick={() => setOpen(false)}>Cancel</Button>
-          <Button disabled={saving || imageUploading} onClick={save}>
-            <Check size={15} /> {saving ? 'Saving…' : imageUploading ? 'Uploading cover…' : 'Save story'}</Button>
-        </div>
-      </OpsModal>}</AnimatePresence>
-    <AnimatePresence>{deleting &&
-      <ConfirmDelete
-        name={deleting.title}
-        onCancel={() => setDeleting(null)}
-        onConfirm={remove}
-      />}</AnimatePresence>
-  </div>;
-}
 
 function ProductManager({ notify }: { notify: (s: string) => void }) {
   const o = useOperations();
@@ -5405,7 +4836,10 @@ function POS({
   </div>
 }
 
-function CourtDesk({ notify }: { notify: (s: string) => void }) {
+function CourtDesk({ notify, onHolidayChange }: { notify: (s: string) => void; onHolidayChange?: (open: boolean) => void }) {
+  const { user } = useAuth();
+  const compactSelection = !!user && ['admin', 'badminton_fo'].includes(user.role);
+  const [selectionOpen, setSelectionOpen] = useState(false);
   const bookingRevision = useBookingRevision();
   const o = useOperations();
   const [holidayView, setHolidayView] = useState(false);
@@ -5528,7 +4962,13 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
   const floors = [...new Set(o.managedCourts.map(courtFloor))];
   const visibleCourts = o.managedCourts.filter(c => c.name.toLowerCase().includes(courtQuery.trim().toLowerCase()) && (floorFilter === 'all' || courtFloor(c) === floorFilter))
     .sort((a, b) => courtFloor(a).localeCompare(courtFloor(b)) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-  const clearSelection = () => { setSelections([]); setSelectedRecords([]); setMenuOpen(false); };
+  const clearSelection = () => { setSelections([]); setSelectedRecords([]); setMenuOpen(false); setSelectionOpen(false); };
+  const selectionCount = selections.length + selectedRecords.length;
+  useEffect(() => { if (!selectionCount) setSelectionOpen(false); }, [selectionCount]);
+  const selectionEntries: CourtSelectionEntry[] = [
+    ...selections.map(selection => ({ key: `slot:${deskSelectionKey(selection)}`, court: selection.courtName, date: selection.date, time: selection.time, invalid: invalidSelections.includes(deskSelectionKey(selection)), remove: () => setSelections(rows => rows.filter(row => deskSelectionKey(row) !== deskSelectionKey(selection))) })),
+    ...selectedRecords.map(selection => ({ key: `record:${selection.id}|${selection.date}`, court: o.managedCourts.find(court => court.id === selection.courtId)?.name || 'Court unavailable', customer: selection.title, date: selection.date, time: selection.time, ...(selection.kind === 'rental' || selection.kind === 'private' ? { bookingId: selection.id } : {}), remove: () => setSelectedRecords(rows => rows.filter(row => row.id !== selection.id || row.date !== selection.date)) })),
+  ];
   const calendarLoading = calendarDate !== date || !!calendarError;
   const selectionSignature = selections.map(deskSelectionKey).join(';');
   useEffect(() => {
@@ -5577,7 +5017,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
   const refreshed = async () => { clearSelection(); setForm(null); setMoveSources([]); await Promise.all([o.refresh(), refreshBlocks()]); notify('Reservations and history updated.'); };
   const selectedCourtIds = selections.filter(s => s.date === date).map(s => s.courtId);
 
-  if (holidayView) return <HolidayManagement onBack={() => { setHolidayView(false); void o.refresh(); void refreshBlocks(); }} onChanged={async () => { await o.refresh(); await refreshBlocks(); }} />;
+  if (holidayView) return <HolidayManagement showHeading={!onHolidayChange} onBack={() => { setHolidayView(false); onHolidayChange?.(false); void o.refresh(); void refreshBlocks(); }} onChanged={async () => { await o.refresh(); await refreshBlocks(); }} />;
   return <div className="court-desk">
     <div className="desk-toolbar">
       <div className="desk-toolbar__date">
@@ -5586,7 +5026,7 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
         <Button variant="secondary" aria-label="Next Day" onClick={() => changeDate(shiftDateKey(date, 1))}><ChevronRight size={16} /></Button>
         <Button variant="secondary" onClick={() => changeDate(bookingClock().date)}>Today</Button>
       </div>
-      <div className="desk-toolbar__tools"><Button variant="secondary" onClick={() => { clearSelection(); setHolidayView(true); }}>Holiday</Button><label className="text-xs text-zawana-500">Session time<Select aria-label="Selection time" value={selectedTime} disabled={saving} onChange={event => { setMenuOpen(false); setSelectedTime(event.target.value); }}><option value="">Choose time</option>{courtSlots.map(time => <option key={time}>{time}</option>)}</Select></label></div>
+      <div className="desk-toolbar__tools"><Button variant="secondary" onClick={() => { clearSelection(); setHolidayView(true); onHolidayChange?.(true); }}>Holiday</Button><label className="text-xs text-zawana-500">Session time<Select aria-label="Selection time" value={selectedTime} disabled={saving} onChange={event => { setMenuOpen(false); setSelectedTime(event.target.value); }}><option value="">Choose time</option>{courtSlots.map(time => <option key={time}>{time}</option>)}</Select></label></div>
     </div>
 
     <div className="desk-filters">
@@ -5607,15 +5047,20 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
       onSelectBooking={booking => selectRecord({ id: booking.id, courtId: booking.courtId || o.managedCourts.find(c => c.name === booking.court)?.id || '', title: booking.customer, customerAccountId: booking.customerAccountId, customerName: booking.customerName, time: booking.time, kind: 'rental' })}
       onSelectBlock={(selected, block) => selectRecord({ id: block.id, courtId: selected.id, title: block.title || 'Reserved', kind: block.type === 'private' ? 'private' : block.type === 'class' ? 'weekly' : 'blocked', time: `${block.start} — ${block.end}` })}
     />}
-    <div className="desk-selection-actions" aria-label="Court selection actions">
+    <div className={`desk-selection-actions ${compactSelection ? 'desk-selection-actions--compact' : ''}`} aria-label="Court selection actions">
+      {compactSelection ? <p className="desk-selection-count" role="status"><strong>{selectionCount}</strong> {!selectionCount ? 'rentals' : selectedRecords.length ? record.kind === 'rental' ? `rental${selectionCount === 1 ? '' : 's'}` : record.kind === 'weekly' ? `weekly ${selectionCount === 1 ? 'class' : 'classes'}` : 'private course' : `session${selectionCount === 1 ? '' : 's'}`} selected</p> : <>
       {selectedRecords.length > 0 && ['rental','private'].includes(record.kind) && <BookingContextSummary key={record.id} bookingId={record.id} />}
       {record?.kind === 'rental' && <p className="w-full text-xs text-zawana-500">Select rentals to refund separately. Rescheduling and grouped requests require the same customer name or account.</p>}
       {!(selectedRecords.length === 1 && ['rental','private'].includes(record.kind)) && <div className="w-full" aria-live="polite"><strong>{selectedRecords.length ? `${selectedRecords.length} ${record.kind === 'private' ? 'private course' : record.kind === 'weekly' ? 'weekly class' : 'rental'} sessions selected` : `${selections.length} sessions selected`}</strong>
       <ul className="mt-3 flex flex-wrap gap-2" aria-label="Selection tray">{selections.map(s => <li key={deskSelectionKey(s)} className="desk-selection-chip"><b>{s.courtName}</b><p className="mt-1">{s.date} · {s.time}</p>{invalidSelections.includes(deskSelectionKey(s)) && <p className="mt-1 text-red-700">Unavailable — remove or choose another session</p>}<button className="mt-2 underline" onClick={() => setSelections(rows => rows.filter(row => deskSelectionKey(row) !== deskSelectionKey(s)))} aria-label={`Remove ${s.courtName} ${s.date} ${s.time}`}>Remove</button></li>)}{selectedRecords.filter(r => r.kind !== 'private').map(r => <li key={`${r.id}|${r.date}`} className="desk-selection-chip"><b>{o.managedCourts.find(c => c.id === r.courtId)?.name} · {r.title}</b><p className="mt-1">{r.date} · {r.time}</p><button className="mt-2 underline" onClick={() => setSelectedRecords(rows => rows.filter(row => row.id !== r.id || row.date !== r.date))}>Remove session</button></li>)}</ul>
       {!selectedRecords.length && !selections.length && <p className="mt-2 text-xs text-zawana-500">Select individual court-and-time cells. Your selection stays in the tray while you change dates or floors.</p>}</div>}
-      <div className="flex flex-wrap items-center gap-2"><Button variant="ghost" disabled={saving || (!selectedRecords.length && !selections.length)} onClick={clearSelection}>Clear Selection</Button>
+      </>}
+      <div className="flex flex-wrap items-center gap-2">
+      {compactSelection && (selectedRecords.length === 1 && ['rental','private'].includes(record.kind) ? <BookingContextSummary key={record.id} bookingId={record.id} compact/> : <Button variant="secondary" disabled={!selectionCount} onClick={() => setSelectionOpen(true)}>View Details</Button>)}
+      <Button variant="ghost" disabled={saving || (!selectedRecords.length && !selections.length)} onClick={clearSelection}>Clear Selection</Button>
       <CourtActionMenu open={menuOpen} onOpenChange={setMenuOpen} disabled={saving || (!selectedRecords.length && (!selections.length || checkingSelections || !!invalidSelections.length))}
-        label={selectedRecords.length ? record.kind === 'private' ? 'Private Course Actions' : record.kind === 'weekly' ? 'Weekly Class Actions' : 'Booking Actions' : `Actions (${selections.length} Sessions Selected)`}>
+        label={selectedRecords.length ? record.kind === 'private' ? 'Private Course Actions' : record.kind === 'weekly' ? 'Weekly Class Actions' : 'Booking Actions' : compactSelection ? 'Actions' : `Actions (${selections.length} Sessions Selected)`}
+        triggerAriaLabel={compactSelection && !selectedRecords.length ? `Actions (${selections.length} Sessions Selected)` : undefined}>
         {selectedRecords.length ? record.kind === 'weekly' ? <>
           <button type="button" role="menuitem" onClick={openMoves}>Reschedule</button>
           <button type="button" role="menuitem" className="desk-context-menu__destructive" onClick={() => { setOccurrenceOnly(true); setRemoveClasses([...selectedRecords]); setMenuOpen(false); }}>Remove Today</button>
@@ -5626,7 +5071,10 @@ function CourtDesk({ notify }: { notify: (s: string) => void }) {
           <button type="button" role="menuitem" onClick={() => { if (selectedRecords.length === 1) setRefundId(record.id); else setBulkRefundIds(selectedRecords.map(row => row.id)); setMenuOpen(false); }}>{selectedRecords.length === 1 ? 'Refund' : 'Refund Selected'}</button>
         </> : <>{[{ kind: 'rental', label: 'Court Rental' }, { kind: 'weekly', label: 'Weekly Class' }, { kind: 'private', label: 'Private Course' }].map(action => <button type="button" role="menuitem" key={action.kind} disabled={action.kind === 'private' && selections.length !== 1} onClick={() => openAction(action.kind)}>{action.label}{action.kind === 'private' && selections.length !== 1 && <small>Select exactly one session</small>}</button>)}</>}
       </CourtActionMenu>{checkingSelections && <span role="status" className="self-center text-xs text-zawana-500">Checking selected sessions…</span>}</div>
+      {compactSelection && invalidSelections.length > 0 && <p className="desk-selection-feedback" role="alert">Some selected sessions are unavailable. Open View Details to review them.</p>}
+      {compactSelection && selectedRecords.length > 1 && record.kind === 'rental' && !selectedRecords.every(row => canCombineRentals(selectedRecords, row)) && <p className="desk-selection-feedback">Rescheduling and requests require the same customer. Refunds can be processed separately.</p>}
     </div>
+    {compactSelection && selectionOpen && selectionCount > 0 && <CourtSelectionManager entries={selectionEntries} onClose={() => setSelectionOpen(false)}/>}
     {!!o.managedCourts.length && !visibleCourts.length && <Empty title="No matching courts" body="Try a different court name or floor." />}
 
     {holiday?.active && calendarDate === date &&
@@ -5752,19 +5200,20 @@ function Professional({ role }: { role: UserRole }) {
   </div>
 }
 
-function CoachBookings({ notify }: { notify: (s: string) => void }) {
+function CoachBookings(_props: { notify: (s: string) => void }) {
+  const [params,setParams]=useSearchParams();const bookingId=params.get('booking');
   const bookingRevision = useBookingRevision();
   const loadVersion = useRef(0);
   const [rows, setRows] = useState<any[]>([]),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(''),
     [page, setPage] = useState(1),
     [pageInfo, setPageInfo] = useState<any>({ total: 0, totalPages: 0 });
-  const [filters, setFilters] = useState({ q: '', status: '', from: '', to: '' });
+  const [filters, setFilters] = useState({ q: '', status: params.get('status')==='PENDING_COACH_CONFIRMATION'?'PENDING_COACH_CONFIRMATION':'', from: '', to: '' });
 
   const load = () => {
     const version = ++loadVersion.current;
     const p = new URLSearchParams({ page: String(page), limit: '20', kind: 'private_course' });
+    if(bookingId)p.set('booking',bookingId);
     for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
     return get<any>(`/bookings?${p}`)
       .then(r => {
@@ -5779,33 +5228,21 @@ function CoachBookings({ notify }: { notify: (s: string) => void }) {
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), filters.q ? 250 : 0);
     return () => { window.clearTimeout(timer); ++loadVersion.current; };
-  }, [page, filters, bookingRevision]);
+  }, [page, filters, bookingRevision,bookingId]);
 
   const setFilter = (key: string, value: string) => {
     setPage(1);
     setFilters(f => ({ ...f, [key]: value }))
   };
 
-  const complete = async (id: string) => {
-    setBusy(id);
-    try {
-      await post(`/coach/private-courses/${id}/complete`, {});
-      await load();
-      notify('Course marked complete.')
-    } catch (e: any) {
-      notify(e.message || 'Could not update booking.')
-    } finally {
-      setBusy('')
-    }
-  };
-
   return <div>
+    {bookingId&&<div className="mb-4 flex flex-wrap items-center gap-3 text-sm"><span>Showing the linked booking</span><Button variant="secondary" onClick={()=>{const next=new URLSearchParams(params);next.delete('booking');setParams(next,{replace:true});}}>Show all bookings</Button></div>}
     <PrivateRescheduleInbox coach onChanged={() => { void load(); }} />
     {error && <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
     <div className="mb-4 rounded-2xl border border-zawana-accent/30 bg-zawana-accent/10 p-4">
       <p className="text-xs font-black uppercase tracking-widest text-zawana-accent">Assigned sessions</p>
-      <p className="mt-1 text-sm text-zawana-600">Review request details here. Confirm or decline new requests from the notification bell or Notifications page.</p>
+      <p className="mt-1 text-sm text-zawana-600">Review your assigned bookings and replacement proposals here. Accepted sessions stay synchronized with your calendar.</p>
     </div>
 
     <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -5864,23 +5301,14 @@ function CoachBookings({ notify }: { notify: (s: string) => void }) {
             <Cell>{b.time}</Cell>
             <Cell>{b.court?.name || b.location}</Cell>
             <Cell>
-              <Badge good={b.status === 'CONFIRMED'}>
-                {String(b.status).replaceAll('_', ' ')}
-              </Badge>
+              <BookingStatusBadge status={b.status}/>
               {b.paymentExpiresAt && b.status === 'AWAITING_PAYMENT' &&
                 <p className="mt-1 text-[10px] text-zawana-500">Due {new Date(b.paymentExpiresAt).toLocaleString()}
                 </p>}
             </Cell>
             <Cell>
               {b.status === 'PENDING_COACH_CONFIRMATION' ?
-                <span className="text-xs font-bold text-amber-800">Respond from Notifications</span> : b.status === 'CONFIRMED' && b.date <= today ?
-                <Button
-                  disabled={!!busy}
-                  className="px-3 py-2"
-                  onClick={() => void complete(b.id)}
-                >
-                  {busy === b.id ? 'Saving…' : 'Complete'}
-                </Button> : b.status === 'COMPLETED' ?
+                <><ActionRequiredIndicator bookingId={b.id}/><CoachBookingDecision bookingId={b.id} onChanged={load}/></> : b.status === 'CONFIRMED' ? <span className="text-xs text-zawana-500">Completes automatically after the session</span> : b.status === 'COMPLETED' ?
                 <span className="text-xs text-zawana-500">Completed</span> : b.status === 'AWAITING_PAYMENT' ?
                 <span className="text-xs text-amber-700">Waiting for member payment</span> :
                 <span className="text-xs text-zawana-500">—</span>}
@@ -5897,7 +5325,7 @@ function CoachBookings({ notify }: { notify: (s: string) => void }) {
               <b>{b.user?.name || 'Member'}</b>
               <p className="text-xs text-zawana-500">{b.title}</p>
             </div>
-            <Badge good={b.status === 'CONFIRMED'}>{String(b.status).replaceAll('_', ' ')}</Badge>
+            <BookingStatusBadge status={b.status}/>
           </div>
           <p className="mt-3 text-sm">
             {b.date} · {b.time} · {b.court?.name || b.location}
@@ -5906,9 +5334,8 @@ function CoachBookings({ notify }: { notify: (s: string) => void }) {
             <p className="mt-1 text-xs text-amber-700">Payment due {new Date(b.paymentExpiresAt).toLocaleString()}
             </p>}
           {b.status === 'PENDING_COACH_CONFIRMATION' &&
-            <p className="mt-3 text-xs font-bold text-amber-800">Confirm or decline from Notifications.</p>}
-          {b.status === 'CONFIRMED' && b.date <= today &&
-            <Button className="mt-3" disabled={!!busy} onClick={() => void complete(b.id)}>Complete</Button>}
+            <div className="mt-3"><ActionRequiredIndicator bookingId={b.id}/><CoachBookingDecision bookingId={b.id} onChanged={load}/></div>}
+
         </Card>)}
     </div>
 

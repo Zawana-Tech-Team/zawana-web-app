@@ -77,7 +77,7 @@ test('occurrence exceptions and grouped requests retain independent scope and fi
       assert.equal(await db.notification.count({ where: { userId: member.id, entityType: 'reschedule_batch' } }), 1);
       await assert.rejects(createStaffRequests(db, staff, ids, 'MAINTENANCE', '', key), /retry key/);
       await assert.rejects(customerRequestAction(db, member, a.id, 'ADMIN_HANDLING'), /no longer/);
-      const inbox = await notificationLifecycle(db, notices); assert.match(inbox[0].body, /0 awaiting response/);
+      const inbox = await notificationLifecycle(db, notices); assert.match(inbox[0].body, /0 Requests awaiting response/);
     });
     await t.test('concurrent rescheduling and refund review cannot both resolve one notice',async()=>{
       const date=addDateKeyDays(today(),6),sources=[];

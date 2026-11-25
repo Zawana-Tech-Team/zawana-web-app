@@ -54,6 +54,7 @@ export function WorkspaceNavLink({ children, ...props }: Omit<NavLinkProps, 'chi
 // element's original state until every dialog that locked it has been removed.
 const inertLocks = new WeakMap<HTMLElement, { count: number; original: boolean }>();
 let openDialogCount = 0;
+const dialogStack:HTMLDivElement[]=[];
 let originalBodyOverflow = '';
 
 /** Dialog behavior reused by operational modals; restores focus and contains keyboard navigation. */
@@ -64,6 +65,7 @@ export function useDialog(onClose: () => void) {
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
+    dialogStack.push(dialog);
     const previous = document.activeElement as HTMLElement | null;
     const background = document.getElementById('root');
     const siblings: HTMLElement[] = [];
@@ -88,6 +90,7 @@ export function useDialog(onClose: () => void) {
     )].filter(element => element.getClientRects().length && element.tabIndex >= 0 && !element.closest('[inert], [aria-hidden="true"]'));
     dialog.focus({ preventScroll: true });
     const keydown = (event: KeyboardEvent) => {
+      if(dialogStack.at(-1)!==dialog)return;
       if (event.key === 'Escape') { event.preventDefault(); close.current(); }
       if (event.key !== 'Tab') return;
       const items = controls(), first = items[0], last = items.at(-1);
@@ -101,6 +104,7 @@ export function useDialog(onClose: () => void) {
     background?.addEventListener('keydown', keydown);
     return () => {
       background?.removeEventListener('keydown', keydown);
+      const stackIndex=dialogStack.indexOf(dialog);if(stackIndex>=0)dialogStack.splice(stackIndex,1);
       openDialogCount -= 1;
       if (openDialogCount === 0) document.body.style.overflow = originalBodyOverflow;
       siblings.forEach(element => {

@@ -45,7 +45,7 @@ try {
     await memberContext.addInitScript(token=>localStorage.setItem('zawana_access_token',token),data.memberToken);
     const memberPage=await memberContext.newPage();memberPage.on('pageerror',e=>errors.push(e.message));
     const tab=name=>memberPage.getByRole('group',{name:'Booking management',exact:true}).getByRole('button',{name,exact:true}).click();
-    await memberPage.goto(`${ui}/bookings`);await tab('Requests');await memberPage.getByText('No staff requests',{exact:true}).waitFor();
+    await memberPage.goto(`${ui}/bookings`);await tab('Requests');await memberPage.getByText('You’re all caught up',{exact:true}).waitFor();
     await tab('Refunds');await memberPage.getByText('No completed refunds yet',{exact:true}).waitFor();
     const send=async(path,payload)=>{const r=await context.request.post(`${api}${path}`,{headers:{Authorization:`Bearer ${data.token}`},data:payload});assert.ok(r.ok(),await r.text());return r.json();};
     const rentals=[];
@@ -58,7 +58,7 @@ try {
     const preview=await context.request.get(`${api}/rescheduling/refunds/bookings/${source.id}`,{headers:{Authorization:`Bearer ${data.token}`}});assert.equal(preview.status(),200);const detail=await preview.json();
     await send(`/rescheduling/refunds/bookings/${source.id}/complete`,{amount:20000,method:'CASH',employeeName:'Desk QA',notes:'Internal fixture receipt verified',reference:'',confirmed:true,revision:detail.revision,requestKey:randomUUID()});
     const {mkdirSync}=await import('node:fs');const shots='/tmp/zawana-activity-preview';mkdirSync(shots,{recursive:true});
-    await tab('Requests');const group=memberPage.getByRole('region',{name:'Request group: 3 bookings',exact:true});await group.waitFor();await memberPage.getByText('Awaiting coach',{exact:true}).waitFor();
+    await tab('Requests');const group=memberPage.getByRole('region',{name:'Request group: 3 bookings',exact:true});await group.waitFor();assert.equal(await memberPage.getByText('Awaiting coach',{exact:true}).count(),0);await tab('Bookings');await memberPage.getByRole('region',{name:'Private course reschedule requests',exact:true}).getByText('Awaiting coach',{exact:true}).waitFor();await tab('Requests');await group.waitFor();
     assert.equal(await group.getByRole('button',{name:'Accept',exact:true}).count(),3);
     assert.equal(await group.getByRole('complementary',{name:'Important Booking Notice',exact:true}).count(),1);await group.getByRole('button',{name:'Accept',exact:true}).first().focus();assert.ok(await group.getByRole('button',{name:'Accept',exact:true}).first().evaluate(el=>el===document.activeElement));
     for(const [name,width,height] of [['desktop',1440,1050],['tablet',768,1024],['mobile',390,844]]){await memberPage.setViewportSize({width,height});assert.ok(await memberPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),name+' requests overflow');await memberPage.screenshot({path:`${shots}/requests-${name}.png`,fullPage:true});}
@@ -68,6 +68,22 @@ try {
     await memberPage.evaluate(()=>window.dispatchEvent(new Event('zawana-bookings-changed')));await refunds.getByRole('alert').waitFor();assert.equal(await refunds.locator('article').count(),1,'Keep recorded refunds visible during refresh errors');
     await memberPage.unroute('**/api/rescheduling/refunds/mine');const recovered=memberPage.waitForResponse(r=>r.url().endsWith('/rescheduling/refunds/mine'));await memberPage.evaluate(()=>window.dispatchEvent(new Event('zawana-bookings-changed')));await recovered;await refunds.getByRole('alert').waitFor({state:'hidden'});
     await refunds.getByRole('button',{name:'View requests',exact:true}).click();await group.waitFor();
+    // Separate notices stay separate, including a one-booking staff request.
+    const additional=[];
+    for(const [i,time] of ['11:00 AM — 12:00 PM','12:00 PM — 1:00 PM','1:00 PM — 2:00 PM'].entries())additional.push(await db.booking.create({data:{code:`SEPARATE-NOTICE-${i}`,userId:data.memberId,kind:'court',courtId:data.courts[0].id,date:data.date,time,title:'Court rental',location:'Arena',status:'CONFIRMED',paymentStatus:'paid',price:20000}}));
+    const second=await send('/rescheduling/requests/batch',{bookingIds:additional.slice(0,2).map(row=>row.id),reason:'EVENT',requestKey:randomUUID()});
+    const single=await send('/rescheduling/requests',{bookingId:additional[2].id,reason:'MAINTENANCE'});
+    await tab('Refunds');await tab('Requests');
+    const groups=memberPage.locator('.affected-booking-group');await groups.nth(2).waitFor();assert.equal(await groups.count(),3);
+    const eventGroup=memberPage.locator(`#request-group-${second.requests[0].batchId}`),singleGroup=memberPage.locator(`#request-group-${single.id}`);
+    await eventGroup.getByRole('heading',{name:'2 Requests',exact:true}).waitFor();await singleGroup.getByRole('heading',{name:'1 Request',exact:true}).waitFor();
+    assert.equal(await eventGroup.getByRole('complementary',{name:'Important Booking Notice',exact:true}).count(),1);
+    await group.getByRole('button',{name:'Admin Handle',exact:true}).first().click();
+    await memberPage.getByRole('dialog',{name:'Request Admin assistance',exact:true}).getByRole('button',{name:'Confirm Admin assistance',exact:true}).click();
+    await memberPage.getByRole('status').filter({hasText:'Sent to Admin'}).waitFor();
+    await memberPage.getByRole('region',{name:'Request group: 2 bookings',exact:true}).filter({hasText:'scheduled maintenance'}).waitFor();
+    assert.equal(await eventGroup.getByRole('button',{name:'Accept',exact:true}).count(),2);assert.equal(await singleGroup.getByRole('button',{name:'Accept',exact:true}).count(),1);
+    await memberPage.reload();await tab('Requests');await groups.nth(2).waitFor();assert.equal(await memberPage.getByText('With Admin',{exact:true}).count(),0);assert.equal(await groups.count(),3);
     assert.deepEqual(errors,[]);await memberContext.close();console.log('PASS requests/refunds: responsive cards, A/B/C actions, coach comparisons, keyboard actions, empty states, refund privacy, refresh recovery; screenshots '+shots);
   }finally{await db.$disconnect();}
 }finally{await browser?.close();children.forEach(child=>child.kill());}

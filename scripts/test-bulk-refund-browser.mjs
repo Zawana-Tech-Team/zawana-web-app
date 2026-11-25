@@ -58,8 +58,8 @@ try {
     assert.equal(await dialog.getByRole('button',{name:'Review Selected Refunds',exact:true}).isDisabled(),true);
     for(let i=0;i<3;i++) await dialog.getByRole('checkbox').nth(i).check();
     await dialog.getByLabel('Refund Notes',{exact:true}).fill('Refunds returned separately to the selected customers');
-    await dialog.getByText('Selected total: 60,000 MMK',{exact:true}).waitFor();
-    for (const viewport of [{width:1440,height:1000},{width:768,height:1024},{width:390,height:844}]) {
+    await dialog.getByRole('region',{name:'Selected refund total',exact:true}).getByText('60,000 MMK',{exact:true}).waitFor();
+    for (const viewport of [{width:1440,height:1000},{width:768,height:1024},{width:390,height:844},{width:320,height:640}]) {
       await page.setViewportSize(viewport); assert.ok(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
     }
     await dialog.getByRole('button',{name:'Review Selected Refunds',exact:true}).click();
@@ -78,9 +78,9 @@ try {
     await page.getByRole('menuitem').filter({hasText:'Request Reschedule'}).click();
     const requestDialog=page.getByRole('dialog',{name:'Send reschedule request',exact:true});
     await requestDialog.locator('select[aria-label="Reason"]').selectOption('EVENT',{force:true});
-    await requestDialog.getByRole('region',{name:'Request message preview',exact:true}).getByText(/upcoming event at The Zawana/).waitFor();
+    await requestDialog.getByText('Customer notice',{exact:true}).click();await requestDialog.locator('.rental-request-message').filter({hasText:/upcoming event at The Zawana/}).waitFor();
     await requestDialog.locator('select[aria-label="Reason"]').selectOption('MAINTENANCE',{force:true});
-    await requestDialog.getByRole('region',{name:'Request message preview',exact:true}).getByText(/necessary maintenance at The Zawana/).waitFor();
+    await requestDialog.locator('.rental-request-message').filter({hasText:/necessary maintenance at The Zawana/}).waitFor();
     await requestDialog.getByRole('button',{name:'Send Request',exact:true}).click();await requestDialog.waitFor({state:'hidden'});
     const sent=await db.bookingRescheduleRequest.findFirstOrThrow({where:{bookingId:data.bookingId},include:{events:true}});
     assert.equal(sent.reason,'MAINTENANCE');assert.match(sent.events[0].detail.message,/necessary maintenance/);

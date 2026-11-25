@@ -7,11 +7,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { rentalDestinationPrice } from '../src/services/rentalPricing.js';
-import { createStaffRequest, startMemberReschedule, quoteCustomerRequest, confirmCustomerRequest, requestAvailability } from '../src/services/bookingRequests.js';
+import { createStaffRequest, startMemberReschedule, quoteCustomerRequest, confirmCustomerRequest, requestCalendar, requestAvailability } from '../src/services/bookingRequests.js';
 import { proposePrivateReschedule } from '../src/services/privateRescheduling.js';
 import { quoteDeskMoves, confirmDeskMoves } from '../src/services/deskMoves.js';
 import { today } from '../src/services/courtPolicy.js';
 import { addDateKeyDays } from '../src/utils/dateKeys.js';
+import { paidRentalAmount } from '../src/services/rentalPaymentBalance.js';
+import { refundDetails } from '../src/services/bookingRefunds.js';
 
 test('unified member rescheduling preserves policy, price, payment and concurrency',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'unified-reschedule-')),file=join(dir,'db');
@@ -48,6 +50,25 @@ test('unified member rescheduling preserves policy, price, payment and concurren
    assert.equal((await db.bookingRescheduleRequest.findUniqueOrThrow({where:{id:session.id}})).status,'COMPLETED');
    assert.equal((await db.transaction.findFirstOrThrow({where:{resourceType:'court_reschedule'}})).finalAmount,15000);
   });
+  await t.test('member pays only the difference atomically, with duplicate protection and attributable receipts',async()=>{
+   const b=await make(30000,member.id,addDateKeyDays(date,9)),session=await startMemberReschedule(db,member,b.id);
+   const target={courtId:courts[0].id,date:b.date,time:'3:00 PM — 4:00 PM'},q=await quoteCustomerRequest(db,member,session.id,target);
+   assert.equal(q.priceDifference,5000);
+   const before=await db.transaction.count();
+   await assert.rejects(confirmCustomerRequest(db,other,session.id,target,q.revision,false,true),/not found/);
+   await assert.rejects(confirmCustomerRequest(db,member,session.id,target,'stale',false,true),/fresh quote/);
+   assert.equal(await db.transaction.count(),before);
+   assert.equal((await confirmCustomerRequest(db,member,session.id,target,q.revision,false,true)).status,'COMPLETED');
+   await confirmCustomerRequest(db,member,session.id,target,q.revision,false,true);
+   assert.equal(await db.transaction.count(),before+1);
+   const receipt=await db.transaction.findUniqueOrThrow({where:{resourceType_resourceId:{resourceType:'member_reschedule',resourceId:session.id}}});
+   assert.equal(receipt.finalAmount,5000);assert.equal(receipt.userId,member.id);assert.equal(receipt.confirmedById,member.id);assert.equal(receipt.confirmationMode,'SIMULATED');
+   const changed=await db.booking.findUniqueOrThrow({where:{id:b.id}});assert.equal(changed.time,target.time);assert.equal(changed.price,35000);
+   assert.equal(await db.$transaction(tx=>paidRentalAmount(tx,changed)),35000);
+   const refund=await refundDetails(db,staff,b.id);assert.equal(refund.paidAmount,35000);assert.equal(refund.blocked,null);assert.equal(refund.payments.length,2);
+   const next=await startMemberReschedule(db,member,b.id),nextTarget={...target,time:'4:00 PM — 5:00 PM'};
+   assert.equal((await quoteCustomerRequest(db,member,next.id,nextTarget)).priceDifference,0,'Previously paid surcharge carries forward');
+  });
   await t.test('rates preserve duration, peak and holiday pricing',()=>{
    assert.equal(rentalDestinationPrice(30000,840,120,null),65000);
    assert.equal(rentalDestinationPrice(30000,840,120,{active:true,price:45000}),90000);
@@ -69,6 +90,7 @@ test('unified member rescheduling preserves policy, price, payment and concurren
    await db.bookingRescheduleRequest.update({where:{id:session.id},data:{oldSchedule:{id:changed.id,courtId:changed.courtId,coachId:changed.coachId,date:changed.date,time:changed.time,status:changed.status,price:changed.price,paymentStatus:changed.paymentStatus}}});
    await assert.rejects(quoteCustomerRequest(db,member,session.id,{courtId:courts[1].id,date,time:b.time}),/24 hours/);
    await assert.rejects(requestAvailability(db,member,session.id,date,courts[1].id),/24 hours/);
+   await assert.rejects(requestCalendar(db,member,session.id,date.slice(0,7)),/24 hours/);
    const coachUser=await db.user.create({data:{name:'Coach',email:'coach@unified.test',role:'coach'}});
    const coach=await db.coach.create({data:{name:'Coach',department:'Badminton',userId:coachUser.id,specialty:'Badminton',phone:'',email:''}});
    const p=await make(30000,member.id,addDateKeyDays(date,4));await db.booking.update({where:{id:p.id},data:{kind:'private_course',coachId:coach.id}});
@@ -101,12 +123,14 @@ test('unified member rescheduling preserves policy, price, payment and concurren
   await t.test('two owners cannot confirm the same destination',async()=>{
    const day=addDateKeyDays(date,6),a=await make(30000,member.id,day),b=await make(30000,other.id,day,'9:00 AM — 10:00 AM');
    const target={courtId:courts[1].id,date:day,time:'11:00 AM — 12:00 PM'};
-   await db.court.update({where:{id:courts[1].id},data:{price:30000}});
+   await db.court.update({where:{id:courts[1].id},data:{price:35000}});
    const sessions=await Promise.all([startMemberReschedule(db,member,a.id),startMemberReschedule(db,other,b.id)]);
    const quotes=await Promise.all(sessions.map((s,i)=>quoteCustomerRequest(db,i?other:member,s.id,target)));
-   const attempts=await Promise.allSettled(sessions.map((s,i)=>confirmCustomerRequest(db,i?other:member,s.id,target,quotes[i].revision,false)));
+   const receipts=await db.transaction.count();
+   const attempts=await Promise.allSettled(sessions.map((s,i)=>confirmCustomerRequest(db,i?other:member,s.id,target,quotes[i].revision,false,true)));
    assert.equal(attempts.filter(row=>row.status==='fulfilled').length,1);
    assert.equal(await db.booking.count({where:{courtId:target.courtId,date:day,time:target.time,status:'CONFIRMED'}}),1);
+   assert.equal(await db.transaction.count(),receipts+1,'Only the winning reservation records its additional payment');
   });
  }finally{await db.$disconnect();rmSync(dir,{recursive:true,force:true});}
 });

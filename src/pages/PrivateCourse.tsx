@@ -4,7 +4,7 @@ import { DeskDialog } from '../components/court-desk/DeskDialog';
 import { BookingActionBar } from '../components/member-booking/BookingActionBar';
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { motionTokens } from "../design/motion";
-import { bookingClock, bookingHasStarted } from "../utils/bookingTime";
+import { normalizeBookingTime, courtBlockOccurs, bookingClock, bookingHasStarted } from "../utils/bookingTime";
 import { useBookingClock } from "../hooks/useBookingClock";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -47,7 +47,14 @@ const slot = (start: number, duration: number) => {
   return `${label(start)} — ${label(start + duration)}`;
 };
 
-export function PrivateCourse() {
+export type PrivateRescheduleOptions={
+ booking:{id:string;title:string;date:string;time:string;price:number;courtId:string|null;courtName?:string;coach:{id:string;name:string;status:string;user:{active:boolean;role:string}|null}|null};
+ calendarPath:string;
+ error?:string;
+ onReview:(target:{courtId:string;date:string;time:string})=>Promise<void>;
+ onSelectionChange:(target:{courtId:string;date:string;time:string}|undefined)=>void;
+};
+export function PrivateCourse({reschedule}:{reschedule?:PrivateRescheduleOptions}={}) {
   const { locale } = useLanguage();
   const now = useBookingClock();
   const reduceMotion = useReducedMotion();
@@ -84,10 +91,11 @@ export function PrivateCourse() {
     [coaches, setCoaches] = useState<any[]>([]),
     [courts, setCourts] = useState<any[]>([]),
     [availabilityResult, setAvailabilityResult] = useState<any>(null);
-  const [course, setCourse] = useState<any>(null),
-    [coach, setCoach] = useState<any>(null),
+  const originalSpan=reschedule?span(normalizeBookingTime(reschedule.booking.time)):null;
+  const [course, setCourse] = useState<any>(reschedule?{title:reschedule.booking.title,price:reschedule.booking.price,duration:originalSpan?originalSpan.end-originalSpan.start:60,coaches:reschedule.booking.coach?[reschedule.booking.coach]:[]}:null),
+    [coach, setCoach] = useState<any>(reschedule?.booking.coach||null),
     [court, setCourt] = useState<any>(null);
-  const [date, setDate] = useState(bookingClock().date),
+  const [date, setDate] = useState(reschedule?.booking.date||bookingClock().date),
     [time, setTime] = useState("");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -116,7 +124,7 @@ export function PrivateCourse() {
   );
 
   useEffect(() => {
-    Promise.all([get<any[]>("/private-courses"), get<any[]>("/courts")])
+    Promise.all([reschedule?Promise.resolve([]):get<any[]>("/private-courses"), get<any[]>("/courts")])
       .then(([c, ct]) => {
         setCourses(c);
         setCoaches([
@@ -132,7 +140,7 @@ export function PrivateCourse() {
         setError(e.message || "Could not load private course options."),
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [reschedule?.booking.id]);
   const availability =
     availabilityResult?.date === date ? availabilityResult.data : null;
   const needsAvailability = step >= 2;
@@ -142,9 +150,9 @@ export function PrivateCourse() {
     let active = true;
     setAvailabilityResult(null);
     setLoadingAvailability(true);
-    get<any>(`/bookings/availability?date=${date}`)
+    get<any>(reschedule?`${reschedule.calendarPath}?month=${date.slice(0,7)}`:`/bookings/availability?date=${date}`)
       .then((data) => {
-        if (active) { setAvailabilityResult({ date, data }); setError(''); }
+        if (active) {const override=data.overrides?.find((o:{date:string})=>o.date===date);const result=reschedule?{...data,bookings:data.bookings.filter((b:{date:string})=>b.date===date),blocks:data.blocks.filter((b:Parameters<typeof courtBlockOccurs>[0])=>courtBlockOccurs(b,date,override)),closed:override?.type==='closed'}:data;setAvailabilityResult({ date, data:result }); setError(''); }
       })
       .catch((e: any) => {
         if (active) setError(e.message || "Could not load court availability.");
@@ -155,18 +163,18 @@ export function PrivateCourse() {
     return () => {
       active = false;
     };
-  }, [date, needsAvailability, bookingRevision]);
+  }, [date, needsAvailability, bookingRevision, reschedule?.calendarPath]);
 
   const courseOptions = courses;
   const eligibleCoaches = useMemo(
     () =>
-      coaches.filter(
+      (reschedule?.booking.coach?[reschedule.booking.coach]:coaches).filter(
         (c) =>
           c.status === "active" &&
           c.user?.active &&
           course?.coaches?.some((x: any) => x.id === c.id),
       ),
-    [coaches, course],
+    [coaches, course,reschedule?.booking.coach],
   );
   const coursePrice = Number(course?.price ?? 0);
   const calculateCoachAt = (c: any, t: string) => {
@@ -187,6 +195,7 @@ export function PrivateCourse() {
   };
   const calculateFreeAt = (c: any, t: string) => {
     const wanted = span(t);
+    if(reschedule&&date===reschedule.booking.date&&c.id===reschedule.booking.courtId&&normalizeBookingTime(t)===normalizeBookingTime(reschedule.booking.time))return false;
     if (
       c.status !== "available" ||
       !wanted ||
@@ -304,9 +313,12 @@ export function PrivateCourse() {
     freeAt(court, time) &&
     coachAt(coach, time);
 
+  const selectionChanged=reschedule?.onSelectionChange;
+  useEffect(()=>{selectionChanged?.(court&&time?{courtId:court.id,date,time}:undefined);},[court,date,time,selectionChanged]);
+  const reviewReplacement=async()=>{if(!reschedule||!ready||busy)return;setBusy(true);setError('');try{await reschedule.onReview({courtId:court.id,date,time});}catch(e){setError(e instanceof Error?e.message:'Could not review this replacement.');}finally{setBusy(false);}};
   return (
     <Page
-      title="Private course"
+      title={reschedule?"Reschedule your private course":"Private course"}
       eyebrow="Badminton coaching"
       actions={<Link to="/bookings?kind=private_course" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">Booking history</Link>}
     >
@@ -340,12 +352,12 @@ export function PrivateCourse() {
               </button>
             ))}
           </nav>
-          {error && (
+          {(error||reschedule?.error) && (
             <p
               role="alert"
               className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
             >
-              {error}
+              {error||reschedule?.error}
             </p>
           )}
           <motion.div
@@ -356,7 +368,8 @@ export function PrivateCourse() {
             transition={transition}
             className="space-y-5"
           >
-            {step === 1 && (
+            {step===1&&reschedule&&<Card className="space-y-4 p-5 sm:p-6"><p className="text-xs uppercase tracking-widest text-zawana-500">Current booking</p><h2 className="text-xl font-semibold">{reschedule.booking.title}</h2><p className="text-sm">Assigned coach: {reschedule.booking.coach?.name}</p><p className="text-sm text-zawana-500">{dateLabel(reschedule.booking.date)} · {reschedule.booking.time} · {reschedule.booking.courtName}</p><p className="text-sm text-zawana-500">Your course, coach and session duration stay the same. Choose your new date, court and time.</p><Button onClick={()=>setStep(2)}>Choose a date <ArrowRight size={16}/></Button></Card>}
+            {step === 1 && !reschedule && (
               <>
                 <Card className="p-5 sm:p-6">
                   <h2 className="text-xl font-semibold tracking-tight">
@@ -523,6 +536,7 @@ export function PrivateCourse() {
                       className="mt-1 shrink-0 text-zawana-500"
                     />
                   </div>
+                  {reschedule&&<label className="mt-5 block text-sm">Session date<input type="date" min={now.date} value={date} onChange={e=>{setDate(e.target.value);setCourt(null);setTime('');setError('');}}/></label>}
                   <div
                     role="group"
                     aria-label="Session dates"
@@ -768,10 +782,10 @@ export function PrivateCourse() {
             )}
           </motion.div>
         </div>
-        {step === 3 && <BookingActionBar hidden={reviewOpen} action={<Button disabled={!ready || busy} onClick={() => setReviewOpen(true)}>Review request <ArrowRight size={15}/></Button>}>
+        {step === 3 && <BookingActionBar hidden={reviewOpen} action={<Button disabled={!ready || busy} onClick={() => reschedule?void reviewReplacement():setReviewOpen(true)}>{reschedule?'Review replacement':'Review request'} <ArrowRight size={15}/></Button>}>
           <span>Private course · court included</span><strong>{coursePrice.toLocaleString(locale)} MMK</strong>
         </BookingActionBar>}
-        {reviewOpen && <DeskDialog title="Review private course" eyebrow="Private coaching" onClose={() => setReviewOpen(false)} busy={busy} cancelLabel="Back to selection"
+        {reviewOpen && !reschedule && <DeskDialog title="Review private course" eyebrow="Private coaching" onClose={() => setReviewOpen(false)} busy={busy} cancelLabel="Back to selection"
           summary={<span>Total <strong>{coursePrice.toLocaleString(locale)} MMK</strong></span>}
           actions={<Button loading={busy} disabled={!ready || busy} onClick={submit}>{busy ? 'Sending request…' : 'Request private course'}</Button>}>
           <h3 className="mb-5 font-semibold">{course?.title}</h3>

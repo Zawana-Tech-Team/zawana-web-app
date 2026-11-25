@@ -21,7 +21,7 @@ export function createNotificationRouter(db: PrismaClient = prisma, authenticate
     const items = lifecycle.map((row, index) => {
       const { recipientReads, ...original } = rows[index];
       const read = recipientReads.length > 0 || (row.userId === req.user!.id && row.read);
-      return { ...original, expiresAt: row.expiresAt, read, readAt: recipientReads[0]?.readAt || null, activeInInbox: row.activeInInbox && !read };
+      return { ...original, title:row.title,body:row.body,expiresAt: row.expiresAt, read, readAt: recipientReads[0]?.readAt || null, activeInInbox: row.activeInInbox && !read };
     });
     res.setHeader('Cache-Control', 'no-store');
     res.json(history ? items : items.filter(n => n.activeInInbox));

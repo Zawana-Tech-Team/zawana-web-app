@@ -2,7 +2,7 @@ import type { UserRole } from './index';
 
 export type CourtChangeSlot = { id: string; courtId: string; courtName: string; date: string; time: string; price: number; available: boolean };
 export type CourtChangeDetail = {
-  booking: { meta?: string | null; id: string; code: string; title: string; date: string; time: string; status: string; paymentStatus: string; price: number };
+  booking: { courtId?:string|null; meta?: string | null; id: string; code: string; title: string; date: string; time: string; status: string; paymentStatus: string; price: number };
   customer: string;
   eligibility: { eligible: boolean; message: string; deadline?: string };
   revision: string;

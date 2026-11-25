@@ -28,6 +28,18 @@ export function createPackageManagementRouter(db:PrismaClient,authenticate=auth)
  r.delete('/categories/:id',roles('admin'),asyncRoute(async(req:AuthRequest,res)=>{
   const row=await db.$transaction(async tx=>{const before=await tx.badmintonPackageCategory.findUnique({where:{id:String(req.params.id)}});if(!before)throw bookingFailure(404,'Category not found.');const row=await tx.badmintonPackageCategory.update({where:{id:before.id},data:{active:false}});await recordPackageMutation(tx,req.user!.id,'badminton',before,row,res.locals.packageAuditId);return row;});res.json({...row,message:'Category archived. Package, class and attendance history is preserved. Existing entitlements remain usable.'});
  }));
+ r.get('/:id/active-students',roles('admin','badminton_fo'),asyncRoute(async(req,res)=>{
+  const {page,pageSize}=z.object({page:z.coerce.number().int().min(1).max(1000000).default(1),pageSize:z.coerce.number().int().min(1).max(100).default(25)}).parse(req.query);
+  const packageId=String(req.params.id),date=today();
+  if(!await db.badmintonPackage.findUnique({where:{id:packageId},select:{id:true}}))throw bookingFailure(404,'Package not found.');
+  const enrollments=await db.badmintonEnrollment.findMany({where:{packageId,status:'active',startDate:{lte:date},expiryDate:{gte:date},sessionsRemaining:{gt:0}},select:{studentId:true,studentName:true,userId:true,user:{select:{id:true,name:true,active:true,deletedAt:true}}},orderBy:{id:'asc'}});
+  const legacyIds=[...new Set(enrollments.filter(row=>!row.userId).map(row=>row.studentId))];
+  const legacy=new Map((await db.user.findMany({where:{id:{in:legacyIds}},select:{id:true,name:true,active:true,deletedAt:true}})).map(user=>[user.id,user]));
+  const students=new Map<string,{id:string;name:string}>();
+  for(const enrollment of enrollments){const account=enrollment.user||legacy.get(enrollment.studentId);if(account&&(!account.active||account.deletedAt))continue;const id=account?.id||enrollment.studentId;students.set(id,{id,name:account?.name||enrollment.studentName});}
+  const rows=[...students.values()].sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
+  res.json({total:rows.length,page,pageSize,rows:rows.slice((page-1)*pageSize,page*pageSize)});
+ }));
  r.get('/:id/members',roles('admin','badminton_fo'),asyncRoute(async(req,res)=>{
   const q=z.object({page:z.coerce.number().int().min(1).max(1000000).default(1),pageSize:z.coerce.number().int().min(1).max(100).default(25),q:z.string().trim().max(120).default(''),status:z.enum(['active','expired','all']).default('active'),categoryCode:categoryCodeInput.optional()}).parse(req.query);
   const matchingAccounts=q.q?await db.user.findMany({where:{role:'member',OR:[{name:{contains:q.q}},{phone:{contains:q.q}},{email:{contains:q.q}}]},select:{id:true}}):[];

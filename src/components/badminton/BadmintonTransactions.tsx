@@ -2,9 +2,10 @@ import '../member-booking/member-booking.css';
 import { SegmentedControl } from '../Interactions';
 import { RefundDialog, RefundInbox } from '../RefundWorkflow';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { ArrowUpRight } from 'lucide-react';
+import { CalendarDays, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
+import { useBookingClock } from '../../hooks/useBookingClock';
+import './badminton-finance.css';
 import { get } from '../../api';
 import { Button, Empty, Pagination } from '../UI';
 import { Select } from '../Select';
@@ -31,6 +32,8 @@ function Status({ value }: { value: string }) {
 
 export default function BadmintonTransactions() {
   const revision = usePaymentRevision();
+  const {date}=useBookingClock();
+  const [filtersOpen,setFiltersOpen]=useState(false);
   const [refundBookingId, setRefundBookingId] = useState('');
   const [ledger, setLedger] = useState<'payments' | 'refunds'>('payments');
   const [filters, setFilters] = useState({ q: '', category: '', paymentMethod: '', status: '', from: '', to: '', sort: 'newest' });
@@ -51,29 +54,27 @@ export default function BadmintonTransactions() {
     }, filters.q ? 250 : 0);
     return () => { alive = false; window.clearTimeout(timer); };
   }, [filters, ledger, page, revision, retry]);
-  const field = 'min-h-11 w-full rounded-lg border border-zawana-950/10 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zawana-gold';
-  return <div className="space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <SegmentedControl label="Finance records" value={ledger} onChange={value => { setLedger(value); setPage(1); setSelected(null); setFilters(previous => ({...previous,status:''})); }} options={[{value:'payments',label:'Payments'},{value:'refunds',label:'Refunds'}]} />
-      <Link to="/badminton-fo/course-finance" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-zawana-950/10 bg-white px-3 text-sm font-medium hover:bg-zawana-50 focus-visible:ring-2 focus-visible:ring-zawana-gold">Course operations <ArrowUpRight size={15} /></Link>
-    </div>
+  const field = 'fo-finance-field';
+  const filtered=Object.entries(filters).some(([key,value])=>key==='sort'?value!=='newest':!!value);
+  const advancedCount=Number(!!filters.from||!!filters.to)+Number(filters.sort!=='newest');
+  const monthEnd=new Date(Number(date.slice(0,4)),Number(date.slice(5,7)),0).getDate();
+  const periods=[{id:'all',label:'All dates',from:'',to:''},{id:'today',label:'Today',from:date,to:date},{id:'month',label:'This month',from:`${date.slice(0,7)}-01`,to:`${date.slice(0,7)}-${monthEnd}`}];
+  return <div className="fo-finance space-y-5">
+    <SegmentedControl label="Finance records" value={ledger} onChange={value => { setLedger(value); setPage(1); setSelected(null); setFilters(previous => ({...previous,status:''})); }} options={[{value:'payments',label:'Payments'},{value:'refunds',label:'Refunds'}]} />
     {ledger === 'refunds' && <details className="border-b border-zawana-border pb-3"><summary className="member-booking-disclosure">Refund requests</summary><div className="mt-3"><RefundInbox pendingOnly /></div></details>}
-    <section aria-label="Transaction filters" className="space-y-3 rounded-xl border border-zawana-950/10 bg-white p-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block"><span className="sr-only">Search transactions</span><input className={field} placeholder="Customer, transaction ID or service" value={filters.q} onChange={e => update('q', e.target.value)} /></label>
-        <Select aria-label="Transaction category" className="w-full min-w-0" value={filters.category} onChange={e => update('category', e.target.value)}><option value="">All categories</option>{categories.map(value => <option key={value}>{value}</option>)}</Select>
+    <section aria-label="Transaction filters" className="fo-finance-filters">
+      <div className="fo-finance-primary-filters">
+        <div className="fo-finance-search-group"><label className="fo-finance-search"><Search size={17} aria-hidden="true"/><input aria-label="Search transactions" placeholder="Customer, service or transaction ID" maxLength={120} value={filters.q} onChange={e=>update('q',e.target.value)}/></label><Button variant="secondary" aria-label="Refresh finance" disabled={loading} onClick={()=>setRetry(value=>value+1)}><RefreshCw size={16} aria-hidden="true"/></Button></div>
+        <label className="fo-finance-filter-label">Category<Select aria-label="Transaction category" value={filters.category} onChange={e=>update('category',e.target.value)}><option value="">All categories</option>{categories.map(value=><option key={value}>{value}</option>)}</Select></label>
+        <label className="fo-finance-filter-label">Payment method<Select aria-label="Payment method" value={filters.paymentMethod} onChange={e=>update('paymentMethod',e.target.value)}><option value="">All methods</option><option>Cash</option><option>Online Payment</option></Select></label>
+        <label className="fo-finance-filter-label">Status<Select aria-label="Payment status" value={filters.status} onChange={e=>update('status',e.target.value)}><option value="">All statuses</option>{(ledger==='refunds'?['refunded']:['paid','pending','failed']).map(value=><option key={value} value={value}>{value.charAt(0).toUpperCase()+value.slice(1)}</option>)}</Select></label>
       </div>
-      <details><summary className="member-booking-disclosure">More filters{filters.paymentMethod || filters.status || filters.from || filters.to ? ' · Active' : ''}</summary>
-      <div className="mt-3 grid grid-cols-2 gap-3">        <Select aria-label="Payment method" className="w-full min-w-0" value={filters.paymentMethod} onChange={e => update('paymentMethod', e.target.value)}><option value="">All methods</option><option>Cash</option><option>Online Payment</option></Select>
-        <Select aria-label="Payment status" className="w-full min-w-0" value={filters.status} onChange={e => update('status', e.target.value)}><option value="">All statuses</option>{(ledger === 'refunds' ? ['refunded'] : ['paid', 'pending', 'failed']).map(value => <option key={value} value={value}>{value.charAt(0).toUpperCase() + value.slice(1)}</option>)}</Select>
+      <div className="fo-finance-filter-bar"><div className="fo-finance-periods" role="group" aria-label="Transaction date range">{periods.map(period=><button key={period.id} type="button" aria-pressed={filters.from===period.from&&filters.to===period.to} onClick={()=>{setFilters(current=>({...current,from:period.from,to:period.to}));setPage(1);}}>{period.id==='all'&&<CalendarDays size={14} aria-hidden="true"/>}{period.label}</button>)}</div><div className="fo-finance-filter-actions"><Button variant="ghost" aria-expanded={filtersOpen} aria-controls="fo-finance-date-filters" onClick={()=>setFiltersOpen(value=>!value)}><SlidersHorizontal size={15} aria-hidden="true"/><span>More filters</span>{advancedCount>0&&<span className="fo-finance-applied">{advancedCount}</span>}</Button>{filtered&&<Button variant="ghost" onClick={()=>{setFilters({q:'',category:'',paymentMethod:'',status:'',from:'',to:'',sort:'newest'});setPage(1);}}><X size={14} aria-hidden="true"/>Reset filters</Button>}</div></div>
+      <div id="fo-finance-date-filters" hidden={!filtersOpen} className="fo-finance-date-filters">
+        <label className="fo-finance-filter-label">From date<input aria-label="From date" type="date" className={field} max={filters.to||undefined} value={filters.from} onChange={e=>update('from',e.target.value)}/></label>
+        <label className="fo-finance-filter-label">To date<input aria-label="To date" type="date" className={field} min={filters.from||undefined} value={filters.to} onChange={e=>update('to',e.target.value)}/></label>
+        <label className="fo-finance-filter-label">Sort by<Select aria-label="Sort transactions" value={filters.sort} onChange={e=>update('sort',e.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="amount_desc">Amount: highest first</option><option value="amount_asc">Amount: lowest first</option></Select></label>
       </div>
-      <div className="mt-3 grid grid-cols-2 items-end gap-3 xl:grid-cols-4">
-        <label className="text-xs text-zawana-500">From<input aria-label="From date" type="date" className={`${field} mt-1`} value={filters.from} onChange={e => update('from', e.target.value)} /></label>
-        <label className="text-xs text-zawana-500">To<input aria-label="To date" type="date" className={`${field} mt-1`} min={filters.from || undefined} value={filters.to} onChange={e => update('to', e.target.value)} /></label>
-        <Select aria-label="Sort transactions" className="w-full min-w-0" value={filters.sort} onChange={e => update('sort', e.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="amount_desc">Amount: highest first</option><option value="amount_asc">Amount: lowest first</option></Select>
-        <button type="button" className="min-h-11 rounded-lg px-3 text-sm text-zawana-500 hover:bg-zawana-50 focus-visible:ring-2 focus-visible:ring-zawana-gold" onClick={() => { setFilters({ q: '', category: '', paymentMethod: '', status: '', from: '', to: '', sort: 'newest' }); setPage(1); }}>Reset filters</button>
-      </div>
-      </details>
     </section>
     {!loading && !error && <div className="flex flex-wrap items-baseline justify-between gap-3 text-sm"><span className="text-zawana-500">{result.pagination.total.toLocaleString()} {ledger === 'refunds' ? 'refund records' : 'payments'}</span><strong>{ledger === 'refunds' ? 'Refunded' : 'Payments total'} · {money(ledger === 'refunds' ? Math.abs(result.summary?.net || 0) : result.summary?.net || 0)}</strong></div>}
     {error ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700"><span>{error}</span><Button variant="secondary" onClick={() => setRetry(value => value + 1)}>Retry</Button></div>
@@ -97,7 +98,7 @@ export default function BadmintonTransactions() {
       <div className="mb-5 flex items-center justify-between gap-3 border-b border-zawana-950/10 pb-5"><p className="text-2xl font-semibold tabular-nums">{money(selected.finalAmount)}</p><Status value={selected.status} /></div>
       <dl className="space-y-4 text-sm">{[['Transaction ID', selected.id], ['Customer', selected.customer], ['Category', selected.category || 'Historical / unclassified'], ['Service / package', selected.item], ['Payment method', methodLabel(selected.paymentMethod)], [selected.resourceType==='booking_refund'?'Recorded refund method':'Original payment method', selected.paymentMethod], ['Verified staff ID',selected.confirmedById||'Historical record'], ['Date & time', timestamp(selected)], ['Staff responsible', selected.staff || 'Not recorded'], ['Subtotal', money(selected.amount)], ['Discount', money(selected.discount)], ['Tax', money(selected.tax)], ['Linked record', selected.resourceId || 'Historical record']].map(([label, value]) => <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-4"><dt className="text-zawana-500">{label}</dt><dd className="break-words text-right">{value}</dd></div>)}</dl>
       <p className="mt-5 rounded-lg bg-zawana-50 p-3 text-xs leading-relaxed text-zawana-500">{confirmation(selected)}. Payment status is separate from booking and coach approval status.</p>
-      {selected.category === 'Private Course' && <Link onClick={() => setSelected(null)} className="mt-4 inline-flex min-h-11 items-center text-sm font-medium underline" to={`/badminton-fo/course-finance${selected.resourceId ? `?booking=${encodeURIComponent(selected.resourceId)}` : ''}`}>Open course operations</Link>}
+
     </DeskDialog>}</AnimatePresence>
     {refundBookingId && <RefundDialog bookingId={refundBookingId} onClose={() => setRefundBookingId('')} onCompleted={async () => { setRetry(value => value + 1); }} />}
   </div>;

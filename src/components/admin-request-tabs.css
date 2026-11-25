@@ -1,0 +1,55 @@
+.admin-request-tab{--request-line:var(--color-zawana-border,#e2e5db);--request-ink:var(--color-zawana-950,#20281f);--request-muted:#65705e;color:var(--request-ink)}
+.admin-request-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.admin-request-search{display:flex;align-items:center;gap:10px;flex:1 1 250px;min-width:0;min-height:48px;padding:0 14px;border:1px solid var(--request-line);border-radius:12px;background:white;color:var(--request-muted)}
+.admin-request-search input{flex:1;min-width:0;width:100%;height:46px;border:0;background:transparent;outline:none;font-size:12px;color:var(--request-ink)}
+.admin-request-search:focus-within{outline:2px solid var(--color-zawana-gold,#b09a46);outline-offset:2px}
+.admin-request-toolbar>select{max-width:100%;min-height:48px;padding:0 34px 0 12px;border:1px solid var(--request-line);border-radius:12px;background:white;font-size:12px;color:var(--request-ink)}
+.admin-request-toolbar .zawana-button{min-height:48px;font-size:12px;padding-inline:14px}
+.admin-request-avatar{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:36px;height:36px;border:1px solid #e3e8db;border-radius:11px;background:#f3f5ee;color:#5d6a50;font-size:12px;font-weight:600}
+.admin-request-group-customer{display:flex;align-items:center;gap:10px;min-width:0}
+.admin-request-tab.staff-requests{margin:0}
+.admin-request-tab .staff-request-group{border-radius:14px}
+.admin-request-tab .staff-request-group>header{padding:14px 18px;background:#fafbf8}
+.admin-request-kind{display:block;margin-top:4px;font-size:10px;color:var(--request-muted);font-weight:400}
+.admin-request-tab .staff-request-group li{gap:18px;padding:18px}
+.admin-request-tab .staff-request-actions .zawana-button{font-size:11px;padding-inline:12px}
+.admin-request-tab .staff-request-notice{padding:6px 18px;background:#fdfdfb}
+.admin-request-tab .staff-requests-empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:36px 20px}
+.admin-request-tab .staff-requests-empty h3{margin:0}
+.admin-request-tab .staff-requests-empty>svg{margin-bottom:4px;color:#8a957f}
+.admin-request-tab .staff-requests-empty p{max-width:36ch}
+.admin-refund-list{border:1px solid var(--request-line);border-radius:14px;overflow:hidden;background:white}
+.admin-refund-list>article{display:grid;grid-template-columns:minmax(200px,1.3fr) minmax(160px,1fr) minmax(130px,.75fr) minmax(150px,auto);align-items:center;gap:20px;padding:20px}
+.admin-refund-list>article+article{border-top:1px solid var(--request-line)}
+.admin-refund-customer{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.admin-refund-customer>div{min-width:0}
+.admin-refund-customer h2{font-size:14px;font-weight:600;line-height:1.6;overflow-wrap:anywhere}
+.admin-refund-customer p{font-size:12px;color:var(--request-muted);line-height:1.8;margin-top:3px;overflow-wrap:anywhere}
+.admin-refund-customer small{display:block;font-size:10px;color:var(--request-muted);line-height:1.8;margin-top:4px;overflow-wrap:anywhere}
+.admin-request-session{min-width:0}
+.admin-request-session p{display:flex;align-items:center;gap:7px;font-size:12px;line-height:1.8;overflow-wrap:anywhere}
+.admin-request-session strong{font-weight:550}
+.admin-request-session p+p{color:var(--request-muted);margin-top:4px}
+.admin-request-session svg,.admin-request-status svg{flex-shrink:0}
+.admin-refund-amount{display:grid;gap:4px;min-width:0}
+.admin-refund-amount>span{font-size:10px;color:var(--request-muted)}
+.admin-refund-amount>strong{font-size:17px;font-weight:600;line-height:1.5;letter-spacing:-.025em;overflow-wrap:anywhere}
+.admin-refund-amount>small{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--request-muted)}
+.admin-refund-action{display:grid;justify-items:end;gap:10px}
+.admin-refund-action .zawana-button{min-height:44px;font-size:12px;padding-inline:14px}
+.admin-request-status{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:5px 8px;border:1px solid var(--request-line);border-radius:7px;background:#f3f5ef;color:#65705e;font-size:11px;line-height:1.6}
+.admin-request-status[data-tone=pending]{border-color:#eadebf;background:#faf4e7;color:#805f23}
+.admin-request-status[data-tone=success]{border-color:#dce7dd;background:#edf5ef;color:#48624e}
+.admin-refund-blocked{grid-column:1/-1;display:flex;align-items:flex-start;gap:7px;padding-top:12px;border-top:1px dashed var(--request-line);font-size:11px;line-height:1.8;color:#896638;overflow-wrap:anywhere}
+.admin-refund-blocked svg{flex-shrink:0;margin-top:2px}
+.admin-request-error{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px;border:1px solid #edd6d1;border-radius:12px;margin-bottom:16px;background:#fff7f5;font-size:12px;color:#994f47}
+.admin-request-error p{flex:1;min-width:0;overflow-wrap:anywhere}
+.admin-request-empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px 20px;border:1px solid var(--request-line);border-radius:14px;background:white;text-align:center;color:var(--request-muted);font-size:12px}
+.admin-request-empty h2{color:var(--request-ink);font-size:16px;font-weight:550;margin-top:6px}
+.admin-request-tab :focus-visible{outline:2px solid var(--color-zawana-gold,#b09a46);outline-offset:3px}
+.admin-request-tab .admin-request-search input:focus-visible{outline:none}
+@keyframes admin-request-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:no-preference){.admin-request-refreshing{animation:admin-request-spin 1.2s linear infinite}}
+@media(max-width:1199px){.admin-refund-list>article{grid-template-columns:minmax(0,1.2fr) minmax(150px,1fr) auto;gap:16px}.admin-refund-action{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center}.admin-request-tab .staff-request-group li{grid-template-columns:minmax(0,1fr) minmax(140px,1fr) auto}.admin-request-tab .staff-request-actions{grid-column:1/-1;max-width:none;justify-content:flex-start}}
+@media(max-width:600px){.admin-request-search{flex-basis:100%}.admin-request-toolbar>select{flex:1;min-width:0}.admin-request-toolbar .zawana-button{padding-inline:12px}.admin-refund-list>article{grid-template-columns:minmax(0,1fr);padding:16px;gap:16px}.admin-refund-amount{padding:12px 0;border-block:1px solid var(--request-line)}.admin-refund-amount>strong{font-size:19px}.admin-refund-action{flex-wrap:wrap;gap:12px}.admin-request-tab .staff-request-group li{grid-template-columns:minmax(0,1fr);padding:16px;gap:12px}.admin-request-tab .staff-request-actions{grid-column:1}.admin-request-tab .staff-request-group>header{padding:14px 16px}}
+@media(max-width:600px){.staff-booking-workspace--admin .staff-booking-workspace__tabs>.premium-segments{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.admin-request-tab .staff-request-session,.admin-request-tab .admin-request-session{display:flex;flex-wrap:wrap;gap:4px 16px}.admin-request-tab .staff-request-session p+p,.admin-request-tab .admin-request-session p+p{margin-top:0}}

@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 import { Button } from '../UI';
 
 /** A body portal keeps the menu out of the timetable's scrolling/transform contexts. */
-export function CourtActionMenu({ open, onOpenChange, disabled, label, children }: {
+export function CourtActionMenu({ open, onOpenChange, disabled, label, children,menuLabel='Court actions',triggerAriaLabel,variant='primary' }: {
   open: boolean; onOpenChange: (open: boolean) => void; disabled: boolean;
   label: string; children: ReactNode;
+  menuLabel?:string;triggerAriaLabel?:string;variant?:'primary'|'secondary'|'ghost';
 }) {
   const id = useId();
   const anchor = useRef<HTMLSpanElement>(null);
@@ -77,10 +78,10 @@ export function CourtActionMenu({ open, onOpenChange, disabled, label, children 
     if (open && positioned) popup.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true });
   }, [open, positioned]);
   return <>
-    <span ref={anchor} className="inline-flex"><Button disabled={disabled} aria-expanded={open} aria-haspopup="menu" aria-controls={open ? id : undefined}
+    <span ref={anchor} className="inline-flex"><Button variant={variant} disabled={disabled} aria-label={triggerAriaLabel} aria-expanded={open} aria-haspopup="menu" aria-controls={open ? id : undefined}
       onClick={() => { setPosition(null); onOpenChange(!open); }}
       onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setPosition(null); onOpenChange(true); } }}>{label}</Button></span>
-    {open && !disabled && createPortal(<div ref={popup} id={id} role="menu" aria-label="Court actions" className="desk-context-menu"
+    {open && !disabled && createPortal(<div ref={popup} id={id} role="menu" aria-label={menuLabel} className="desk-context-menu"
       style={{ ...position, visibility: position ? 'visible' : 'hidden' }}
       onClick={event => { if ((event.target as Element).closest('button:not(:disabled)')) { onOpenChange(false); } }}
       onKeyDown={event => {

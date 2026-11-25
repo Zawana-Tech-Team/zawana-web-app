@@ -1,0 +1,11 @@
+.booking-status-badge{display:inline-flex;align-items:center;justify-content:center;gap:6px;max-width:100%;padding:6px 10px;border:1px solid transparent;border-radius:9px;font-size:12px;font-weight:600;line-height:1.4;white-space:normal;color:#805d1c;background:#faf4e7;border-color:#eee1c5}
+.booking-status-badge svg{flex-shrink:0}
+.booking-status-badge[data-status=confirmed]{color:#24613f;background:#eef7f0;border-color:#d6e9dc}
+.booking-status-badge[data-status=completed]{color:#315f82;background:#eef4fa;border-color:#dbe7f1}
+.booking-status-badge[data-status=cancelled]{color:#9a4146;background:#fcf0f0;border-color:#f0dada}
+.booking-status-badge[data-status=expired]{color:#626761;background:#f2f3f0;border-color:#e3e5de}
+.booking-history .member-booking-row[data-status=confirmed]{border-left:3px solid #93b89f}
+.booking-history .member-booking-row[data-status=completed]{border-left:3px solid #91b3cd}
+.booking-history .member-booking-row[data-status=cancelled],.booking-history .member-booking-row[data-status=coach_declined]{border-left:3px solid #d3a1a3}
+.booking-history .member-booking-row[data-status=completed] .booking-history-date{background:#f0f5fa}
+.booking-history .member-booking-row[data-status=cancelled] .booking-history-date{background:#faf1f1}

@@ -1,3 +1,4 @@
+import { notifyBadmintonStaff } from './notificationEvents.js';
 import { isDateKey } from '../utils/dateKeys.js';
 import { blockOccurs, blockExcludedDates } from './blockSchedule.js';
 import type { CourtBlock, Prisma, PrismaClient } from '@prisma/client';
@@ -51,6 +52,7 @@ export async function removeWeeklyClasses(db: PrismaClient, actor: Actor, blockI
     }
     const result = JSON.parse(JSON.stringify({operation:'REMOVE_WEEKLY_CLASS',selectedIds:ids,removedIds:family.map(b => b.id),from:date,previous:family,current})) as Prisma.InputJsonValue;
     await tx.deskMoveBatch.update({where:{id:receipt.id},data:{result}});
+    await notifyBadmintonStaff(tx,`weekly-removed:${receipt.id}`,'Weekly classes removed',`${ids.length} selected recurring classes removed from ${date}. Historical records are preserved.`,'','weekly_change',receipt.id);
     return result;
   },{maxWait:10000,timeout:20000});
 }
@@ -100,6 +102,7 @@ export async function removeClassOccurrences(db: PrismaClient, actor: Actor, occ
     }
     const result = JSON.parse(JSON.stringify({ operation: 'REMOVE_CLASS_OCCURRENCES', selected, previous, current })) as Prisma.InputJsonValue;
     await tx.deskMoveBatch.update({ where: { id: receipt.id }, data: { result } });
+    await notifyBadmintonStaff(tx,`occurrences-removed:${receipt.id}`,'Class occurrences removed',`${selected.length} selected occurrences removed. Future weekly classes remain unchanged.`,'','weekly_change',receipt.id);
     return result;
   }, { maxWait: 10000, timeout: 20000 });
 }

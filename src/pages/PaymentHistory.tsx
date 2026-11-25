@@ -1,159 +1,75 @@
+import { useEffect, useRef, useState } from 'react';
+import { Banknote, CheckCircle2, ChevronDown, CircleX, Clock3, CreditCard, Hourglass, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { usePaymentRevision } from '../hooks/usePaymentRevision';
+import { useLanguage } from '../context/LanguageContext';
 import { Select } from '../components/Select';
-import { useEffect, useState } from "react";
-import { CreditCard, ReceiptText, Search } from "lucide-react";
-import { Badge, Button, Card, Empty, Page, Pagination } from "../components/UI";
-import { get } from "../api";
+import { Button, Empty, Page } from '../components/UI';
+import { HistoryPagination } from '../components/member-booking/HistoryPagination';
+import { formatBookingDate } from '../utils/bookingDates';
+import { get } from '../api';
+import './payment-history.css';
 
-type Transaction = {
-  id: string;
-  date: string;
-  item: string;
-  business: string;
-  finalAmount: number;
-  status: string;
-  confirmationMode?: string;
-  paymentMethod: string
-};
+type Transaction={id:string;date:string;createdAt?:string|null;item:string;business:string;category?:string|null;finalAmount:number;status:string;confirmationMode?:string;paymentMethod:string};
+type PaymentPage={data:Transaction[];pagination:{page:number;limit:number;total:number;totalPages:number}};
+const PAGE_SIZE=10;
+const EMPTY:PaymentPage={data:[],pagination:{page:1,limit:PAGE_SIZE,total:0,totalPages:0}};
+const stateLabel=(status:string)=>({paid:'Paid',pending:'Pending',refunded:'Refunded',failed:'Failed',cancelled:'Cancelled'} as Record<string,string>)[status.toLowerCase()]||status.replaceAll('_',' ');
+function recordedTime(value:string|null|undefined,date:string,locale:string){
+ if(!value)return null;
+ const recorded=new Date(value);if(!Number.isFinite(recorded.getTime()))return null;
+ const sameDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yangon',year:'numeric',month:'2-digit',day:'2-digit'}).format(recorded)===date;
+ return new Intl.DateTimeFormat(locale,{timeZone:'Asia/Yangon',...(sameDate?{}:{day:'numeric',month:'short',year:'numeric'}),hour:'numeric',minute:'2-digit'}).format(recorded);
+}
+function PaymentCard({row}:{row:Transaction}){
+ const {locale}=useLanguage();
+ const state=row.status.toLowerCase(),simulated=row.confirmationMode==='SIMULATED'||/simulated/i.test(row.paymentMethod);
+ const cash=/^cash$/i.test(row.paymentMethod),method=simulated?'Simulated payment':cash?'Cash':row.paymentMethod;
+ const Icon=state==='paid'?CheckCircle2:state==='refunded'?RotateCcw:state==='failed'||state==='cancelled'?CircleX:Hourglass;
+ const time=recordedTime(row.createdAt,row.date,locale);
+ const date=(options:Intl.DateTimeFormatOptions)=>formatBookingDate(row.date,options,locale);
+ return <article className="payment-history-card" data-status={state}>
+  <div className="payment-history-card-summary">
+   <span className="payment-history-date" role="img" aria-label={`Receipt date ${date({day:'numeric',month:'long',year:'numeric'})}`}><span aria-hidden="true">{date({month:'short'})}</span><strong aria-hidden="true">{date({day:'2-digit'})}</strong><small aria-hidden="true">{date({year:'numeric'})}</small></span>
+   <div className="payment-history-main"><p className="payment-history-category">{row.category||row.business}</p><h2>{row.item}</h2><p className="payment-history-time"><Clock3 size={14} aria-hidden="true"/>{time?<>Recorded <time dateTime={row.createdAt!}>{time}</time></>:'Time not recorded'}</p><p className="payment-history-method">{cash?<Banknote size={14} aria-hidden="true"/>:<CreditCard size={14} aria-hidden="true"/>}{method}{simulated&&<span>· No external charge</span>}</p></div>
+   <div className="payment-history-value"><p><strong>{Number(row.finalAmount).toLocaleString(locale)}</strong><span>MMK</span></p><span className="payment-history-state" data-status={state}><Icon size={14} aria-hidden="true"/>{stateLabel(row.status)}</span></div>
+  </div>
+  <details className="payment-history-details"><summary>Receipt details<ChevronDown size={15} aria-hidden="true"/></summary><dl><dt>Receipt reference</dt><dd>{row.id}</dd></dl></details>
+ </article>;
+}
 
-export default function PaymentHistory() {
-  const paymentRevision = usePaymentRevision();
-  const [rows, setRows] = useState<Transaction[]>([]),
-    [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
-    [page, setPage] = useState(1),
-    [total, setTotal] = useState(0),
-    [totalPages, setTotalPages] = useState(0);
-  const [search, setSearch] = useState(""),
-    [query, setQuery] = useState(""),
-    [status, setStatus] = useState(""),
-    [from, setFrom] = useState(""),
-    [to, setTo] = useState("");
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    const params = new URLSearchParams({ page: String(page), limit: "20" });
-    if (query) params.set("q", query);
-    if (status) params.set("status", status);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    get<any>(`/transactions?${params}`)
-      .then(r => {
-        if (!active) return;
-        setRows(r.data || []);
-        setTotal(r.pagination?.total || 0);
-        setTotalPages(r.pagination?.totalPages || 0);
-        setError("")
-      })
-      .catch((e: any) => {
-        if (active) setError(e.message || "Could not load your payment history.")
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      });
-    return () => {
-      active = false
-    }
-  }, [page, query, status, from, to, paymentRevision]);
-  const searchNow = (event: React.FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setQuery(search.trim())
-  };
-  return <Page title="Payments & receipts" eyebrow="Your account">
-    <Card className="mb-5 p-4">
-      <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={searchNow}>
-        <label className="relative sm:col-span-2 lg:col-span-2">
-          <Search size={16} className="absolute left-3 top-3.5 text-zawana-400" />
-          <input
-            aria-label="Search payments"
-            className="w-full pl-9"
-            placeholder="Search receipt or item"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </label>
-        <Select
-          aria-label="Filter payment status"
-          value={status}
-          onChange={e => {
-            setPage(1);
-            setStatus(e.target.value)
-          }}
-        >
-          <option value="">All statuses</option>
-          <option value="paid">Paid</option>
-          <option value="pending">Pending</option>
-          <option value="refunded">Refunded</option>
-        </Select>
-        <input
-          aria-label="From date"
-          type="date"
-          value={from}
-          onChange={e => {
-            setPage(1);
-            setFrom(e.target.value)
-          }}
-        />
-        <input
-          aria-label="To date"
-          type="date"
-          value={to}
-          onChange={e => {
-            setPage(1);
-            setTo(e.target.value)
-          }}
-        />
-        <Button className="sm:col-span-2 lg:col-span-5">
-          <Search size={15} /> Search payments</Button>
-      </form>
-    </Card>
-    {error &&
-      <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">
-        {error}
-      </p>}
-    {loading ?
-      <div className="grid animate-pulse gap-3">
-        {[0, 1, 2].map(i =>
-          <Card key={i} className="h-20 bg-zawana-950/5" />
-        )}
-      </div> : rows.length ?
-      <>
-        <div className="space-y-3">
-          {rows.map(r =>
-            <Card
-              key={r.id}
-              className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-zawana-accent/15">
-                  <ReceiptText size={18} />
-                </span>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-wider text-zawana-500">
-                    {r.business} · {r.date}
-                  </p>
-                  <h2 className="mt-1 font-black">{r.item}</h2>
-                  <p className="mt-1 text-xs text-zawana-500">
-                    {r.id} · {r.paymentMethod}
-                  </p>
-                  {r.status === 'paid' && r.confirmationMode && r.confirmationMode !== 'LEGACY' && <p className="mt-1 text-xs text-zawana-500">{r.confirmationMode === 'SIMULATED' ? 'Simulated confirmation · no external charge' : 'Manually confirmed'}</p>}
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <b className="text-lg">{Number(r.finalAmount).toLocaleString()} MMK</b>
-                <Badge good={r.status === "paid"}>{r.status}</Badge>
-              </div>
-            </Card>
-          )}
-        </div>
-        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
-      </> :
-      <Empty
-        title="No payment history found"
-        body="Your account-linked purchases and completed payments will appear here."
-      />}
-    <div className="mt-5 flex items-center gap-2 text-xs text-zawana-500">
-      <CreditCard size={14} /> Payment records are connected to your Zawana account.</div>
-  </Page>
+export default function PaymentHistory(){
+ const revision=usePaymentRevision();
+ const [result,setResult]=useState<PaymentPage>(EMPTY),[loading,setLoading]=useState(true),[error,setError]=useState(''),[page,setPage]=useState(1),[retry,setRetry]=useState(0);
+ const [search,setSearch]=useState(''),[query,setQuery]=useState(''),[filters,setFilters]=useState({status:'',from:'',to:''});
+ const lastQuery=useRef(''),paging=useRef(false),heading=useRef<HTMLHeadingElement>(null);
+ useEffect(()=>{const next=search.trim();if(next===query)return;const timer=setTimeout(()=>{setPage(1);setQuery(next);},250);return()=>clearTimeout(timer);},[search,query]);
+ useEffect(()=>{
+  let live=true;
+  const params=new URLSearchParams({page:String(page),limit:String(PAGE_SIZE)});
+  if(query)params.set('q',query);for(const [key,value] of Object.entries(filters))if(value)params.set(key,value);
+  const key=params.toString();if(lastQuery.current!==key){setLoading(true);lastQuery.current=key;}
+  void get<PaymentPage>(`/transactions?${params}`).then(data=>{
+   if(!live)return;
+   const pagination={...EMPTY.pagination,...data.pagination,page:data.pagination?.page||page};
+   const last=Math.max(1,pagination.totalPages);if(page>last){setPage(last);return;}
+   setResult({data:data.data||[],pagination});setError('');
+  }).catch(failure=>{if(live)setError(failure instanceof Error?failure.message:'Could not load your payment history.');}).finally(()=>{if(live)setLoading(false);});
+  return()=>{live=false;};
+ },[page,query,filters,revision,retry]);
+ useEffect(()=>{if(!loading&&paging.current&&result.pagination.page===page){paging.current=false;heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'start'});}},[loading,result.pagination.page,page]);
+ const changeFilters=(next:Partial<typeof filters>)=>{setPage(1);setFilters(current=>({...current,...next}));};
+ const filtered=!!(query||filters.status||filters.from||filters.to);
+ return <Page title="Payments" eyebrow="Your account"><div className="payment-history">
+  <div className="payment-history-tools"><label className="payment-history-search"><Search size={17} aria-hidden="true"/><input type="search" aria-label="Search payments" placeholder="Search payment or receipt" value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();setPage(1);setQuery(search.trim());}}}/></label>
+   <details className="payment-history-filters"><summary><SlidersHorizontal size={16} aria-hidden="true"/>Filters{filters.status||filters.from||filters.to?' · Active':''}</summary><div className="payment-history-filter-fields">
+    <label>Status<Select aria-label="Filter payment status" value={filters.status} onChange={event=>changeFilters({status:event.target.value})}><option value="">All statuses</option>{['paid','pending','refunded','failed'].map(state=><option key={state} value={state}>{stateLabel(state)}</option>)}</Select></label>
+    <label>From date<input aria-label="From date" type="date" value={filters.from} onChange={event=>changeFilters({from:event.target.value})}/></label>
+    <label>To date<input aria-label="To date" type="date" value={filters.to} onChange={event=>changeFilters({to:event.target.value})}/></label>
+   </div>{filtered&&<Button variant="ghost" onClick={()=>{setSearch('');setQuery('');setPage(1);setFilters({status:'',from:'',to:''});}}>Clear filters</Button>}</details>
+  </div>
+  {error&&<div role="alert" className="payment-history-error"><p>{error}</p><Button variant="secondary" onClick={()=>setRetry(value=>value+1)}>Retry</Button></div>}
+  <h2 className="sr-only" ref={heading} tabIndex={-1}>Payment records</h2>
+  {loading?<div role="status" className="payment-history-loading"><span className="sr-only">Loading payments…</span>{[0,1,2].map(item=><div key={item} aria-hidden="true"/>)}</div>:<><div className="payment-history-list">{result.data.map(row=><PaymentCard row={row} key={row.id}/>)}</div>{!result.data.length&&!error&&<Empty title="No payment history found" body={filtered?'Try another date or clear a filter.':'Your payment records will appear here.'}/>}<HistoryPagination page={result.pagination.page} totalPages={result.pagination.totalPages} total={result.pagination.total} pageSize={PAGE_SIZE} noun={result.pagination.total===1?'payment':'payments'} label="Payment history pagination" disabled={loading} onPage={next=>{paging.current=true;setPage(next);}}/></>}
+  <p className="payment-history-timezone">Times shown in Yangon.</p>
+ </div></Page>;
 }

@@ -54,6 +54,21 @@ test('shared replacement availability and operational reason API preserve owners
       assert.ok([403, 404].includes((await request(`${path}?date=${date}&courtId=${court.id}`, 'other')).status));
       assert.equal((await request(`${path}?date=invalid&courtId=${court.id}`)).status, 400);
     }
+    await db.courtBlock.create({data:{courtId:court.id,date,type:'maintenance',title:'Maintenance',start:'18:00',end:'19:00',note:'Internal staff note'}});
+    await db.courtDateOverride.create({data:{date,type:'open',weeklyOnly:true,holidayActive:false,title:'Operating day',reason:'Internal holiday note'}});
+    const month=date.slice(0,7);
+    const calendar=await request(`/requests/${row.id}/calendar?month=${month}`);assert.equal(calendar.status,200);const calendarData=await calendar.json();
+    assert.ok(calendarData.blocks.length>0);assert.equal('note' in calendarData.blocks[0],false);assert.equal('reason' in calendarData.overrides[0],false);
+    assert.ok(calendarData.courts.some((c:{id:string})=>c.id===court.id));
+    assert.equal(calendarData.bookings.some((b:{time:string;courtId:string})=>b.courtId===court.id&&b.time===rental.time),false,'Calendar must release only the original booking for selection');
+    assert.ok(calendarData.bookings.some((b:{time:string;coachId:string})=>b.time===course.time&&b.coachId===coach.id));
+    assert.equal((await request(`/requests/${row.id}/calendar?month=${month}`,'other')).status,404);
+    assert.equal((await request(`/requests/${row.id}/calendar?month=${month}`,'staff')).status,403);
+    assert.equal((await request(`/requests/${row.id}/calendar?month=invalid`)).status,400);
+    const privateCalendar=await request(`/requests/${privateSession.id}/calendar?month=${month}`);assert.equal(privateCalendar.status,200);const privateData=await privateCalendar.json();
+    assert.equal(privateData.bookings.some((b:{time:string;courtId:string})=>b.courtId===court.id&&b.time===course.time),false);
+    assert.ok(privateData.bookings.some((b:{time:string;courtId:string})=>b.courtId===court.id&&b.time===rental.time),'Other reservations remain blocking');
+    assert.deepEqual(await db.booking.findUnique({where:{id:rental.id}}),rental);
     const groupA=await make('court','GROUP-HTTP-1','11:00 AM — 12:00 PM'),groupB=await make('court','GROUP-HTTP-2','12:00 PM — 1:00 PM');
     const grouped=await request('/requests/batch','staff',{bookingIds:[groupA.id,groupB.id],reason:'EVENT'});assert.equal(grouped.status,201);const group=(await grouped.json()).requests;
     const item=group.find((item:{bookingId:string})=>item.bookingId===groupA.id);
@@ -71,5 +86,19 @@ test('shared replacement availability and operational reason API preserve owners
     await db.bookingRescheduleRequest.update({ where: { id: row.id }, data: { reason: 'Historical custom reason' } });
     const history = await (await request('/requests')).json(); assert.equal(history.find((item:{id:string})=>item.id===row.id).reason, 'Historical custom reason');
     assert.deepEqual(await db.booking.findUnique({ where: { id: course.id } }), course);
+    // Member checkout accepts an explicit confirmation, never a client-supplied amount.
+    await db.transaction.create({data:{resourceType:'booking',resourceId:rental.id,userId:member.id,date,customer:member.name,business:'Badminton',item:'Rental',amount:20000,discount:0,tax:0,finalAmount:20000,paymentMethod:'Cash',staff:staff.name,status:'paid'}});
+    const target={courtId:court.id,date,time:'3:00 PM — 4:00 PM'};
+    const priced=await (await request(`/requests/${row.id}/quote`,'member',target)).json();assert.equal(priced.priceDifference,5000);
+    const payment={target,revision:priced.revision,paymentConfirmed:true};
+    assert.equal((await request(`/requests/${row.id}/confirm`,'other',payment)).status,404);
+    assert.equal((await request(`/requests/${row.id}/confirm`,'staff',payment)).status,403);
+    assert.equal((await request(`/requests/${row.id}/confirm`,'member',{...payment,amount:1})).status,400);
+    assert.equal((await request(`/requests/${row.id}/confirm`,'member',{...payment,paymentConfirmed:'true'})).status,400);
+    assert.equal((await request(`/requests/${row.id}/confirm`,'member',payment)).status,200);
+    assert.equal((await request(`/requests/${row.id}/confirm`,'member',payment)).status,200);
+    const receipt=await db.transaction.findUniqueOrThrow({where:{resourceType_resourceId:{resourceType:'member_reschedule',resourceId:row.id}}});
+    assert.equal(receipt.finalAmount,5000);assert.equal(receipt.confirmationMode,'SIMULATED');
+    assert.equal((await db.booking.findUniqueOrThrow({where:{id:rental.id}})).time,target.time);
   } finally { if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); }
 });

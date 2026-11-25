@@ -180,11 +180,11 @@ export function Notifications() {
   return (
     <div ref={surface}><Page
       title={config.title}
-      eyebrow={role === 'clinic_fo' ? 'Revive Clinic · Front Office' : 'Front Office'}
+      eyebrow={role==='member'?'Your activity':role==='coach'?'Your coaching workspace':'Operations'}
     >
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight md:text-3xl">Stay on top of the desk</h1>
+
           <p className="mt-1 max-w-2xl text-sm text-zawana-500">{config.description}</p>
         </div>
         {unreadCount > 0 && <Badge good>{unreadCount} unread</Badge>}

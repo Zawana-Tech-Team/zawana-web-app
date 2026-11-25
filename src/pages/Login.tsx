@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { authErrorMessage } from '../services/authErrors';
+import { useRef, useState, type FormEvent } from 'react';
 import { AlertCircle, Eye, EyeOff, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Badge, Button, Card } from '../components/UI';
@@ -63,46 +64,14 @@ export function Login() {
     else setNotice('Verify your email using the link we sent, then return here to sign in.');
   };
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError('');
-    setNotice('');
-    setBusy(true);
-    try {
-      await finish(await login(email.trim(), password));
-    } catch (reason: any) {
-      setError(reason.message || 'Sign-in failed. Please try again.');
-    } finally {
-      setBusy(false);
-    }
+  const lock=useRef(false);
+  const run=async(action:()=>Promise<void>)=>{
+    if(lock.current)return;lock.current=true;setBusy(true);setError('');setNotice('');
+    try{await action();}catch(reason){setError(authErrorMessage(reason));}finally{lock.current=false;setBusy(false);}
   };
-
-  const google = async () => {
-    setError('');
-    setNotice('');
-    setBusy(true);
-    try {
-      await finish(await googleLogin());
-    } catch (reason: any) {
-      setError(reason.message || 'Google sign-in failed. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const verifyMfa = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      await finish(await completeMfa(code));
-    } catch (reason: any) {
-      setError(reason.message || 'The verification code could not be verified.');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const submit=(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();void run(async()=>finish(await login(email.trim(),password)));};
+  const google=()=>run(async()=>finish(await googleLogin()));
+  const verifyMfa=(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();void run(async()=>finish(await completeMfa(code)));};
 
   return <AuthShell title="Welcome back.">
     <Card className="overflow-hidden shadow-[0_24px_70px_rgba(29,27,71,.08)]">
@@ -119,7 +88,7 @@ export function Login() {
       </div>
       <div className="space-y-5 p-5 sm:p-7">
         {!firebaseConfigured &&
-          <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Authentication is not configured. Check the frontend authentication settings, then restart the frontend.</p>}
+          <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Sign-in is temporarily unavailable. Please try again shortly.</p>}
         {(error || sessionError) &&
           <div
             role="alert"
@@ -127,7 +96,7 @@ export function Login() {
             className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm leading-5 text-red-800"
           >
             <AlertCircle size={17} className="mt-0.5 shrink-0" />
-            <div><p>{error || sessionError}</p>{canRetrySession && <button type="button" disabled={busy} className="mt-3 min-h-10 rounded-lg border border-red-300 px-3 text-sm font-semibold disabled:opacity-50" onClick={async () => { setBusy(true); setError(''); try { await finish(await retrySession()); } catch (reason: any) { setError(reason.message || 'Verification is still unavailable. Please retry shortly.'); } finally { setBusy(false); } }}>Retry verification</button>}</div>
+            <div><p>{error || sessionError}</p>{canRetrySession && <button type="button" disabled={busy} className="mt-3 min-h-10 rounded-lg border border-red-300 px-3 text-sm font-semibold disabled:opacity-50" onClick={()=>void run(async()=>finish(await retrySession()))}>Retry verification</button>}</div>
           </div>}
         {notice &&
           <p
@@ -217,13 +186,7 @@ export function Login() {
               variant="secondary"
               className="w-full"
               disabled={busy}
-              onClick={() =>
-                void sendMfaCode()
-                  .then(() => setNotice('A sign-in code was sent.'))
-                  .catch((reason: any) =>
-                    setError(reason.message || 'Could not send the verification code.')
-                  )
-              }
+              onClick={()=>void run(async()=>{await sendMfaCode();setNotice('A sign-in code was sent.');})}
             >Send verification code</Button>
             <Field label="Verification code">
               <input
@@ -246,14 +209,14 @@ export function Login() {
             />
           </form>}
 
-        <details className="rounded-xl border border-zawana-950/8 bg-zawana-950/[.02] p-3 text-xs leading-5 text-zawana-500">
+        {authMode==='database'&&<details className="rounded-xl border border-zawana-950/8 bg-zawana-950/[.02] p-3 text-xs leading-5 text-zawana-500">
           <summary className="cursor-pointer font-bold text-zawana-700">Using a local demo account?</summary>
           <p className="mt-2">
             {authMode === 'database'
               ? 'Sign in with the username (the part before @ in the database email) and password saved in the Zawana database.'
               : 'Seeded Zawana profiles are database records; their password is not automatically a Firebase password.'}
           </p>
-        </details>
+        </details>}
         <p className="text-center text-sm text-zawana-500">New to Zawana? <Link className="font-bold text-zawana-950" to="/signup">Create an account</Link>
         </p>
         <p className="flex items-center justify-center gap-2 text-[11px] text-zawana-400">

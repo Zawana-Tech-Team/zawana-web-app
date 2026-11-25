@@ -1,3 +1,4 @@
+import { CoachManagement } from '../components/CoachManagement';
 import { courtFloor } from '../components/court-desk/timetable';
 import { Link } from 'react-router-dom';
 import { useDialog } from '../components/Interactions';
@@ -107,7 +108,7 @@ function ConfirmDelete({
   </Modal>
 }
 
-export function AdminManagement({ section, department = "Badminton" }: { section: Section; department?: "Badminton" | "Gym" }) {
+function FacilityManagement({ section, department = "Badminton" }: { section: Section; department?: "Badminton" | "Gym" }) {
   const [rows, setRows] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -486,3 +487,5 @@ function CourtCard({
     </div>
   </Card>
 }
+
+export function AdminManagement({section,department="Badminton"}:{section:Section;department?:"Badminton"|"Gym"}){return section==='coaches'?<CoachManagement department={department}/>:<FacilityManagement section={section} department={department}/>;}

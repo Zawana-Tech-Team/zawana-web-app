@@ -1,3 +1,4 @@
+import '../components/member-booking/court-booking-review.css';
 import { useBookingRevision } from '../hooks/useBookingRevision';
 import { SegmentedControl } from '../components/Interactions';
 import { courtBlockOccurs } from '../utils/bookingTime';
@@ -15,7 +16,7 @@ import { DeskDialog } from '../components/court-desk/DeskDialog';
 import { BookingActionBar } from '../components/member-booking/BookingActionBar';
 import { AnimatePresence, useReducedMotion } from "framer-motion";
 import { motionTokens } from "../design/motion";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
@@ -229,7 +230,7 @@ const CourtDateCalendar = memo(function CourtDateCalendar({
 });
 
 type RescheduleOptions = {
-  detail: CourtChangeDetail;
+  detail: Pick<CourtChangeDetail,'booking'|'customer'|'eligibility'>;
   backTo: string;
   step: 1 | 2;
   onStepChange: (step: 1 | 2) => void;
@@ -238,11 +239,17 @@ type RescheduleOptions = {
   onExceptionReason: (reason: string) => void;
   availabilityVersion: number;
   error: string;
+  calendarPath?: string;
+  priceSummary?: ReactNode;
+  onSelectionChange?: (selection: SlotPick | undefined) => void;
 };
 
 export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } = {}) {
   const [visibleFloor, setVisibleFloor] = useState('all');
   const isRescheduling = !!reschedule;
+  const originalSpan=reschedule?span(reschedule.detail.booking.time):null;
+  const duration=originalSpan?originalSpan.end-originalSpan.start:60;
+  const sessionTimes=times.map(time=>{const start=span(time)!.start;const label=(n:number)=>`${Math.floor(n/60)%12||12}:${String(n%60).padStart(2,'0')} ${n>=720?'PM':'AM'}`;return {start,time:`${label(start)} — ${label(start+duration)}`};}).filter(s=>s.start+duration<=1260).map(s=>s.time);
   const { locale } = useLanguage();
   const dateFormatter = useMemo(
     () =>
@@ -315,7 +322,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
     setLoadingMonth(true);
     try {
       const data = await get<any>(
-        `/bookings/month-availability?month=${monthKey}`,
+        `${reschedule?.calendarPath||'/bookings/month-availability'}?month=${monthKey}`,
       );
       if (request === availabilityRequest.current) { setMonthData(data); setError(''); }
     } catch (e: any) {
@@ -328,7 +335,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
   };
   useEffect(() => {
     void loadMonth();
-  }, [monthKey, reschedule?.availabilityVersion, bookingRevision]);
+  }, [monthKey, reschedule?.availabilityVersion, reschedule?.calendarPath, bookingRevision]);
 
   const courts = monthData?.courts || [];
   const pickedDate = parseDate(date);
@@ -355,7 +362,10 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
   const hasPassed = (day: string, time: string) => {
     return bookingHasStarted(day, time, now);
   };
+  const selectionChanged=reschedule?.onSelectionChange;
+  useEffect(()=>{selectionChanged?.(selected[0]);},[selected,selectionChanged]);
   const stateFor = (court: any, time: string) => {
+    if(reschedule&&date===reschedule.detail.booking.date&&court.id===reschedule.detail.booking.courtId&&normalizeBookingTime(time)===normalizeBookingTime(reschedule.detail.booking.time))return 'Reserved';
     if (hasPassed(date, time)) return "Elapsed";
     if (dateOverride?.type === "closed") return "Closed";
     if (court.status !== "available") return "Unavailable";
@@ -378,9 +388,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
   };
   const priceFor = (court: any, time: string) => {
     const start = span(time)?.start ?? 0;
-    return holiday?.active
-      ? Number(holiday.price)
-      : Number(court.price) + (start >= 900 ? 5000 : 0);
+    return Array.from({length:Math.ceil(duration/60)},(_,i)=>holiday?.active?Number(holiday.price):Number(court.price)+(start+i*60>=900?5000:0)).reduce((sum,value)=>sum+value,0);
   };
   const toggle = (court: any, time: string, price: number) => {
     if (bookingHasStarted(date, time)) return;
@@ -440,7 +448,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
         const hasCourt = courts.some(
           (c: any) =>
             c.status === "available" &&
-            times.some(
+            sessionTimes.some(
               (time) =>
                 !hasPassed(value, time) &&
                 !effectiveBlocks.some(
@@ -459,7 +467,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
           courts.every(
             (c: any) =>
               c.status !== "available" ||
-              times.every(
+              sessionTimes.every(
                 (time: string) =>
                   effectiveBlocks.some(
                     (b: any) =>
@@ -490,7 +498,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
       new Map<string, { time: string; state: string; price: number }[]>(
         courts.map((court: any) => [
           court.id,
-          times.map((time) => ({
+          sessionTimes.map((time) => ({
             time,
             state: stateFor(court, time),
             price: priceFor(court, time),
@@ -508,8 +516,8 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
     for (const pick of selected) {
       if (!byDate.has(pick.date)) byDate.set(pick.date, new Map());
       const byCourt = byDate.get(pick.date)!;
-      if (!byCourt.has(pick.courtName)) byCourt.set(pick.courtName, []);
-      byCourt.get(pick.courtName)!.push(pick);
+      if (!byCourt.has(pick.courtId)) byCourt.set(pick.courtId, []);
+      byCourt.get(pick.courtId)!.push(pick);
     }
     return [...byDate.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -736,7 +744,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                   <details>
                   <summary className="member-booking-disclosure">Preferred times (optional){preferredTimes.length ? ` · ${preferredTimes.length} selected` : ''}</summary>
                   <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                    {times.map((time) => (
+                    {sessionTimes.map((time) => (
                       <button
                         key={time}
                         type="button"
@@ -1094,7 +1102,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
           </motion.div>
         </div>
 
-        {reschedule && <aside id="reschedule-summary" aria-label="Rescheduling summary"><CourtRescheduleSummary detail={reschedule.detail} selection={selected[0]} backTo={reschedule.backTo} busy={busy} disabled={rescheduleDisabled} exceptionReason={reschedule.exceptionReason} onExceptionReason={reschedule.onExceptionReason} onReview={() => void reviewSelection()} /></aside>}
+        {reschedule && <aside id="reschedule-summary" aria-label="Rescheduling summary"><CourtRescheduleSummary detail={reschedule.detail} selection={selected[0]} backTo={reschedule.backTo} busy={busy} disabled={rescheduleDisabled} exceptionReason={reschedule.exceptionReason} onExceptionReason={reschedule.onExceptionReason} onReview={() => void reviewSelection()} priceSummary={reschedule.priceSummary}/></aside>}
         {!reschedule && step === 2 && <BookingActionBar hidden={checkoutOpen} action={<Button disabled={!selected.length || busy || loadingMonth || hasElapsedSelection} onClick={() => setCheckoutOpen(true)}>Review booking <ChevronRight size={16} /></Button>}>
           <span>{selected.length} session{selected.length === 1 ? '' : 's'}</span><strong>{total.toLocaleString(locale)} MMK</strong>
         </BookingActionBar>}
@@ -1109,45 +1117,29 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
       </>}
       <AnimatePresence>
         {!isRescheduling && checkoutOpen && (
-          <DeskDialog title="Review booking" eyebrow="Court rental" description={`${selected.length} selected sessions. Your sessions and payment will be saved together.`} onClose={() => setCheckoutOpen(false)} closeLabel="Close checkout" cancelLabel="Back to selection" busy={busy}
-            summary={<span>Total <strong>{total.toLocaleString(locale)} MMK</strong></span>}
-            actions={<Button disabled={!selected.length || busy || loadingMonth || hasElapsedSelection} onClick={confirm}>{busy ? "Confirming bookings…" : "Book & record payment"}</Button>}>
+          <DeskDialog title="Review booking" eyebrow="Court rental" description="Check your courts, dates and times before confirming." className="court-booking-review" onClose={() => setCheckoutOpen(false)} closeLabel="Close checkout" cancelLabel="Back to selection" busy={busy}
+            summary={<div className="court-review-total"><span>{selected.length} {selected.length===1?'session':'sessions'} · Total</span><strong>{total.toLocaleString(locale)} <small>MMK</small></strong></div>}
+            actions={<Button disabled={!selected.length || busy || loadingMonth || hasElapsedSelection} onClick={confirm}>{busy ? "Confirming…" : "Confirm booking"}</Button>}>
             <div>
 
               {selected.length ? (
                 grouped.map((day) => (
-                  <div key={day.date} className="mb-4 rounded-2xl border p-4">
-                    <h3 className="font-black">{dateLabel(day.date)}</h3>
-                    {day.courts.map(([courtName, picks]) => (
-                      <div key={courtName} className="mt-3 border-t pt-3">
-                        <b className="text-sm">{courtName}</b>
-                        {picks.map((p) => (
-                          <div
-                            key={pickKey(p)}
-                            className="flex items-center justify-between gap-3 py-2 text-sm"
-                          >
-                            <span className="min-w-0">{p.time}</span>
-                            <span className="flex shrink-0 items-center gap-2">
-                              <b>{p.price.toLocaleString(locale)} MMK</b>
-                              <button
-                                aria-label={`Remove ${courtName} ${p.time} on ${p.date}`}
-                                onClick={() =>
-                                  setSelected((prev) =>
-                                    prev.filter(
-                                      (x) => pickKey(x) !== pickKey(p),
-                                    ),
-                                  )
-                                }
-                                className="grid h-9 w-9 place-items-center rounded-full text-zawana-500 hover:bg-red-50 hover:text-red-700"
-                              >
-                                <X size={15} />
-                              </button>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
+                  <section key={day.date} className="court-review-day" aria-label={dateLabel(day.date)}>
+                    <h3><CalendarDays size={15} aria-hidden="true"/>{dateLabel(day.date)}</h3>
+                    {day.courts.map(([courtId, picks]) => {
+                      const court=courts.find((item:any)=>item.id===courtId);
+                      const floor=court?courtFloor(court):'Floor not specified';
+                      const courtName=picks[0].courtName;
+                      return <div key={courtId} className="court-review-court">
+                        <h4>{courtName} <span>({floor==='Other courts'?'Floor not specified':floor})</span></h4>
+                        <ul>{picks.map(p=><li key={pickKey(p)} className="court-review-session">
+                          <span className="court-review-time">{normalizeBookingTime(p.time)}</span>
+                          <span className="court-review-price">{p.price.toLocaleString(locale)} <small>MMK</small></span>
+                          <button type="button" disabled={busy} aria-label={`Remove ${courtName} ${p.time} on ${p.date}`} onClick={()=>setSelected(previous=>previous.filter(item=>pickKey(item)!==pickKey(p)))}><X size={16} aria-hidden="true"/></button>
+                        </li>)}</ul>
+                      </div>;
+                    })}
+                  </section>
                 ))
               ) : (
                 <div className="py-14 text-center">
@@ -1158,6 +1150,7 @@ export function CourtBooking({ reschedule }: { reschedule?: RescheduleOptions } 
                   </p>
                 </div>
               )}
+              {selected.length>0&&<p className="court-review-payment-note">Payment is simulated. No money is charged.</p>}
               {hasElapsedSelection && (
                 <p role="alert" className="mb-3 text-sm text-red-700">
                   A selected session has already started. Remove it to continue.

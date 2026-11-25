@@ -1,0 +1,29 @@
+.staff-history-list{border:1px solid var(--desk-line);border-radius:16px;background:#fff;overflow:hidden}
+.staff-history-record{display:grid;grid-template-columns:minmax(160px,1.2fr) minmax(160px,1fr) minmax(125px,.8fr) minmax(180px,auto);align-items:center;gap:20px;padding:20px}
+.staff-history-record+article{border-top:1px solid var(--desk-line)}
+.staff-history-identity,.staff-history-session,.staff-history-state{min-width:0}
+.staff-history-identity h3{font-size:15px;line-height:1.6;font-weight:600;color:var(--desk-ink);overflow-wrap:anywhere}
+.staff-history-identity p,.staff-history-session p{display:flex;align-items:center;gap:7px;font-size:12px;line-height:1.8;color:var(--desk-muted);margin-top:5px;overflow-wrap:anywhere}
+.staff-history-record svg{flex-shrink:0}
+.staff-history-session p:first-child{margin-top:0;color:var(--desk-ink)}
+.staff-history-session strong{font-weight:550}
+.staff-history-state{display:grid;justify-items:start;gap:10px}
+.staff-history-payment{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:12px;line-height:1.7}
+.staff-history-payment strong{font-weight:550;color:var(--desk-ink)}
+.staff-history-payment span{font-size:11px;color:var(--desk-muted);text-transform:capitalize}
+.staff-history-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;max-width:250px}
+.staff-history-actions .zawana-button{min-height:44px;font-size:11px;padding-inline:12px}
+@media(max-width:1199px){.staff-history-record{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;gap:16px}.staff-history-actions{grid-column:1/-1;max-width:none;justify-content:flex-start}}
+@media(max-width:600px){.staff-history-record{grid-template-columns:minmax(0,1fr);padding:16px;gap:14px}.staff-history-state{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}.staff-history-actions{border-top:1px solid var(--desk-line);padding-top:12px}.staff-history-actions .zawana-button{padding-inline:12px}.staff-history-identity h3{font-size:16px}}
+.desk-history-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.desk-history-toolbar>.premium-segments{width:auto;max-width:100%}
+.desk-history-toolbar .desk-history-tools{margin:0;justify-content:flex-end}
+@media(max-width:600px){.desk-history-toolbar>.premium-segments{width:100%}.desk-history-toolbar .desk-history-tools{width:100%}}
+.staff-history-detail-session{display:flex;align-items:flex-start;gap:12px;padding:16px;border:1px solid var(--desk-line);border-radius:12px;background:var(--desk-surface)}
+.staff-history-detail-session>svg{flex-shrink:0;color:var(--desk-muted);margin-top:2px}
+.staff-history-detail-session strong{font-size:15px;font-weight:600}
+.staff-history-detail-session p{font-size:12px;color:var(--desk-muted);line-height:1.8;margin-top:5px;overflow-wrap:anywhere}
+.staff-booking-workspace__tabs{margin-bottom:24px}
+.staff-booking-workspace>.staff-requests{margin-top:0}
+.staff-booking-workspace__refunds>p{padding:28px 20px;border:1px solid var(--desk-line,#e2e4db);border-radius:14px;background:white}
+@media(max-width:600px){.staff-booking-workspace__tabs>.premium-segments{display:flex;flex-wrap:wrap;gap:4px}.staff-booking-workspace__tabs>.premium-segments>button{flex:1 1 auto;min-height:44px}.staff-booking-workspace__tabs{margin-bottom:20px}}

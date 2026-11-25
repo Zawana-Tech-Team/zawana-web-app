@@ -1,3 +1,4 @@
+import {chooseRentalReplacement,reviewRentalReplacement} from './helpers/member-rescheduling.mjs';
 import QRCode from 'qrcode';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
@@ -28,6 +29,11 @@ try {
   await Promise.all([ready(ui), ready(`${api}/health`)]);
   const chrome = process.env.ATTENDANCE_BROWSER_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'], ...(existsSync(chrome) ? { executablePath: chrome } : {}) });
+  const staffToken=data.tokens.find(row=>row.role==='admin').token;
+  const enrollments=await (await fetch(`${api}/badminton/enrollments`,{headers:{Authorization:`Bearer ${staffToken}`}})).json();
+  const socialEnrollment=enrollments.find(row=>row.userId===data.memberId&&row.categoryCode==='SOCIAL');
+  const initialVisit=await fetch(`${api}/badminton/check-ins`,{method:'POST',headers:{Authorization:`Bearer ${staffToken}`,'Content-Type':'application/json'},body:JSON.stringify({enrollmentId:socialEnrollment.id})});
+  assert.equal(initialVisit.status,201);
   for (const { role, token } of data.tokens) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
     await context.addInitScript(token => localStorage.setItem('zawana_access_token', token), token);
@@ -35,26 +41,27 @@ try {
     page.on('console', message => { if (/Each child in a list|unique.*key.*prop/.test(message.text())) keyWarnings.push(message.text()); });
     const path = role === 'member' ? '/attendance' : `/${role === 'badminton_fo' ? 'badminton-fo' : role}/attendance`;
     await page.goto(ui + path);
-    await page.getByRole('heading', { name: 'Attendance.' }).waitFor();
+    if(role==='member'){
+      await page.getByRole('heading',{name:'Check-in history',exact:true}).waitFor();await page.getByRole('region',{name:'Selected day check-ins',exact:true}).getByRole('heading',{name:'Ten court visits',exact:true}).waitFor();
+      assert.equal(await page.getByText('People present',{exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'Check in student',exact:true}).count(),0);
+      for(const width of [1440,768,390]){await page.setViewportSize({width,height:1000});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(temp,`member-history-${width}.png`),fullPage:true});}
+    }else{
+    await page.getByRole('heading', { name: 'Attendance',exact:true }).waitFor();
     await page.getByRole('heading', { name: 'Aye Student' }).waitFor();
-    if (role === 'admin') {
-      await page.getByRole('button', { name: 'Check in student' }).click();
-      await page.getByText('Recorded by Attendance Admin').waitFor();
-      await page.reload(); await page.getByText('Recorded by Attendance Admin').waitFor();
-    } else {
-      await page.getByText('Recorded by Attendance Admin').waitFor();
-      assert.equal(await page.getByRole('button', { name: 'Check in student' }).count(), 0);
-    }
+    await page.locator('.attendance-record .attendance-status').filter({hasText:/Checked in|Late/}).first().waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Check in student' }).count(), 0);
     await page.locator('.attendance-record h3 button').first().click();
     const attendanceDialog = page.getByRole('dialog', { name: 'Participant attendance' });
+    await attendanceDialog.getByRole('button',{name:'History',exact:true}).click();
     await attendanceDialog.getByRole('heading', { name: 'Attendance history', exact: true }).waitFor();
+    await attendanceDialog.getByText('Attendance Admin',{exact:false}).first().waitFor();
     assert.ok(await attendanceDialog.evaluate(el => {
       const luminance = color => { const rgb = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4); return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722; };
       const css = getComputedStyle(el), a = luminance(css.color), b = luminance(css.backgroundColor);
       return (Math.max(a, b) + .05) / (Math.min(a, b) + .05) >= 4.5;
     }), 'Dialog body text meets normal-text contrast');
 
-    await attendanceDialog.getByText('Independently purchased private course.', { exact: false }).waitFor();
+    await attendanceDialog.getByRole('button',{name:'Overview',exact:true}).click();await attendanceDialog.getByRole('heading',{name:'Package information',exact:true}).waitFor();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.waitForFunction(() => {
@@ -83,7 +90,8 @@ try {
       await page.setViewportSize({ width, height: 1000 });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${role} ${width}: no overflow`);
       await page.screenshot({ path: join(temp, `${role}-${width}.png`), fullPage: true });
-      await page.locator('.attendance-list-panel').screenshot({ path: join(temp, `attendance-list-${role}-${width}.png`) });
+      await page.getByRole('group',{name:'Attendance view',exact:true}).getByRole('button',{name:'Records',exact:true}).click();await page.locator('.attendance-list-panel').screenshot({ path: join(temp, `attendance-list-${role}-${width}.png`) });await page.getByRole('group',{name:'Attendance view',exact:true}).getByRole('button',{name:'Calendar',exact:true}).click();
+    }
     }
     if (role === 'member' || role === 'badminton_fo') {
       const bookingsPath = role === 'member' ? '/bookings' : '/badminton-fo/bookings';
@@ -92,28 +100,24 @@ try {
         const rental=page.locator('details.member-booking-row').filter({hasText:'2F SOP Court'});
         await rental.locator('summary').click();
         await rental.getByRole('button', { name: 'Change Date / Time', exact: true }).click();
-        await page.getByRole('heading',{name:'Reschedule your booking',exact:true}).waitFor();
-        assert.ok(page.url().endsWith(`/bookings/${data.bookingId}/reschedule`));
-        const dialog=page.getByRole('dialog',{name:'Reschedule request details',exact:true});
-        await dialog.getByRole('heading',{name:'Court Rental request',exact:true}).waitFor();
-        await dialog.getByLabel('Replacement date',{exact:true}).fill(data.targetDate);
-        await dialog.locator('select[aria-label="Available replacement time"]').selectOption('3:00 PM — 4:00 PM',{force:true});
-        const summary=dialog.getByRole('region',{name:'Reschedule Summary',exact:true});
+        await page.waitForURL(`**/bookings/${data.bookingId}/reschedule`);
+        await chooseRentalReplacement(page,{date:data.targetDate,courtName:'2F SOP Court',time:'3:00 PM — 4:00 PM'});
+        const summary=page.getByRole('region',{name:'Reschedule Summary',exact:true});
         await summary.getByText('+5,000 MMK',{exact:true}).waitFor();
-        await dialog.getByRole('button',{name:'Review replacement',exact:true}).click();
-        await dialog.getByRole('button',{name:'Request Staff Payment Assistance',exact:true}).waitFor();
+        await reviewRentalReplacement(page);
+        await page.getByRole('button',{name:'Pay 5,000 MMK & Reschedule',exact:true}).waitFor();
         const unchanged=await (await fetch(`${api}/court-booking/bookings/${data.bookingId}/changes`,{headers:{Authorization:`Bearer ${token}`}})).json();
         assert.equal(unchanged.booking.time,'8:00 AM — 9:00 AM');
-        await dialog.getByRole('button',{name:'Edit replacement',exact:true}).click();
-        await dialog.locator('select[aria-label="Available replacement time"]').selectOption('6:00 AM — 7:00 AM',{force:true});
-        await dialog.getByRole('button',{name:'Review replacement',exact:true}).click();
+        await page.getByRole('button',{name:'Edit replacement',exact:true}).click();
+        await page.getByRole('button',{name:'2F SOP Court, 6:00 AM — 7:00 AM, Available',exact:true}).click();
+        await reviewRentalReplacement(page);
         await summary.getByText('0 MMK',{exact:true}).waitFor();
         await page.screenshot({path:join(temp,'reschedule-review-mobile.png'),fullPage:true});
         await page.setViewportSize({width:1440,height:1000});
         await page.screenshot({path:join(temp,'reschedule-review-desktop.png'),fullPage:true});
-        await dialog.getByRole('button',{name:'Confirm Replacement',exact:true}).click();
-        await dialog.getByText('Your replacement is confirmed.',{exact:true}).waitFor();
-        await dialog.getByRole('button',{name:'Done',exact:true}).click();
+        await page.getByRole('button',{name:'Confirm Replacement',exact:true}).click();
+        await page.getByText('Your replacement is confirmed.',{exact:true}).waitFor();
+        await page.getByRole('button',{name:'Back to bookings',exact:true}).click();
       } else {
         await page.getByRole('button', { name: 'Reschedule', exact: true }).first().click();
         await page.getByRole('heading', { name: 'Reschedule court rental', exact: true }).waitFor();
@@ -121,7 +125,7 @@ try {
         const moveDialog=page.getByRole('dialog');await moveDialog.getByRole('button',{name:'Cancel',exact:true}).click();
       }
       if(role==='member')await page.locator('details.member-booking-row').filter({hasText:'2F SOP Court'}).locator('summary').click();
-      await page.getByRole('button', { name: 'Details & history', exact: true }).first().click();
+      await page.getByRole('button', { name: role === 'member' ? 'Details & history' : 'View Details', exact: true }).first().click();
       const dialog = page.getByRole('dialog', { name: 'Court booking details' });
       await dialog.getByRole('heading', { name: 'Booking history', exact: true }).waitFor();
       if (role === 'member') {
@@ -193,6 +197,7 @@ try {
       await page.getByRole('button', { name: 'Edit Legacy review package', exact: true }).click();
       const categoryDialog = page.getByRole('dialog', { name: 'Edit badminton package' });
       await categoryDialog.getByLabel('Badminton category', { exact: true }).selectOption({ label: 'Social · SOCIAL' });
+      await categoryDialog.locator('summary').filter({hasText:'Legacy category review'}).click();
       await categoryDialog.getByRole('checkbox', { name: /I reviewed this package/ }).check();
       await categoryDialog.getByRole('button', { name: 'Save changes', exact: true }).click();
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -216,8 +221,8 @@ try {
     }
     if (role === 'member') {
       await page.goto(ui + '/member');
-      await page.locator('.workspace-cover').waitFor();
-      await page.getByRole('button', { name: /Scan to check in/ }).waitFor();
+      await page.getByRole('navigation',{name:'Quick actions',exact:true}).getByRole('link',{name:'Packages & check-in',exact:true}).waitFor();
+      assert.equal(await page.locator('.workspace-cover').count(),0);
       await page.goto(ui + '/membership', { waitUntil: 'domcontentloaded' }); await page.getByRole('link', { name: 'Scan to check in' }).first().waitFor();
       await page.getByRole('heading', { name: 'Foundation twelve' }).first().waitFor();
       await page.getByRole('heading', { name: 'Ten court visits' }).first().waitFor();
@@ -229,7 +234,7 @@ try {
     execFileSync(join(root, 'backend/node_modules/.bin/tsx'), ['tests/attendance-browser-fixture.ts', '--reset-profile-rate'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
   }
   const fo = data.tokens.find(t => t.role === 'badminton_fo');
-  const member = data.tokens.find(t => t.role === 'member');
+  const member = data.qrMember;
   const apiRequest = (path, token, body) => fetch(api + path, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   assert.equal((await apiRequest('/check-in/qr', member.token, {})).status, 403);
   const generatedAt = Date.now();
@@ -251,7 +256,7 @@ try {
   const watchContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await watchContext.addInitScript(token => localStorage.setItem('zawana_access_token', token), fo.token);
   const watch = await watchContext.newPage(); watch.on('pageerror', e => errors.push(e.message));
-  await watch.goto(ui + '/badminton-fo/attendance');
+  await watch.goto(ui + '/badminton-fo/check-in');
   const liveSocial = watch.getByRole('region', { name: 'Badminton attendance QR generation', exact: true }).getByRole('article', { name: 'QR slot 1', exact: true });
   await liveSocial.getByText('0 check-ins', { exact: true }).waitFor();
   const png = join(temp, 'entry-qr.png');
@@ -283,7 +288,7 @@ try {
   await liveSocial.getByText('2 check-ins', { exact: true }).waitFor();
   await liveSocial.getByRole('img', { name: 'Social attendance QR code' }).waitFor();
   await liveSocial.getByText('Attendance history', { exact: true }).click();
-  await liveSocial.getByText('Aye Student', { exact: true }).waitFor();
+  await liveSocial.getByText('QR Scan Member', { exact: true }).waitFor();
   await liveSocial.getByText('Ko Second Member', { exact: true }).waitFor();
   await watch.screenshot({ path: join(temp, 'category-qr-live-count-history.png') });
   await watchContext.close();
@@ -293,16 +298,18 @@ try {
   const profile = await fetch(api + '/auth/me', { headers: { Authorization: `Bearer ${member.token}` } });
   assert.equal(profile.status, 200, 'Member session remains valid after QR redemption');
   await scan.goto(ui + '/attendance');
-  await scan.getByRole('heading', { name: /^Attendance list/ }).waitFor().catch(async error => {
+  await scan.getByRole('heading', { name: 'Check-in history',exact:true }).waitFor().catch(async error => {
     await scan.screenshot({ path: join(temp, 'qr-attendance-failure.png'), fullPage: true });
     console.error({ url: scan.url(), body: await scan.locator('body').innerText(), errors, artifacts: temp }); throw error;
   });
-  await scan.locator('.attendance-list-mobile').getByText('Ten court visits', { exact: true }).waitFor();
-  await scan.locator('.attendance-list-panel').screenshot({ path: join(temp, 'attendance-list-package-mobile.png') });
-  await scan.getByRole('button', { name: 'Filters', exact: true }).click();
-  await scan.locator('.attendance-extra-filters').screenshot({ path: join(temp, 'attendance-filters-mobile.png') });
-  await scan.setViewportSize({ width: 1440, height: 1000 });
-  await scan.locator('.attendance-list-panel').screenshot({ path: join(temp, 'attendance-list-package-desktop.png') });
+  const memberVisits=scan.getByRole('region',{name:'Selected day check-ins',exact:true});
+  await memberVisits.getByRole('heading',{name:'Ten court visits',exact:true}).waitFor();
+  await memberVisits.getByRole('heading',{name:'Foundation twelve',exact:true}).waitFor();
+  assert.equal(await scan.getByRole('button',{name:'Filters',exact:true}).count(),0);
+  await scan.locator('.member-attendance-calendar-layout').screenshot({path:join(temp,'attendance-calendar-package-mobile.png')});
+  await memberVisits.screenshot({path:join(temp,'attendance-records-mobile.png')});
+  await scan.setViewportSize({width:1440,height:1000});
+  await scan.locator('.member-attendance-calendar-layout').screenshot({path:join(temp,'attendance-calendar-package-desktop.png')});
   await qrContext.close();
   console.log('PASS two independent category QR slots across refresh/API restart, shared member scans, per-member duplicate protection, exact-category deduction and package reauthentication');
   const publicContext = await browser.newContext();

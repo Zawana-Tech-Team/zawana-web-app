@@ -1,3 +1,4 @@
+import { NavigationActionCounter, OperationalActionHealth } from './operational-actions/OperationalActionUI';
 import { LayoutGroup } from "framer-motion";
 import { WorkspaceNavLink } from "./Interactions";
 import { useEffect, useId, useState, type ReactNode } from "react";
@@ -17,6 +18,7 @@ import {
   LogOut,
   Menu,
   Package,
+  ScanLine,
   Settings,
   ShoppingBag,
   Stethoscope,
@@ -45,7 +47,6 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     label: "Zawana Admin",
     eyebrow: "Central Management",
     items: [
-      { to: "/admin/course-finance", label: "Course Bookings & Finance", icon: CalendarDays },
       { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
       { to: "/admin/attendance", label: "Attendance", icon: CalendarDays },
       { to: "/admin/users", label: "Users", icon: Users },
@@ -64,7 +65,8 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
             label: "Badminton Packages",
             icon: Package,
           },
-          { to: "/admin/coaches", label: "Coach Packages", icon: UserRound },
+          { to: "/admin/badminton-categories", label: "Package Categories", icon: Package },
+          { to: "/admin/coaches", label: "Coaches", icon: UserRound },
           {
             to: "/admin/private-courses",
             label: "Private Courses",
@@ -95,6 +97,7 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
         label: "Packages",
         icon: Package,
       },
+      { to: "/badminton-fo/check-in", label: "Check-in", icon: ScanLine },
       {
         to: "/badminton-fo/courts",
         label: "Court Rental Desk",
@@ -189,11 +192,10 @@ const configs: Record<Exclude<UserRole, "member">, RoleConfig> = {
     label: "Coach Portal",
     eyebrow: "My Coaching Workspace",
     items: [
-      { to: "/coach/course-finance", label: "Course Bookings & Finance", icon: CalendarDays },
       { to: "/coach", label: "Dashboard", icon: LayoutDashboard },
       { to: "/coach/attendance", label: "Attendance", icon: CalendarDays },
       { to: "/coach/schedule", label: "My Calendar", icon: CalendarDays },
-      { to: "/coach/bookings", label: "Bookings", icon: ClipboardList },
+      { to: "/coach/bookings", label: "Bookings & Requests", icon: ClipboardList },
       { to: "/coach/clients", label: "Customers", icon: Users },
     ],
   },
@@ -239,7 +241,7 @@ function NavGroup({
         className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-zawana-gold ${active ? "text-zawana-accent" : "text-zawana-600 hover:bg-zawana-800"}`}
       >
         <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
-        <span className="flex-1">{t(item.label)}</span>
+        <span className="flex-1">{t(item.label)}</span><NavigationActionCounter path={item.to} label={item.label}/>
         <ChevronRight
           size={14}
           aria-hidden="true"
@@ -288,7 +290,7 @@ function NavItems({
               className="shrink-0"
               aria-hidden="true"
             />
-            <span className="min-w-0 flex-1 truncate">{t(label)}</span>
+            <span className="min-w-0 flex-1 truncate">{t(label)}</span><NavigationActionCounter path={to} label={label}/>
             <ChevronRight
               size={14}
               aria-hidden="true"
@@ -501,7 +503,7 @@ export default function RoleLayout({
             </div>
             <div className="ml-auto flex items-center gap-2 sm:gap-3">
               <LanguageSwitcher />
-              <NotificationBell />
+              <NotificationBell /><OperationalActionHealth/>
               <div className="hidden items-center gap-2 border-l border-zawana-border pl-3 sm:flex">
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-zawana-gold-soft text-xs font-bold text-zawana-accent">
                   {initials(user?.name)}
@@ -516,7 +518,7 @@ export default function RoleLayout({
             </div>
           </header>
           <div id="main-content" tabIndex={-1}>
-            <WorkspaceCover role={role} />
+            {!['coach','admin','badminton_fo'].includes(role)&&<WorkspaceCover role={role} />}
             {children}
           </div>
         </div>

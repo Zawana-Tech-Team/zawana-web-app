@@ -92,12 +92,15 @@ try {
   const review = page.getByRole('dialog', { name: 'Review booking', exact: true });
   await review.waitFor();
   assert.equal(await review.getByRole('button', { name: /^Remove / }).count(), 3);
+  await review.getByRole('heading',{name:'Court 1 (2nd floor)',exact:true}).first().waitFor();await review.getByRole('heading',{name:'Court 5 (6th floor)',exact:true}).waitFor();
+  for(const width of [1440,768,390,320]){await page.setViewportSize({width,height:900});const bounds=await review.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=width+1&&bounds.y+bounds.height<=901);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:join(artifacts,`review-booking-${width}.png`),fullPage:true});}
+  await page.setViewportSize({width:1440,height:1000});
   await page.keyboard.press('Escape');
   await review.waitFor({ state: 'hidden' });
   assert.equal(await page.getByRole('button', { name: 'Review booking', exact: true }).evaluate(el => document.activeElement === el), true, 'Review restores focus');
   await page.getByRole('button', { name: 'Review booking', exact: true }).click();
   const response = page.waitForResponse(r => r.url().endsWith('/bookings') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Book & record payment', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm booking', exact: true }).click();
   const confirmed = await response;
   assert.equal(confirmed.status(), 201, await confirmed.text());
   const payload = confirmed.request().postDataJSON();

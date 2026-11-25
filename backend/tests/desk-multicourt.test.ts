@@ -11,10 +11,10 @@ import { createCourtBooking } from '../src/services/courtBooking.js';
 import { today } from '../src/services/courtPolicy.js';
 import { deskRescheduleEligibility } from '../../src/utils/deskRescheduleEligibility.js';
 
-test('future desk eligibility exempts both staff roles and includes exactly 24 hours for members', () => {
+test('future desk eligibility exempts both staff roles and excludes exactly 24 hours for members', () => {
   const start = new Date('2030-01-10T09:00:00+06:30');
   const boundary = new Date(start.getTime() - 24 * 3600000);
-  assert.equal(deskRescheduleEligibility('member', '2030-01-10', '9:00 AM — 10:00 AM', boundary).eligible, true);
+  assert.equal(deskRescheduleEligibility('member', '2030-01-10', '9:00 AM — 10:00 AM', boundary).eligible, false);
   assert.equal(deskRescheduleEligibility('member', '2030-01-10', '9:00 AM — 10:00 AM', new Date(+boundary + 1)).eligible, false);
   for (const role of ['admin', 'badminton_fo'] as const) assert.equal(deskRescheduleEligibility(role, '2030-01-10', '9:00 AM — 10:00 AM', start).eligible, true);
   assert.equal(deskRescheduleEligibility('coach', '2030-01-10', '9:00 AM — 10:00 AM', boundary).eligible, false);

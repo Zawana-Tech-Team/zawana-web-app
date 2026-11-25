@@ -1,662 +1,144 @@
-import '../components/member-premium.css';
-import { useDialog } from '../components/Interactions';
-import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
-import { motionTokens } from '../design/motion';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { CalendarDays, CheckCircle2, Clock3, CreditCard, Eye, EyeOff, LockKeyhole, Package, Pencil, Plus, Search, ShieldCheck, Stethoscope, Trash2 } from 'lucide-react';
 import { Select } from '../components/Select';
-import { useCallback, useEffect, useState } from "react";
-import { Eye, Pencil, Plus, Search, ShieldCheck, UserRound, X, Trash2 } from "lucide-react";
-import { Badge, Button, Card, Empty, Page, Pagination, Toast } from "../components/UI";
-import { get, patch, post, del } from "../api";
-import { ImageUpload } from "../components/ImageUpload";
+import { Button, Empty, Page, Toast } from '../components/UI';
+import { DeskDialog } from '../components/court-desk/DeskDialog';
+import { CourtActionMenu } from '../components/court-desk/CourtActionMenu';
+import { HistoryPagination } from '../components/member-booking/HistoryPagination';
+import { ImageUpload, mediaImageSrc } from '../components/ImageUpload';
+import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { formatBookingDate } from '../utils/bookingDates';
+import { normalizeBookingTime } from '../utils/bookingTime';
+import { get, patch, post, del } from '../api';
+import './user-management.css';
 
-type Account = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  phone?: string | null;
-  membership?: string | null;
-  active: boolean;
-  deletedAt?: string | null;
-  createdAt: string;
-  lastLoginAt?: string | null;
-  coachId?: string | null;
-  coachProfile?: { id: string; department: string; imageUrl?: string | null } | null;
-  _count?: Record<string, number>
-};
-type AccountPage = {
-  data: Account[];
-  pagination: { page: number; limit: number; total: number; totalPages: number };
-  summary: { members: number; staff: number; active: number }
-};
-const roles = [
-  "member",
-  "coach",
-  "doctor",
-  "admin",
-  "owner",
-  "gym_fo",
-  "clinic_fo",
-  "badminton_fo",
-  "store_fo",
-  "cafe_fo"
-];
-const label = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, x => x.toUpperCase());
-const stamp = (value?: string | null) =>value ? new Date(value).toLocaleString() : "Never";
+type Account={id:string;name:string;email:string|null;role:string;phone?:string|null;avatar?:string|null;membership?:string|null;active:boolean;deletedAt?:string|null;createdAt:string;lastLoginAt?:string|null;coachId?:string|null;coachProfile?:{id:string;department:string;imageUrl?:string|null}|null};
+type AccountPage={data:Account[];pagination:{page:number;limit:number;total:number;totalPages:number}};
+type BookingActivity={id:string;title:string;date:string;time:string;status:string;createdAt?:string};
+type PackageActivity={id:string;packageName:string;sessionsRemaining:number;sessionsTotal:number;expiryDate:string;status:string;createdAt?:string};
+type PaymentActivity={id:string;item:string;date:string;finalAmount:number;status:string;createdAt?:string};
+type AppointmentActivity={id:string;type:string;date:string;time:string;status:string;createdAt?:string};
+type Activity={bookings:BookingActivity[];badmintonEnrollments:PackageActivity[];transactions:PaymentActivity[];appointments:AppointmentActivity[]};
+type Form={name:string;email:string;phone:string;role:string;active:boolean;password:string;coachDepartment:string};
+const PAGE_SIZE=10;
+const roles=['member','coach','doctor','admin','owner','gym_fo','clinic_fo','badminton_fo','store_fo','cafe_fo'];
+const roleLabel=(value:string)=>({gym_fo:'Gym front office',clinic_fo:'Clinic front office',badminton_fo:'Badminton front office',store_fo:'Store front office',cafe_fo:'Cafe front office'} as Record<string,string>)[value]||value.replaceAll('_',' ').replace(/\b\w/g,letter=>letter.toUpperCase());
+const emailReleased=(account:Account)=>account.email===`deleted-${account.id}@accounts.invalid`;
+const contact=(account:Account)=>emailReleased(account)?'Email released':account.email||account.phone||'No contact details';
+const blankForm=():Form=>({name:'',email:'',phone:'',role:'member',active:true,password:'',coachDepartment:'Badminton'});
+const message=(failure:unknown,fallback:string)=>failure instanceof Error?failure.message:fallback;
+const timestamp=(value:string|null|undefined,locale:string)=>value&&Number.isFinite(new Date(value).getTime())?new Intl.DateTimeFormat(locale,{timeZone:'Asia/Yangon',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(value)):'No sign-in recorded';
 
-function UserModal({
-  title,
-  onClose,
-  children
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode
-}) {
-  const dialogRef = useDialog(onClose);
-  const reduced = useReducedMotion();
-  return <motion.div
-    initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-    transition={{ duration: reduced ? 0 : motionTokens.dialog }}
-    className="premium-dialog-backdrop fixed inset-0 z-[100] flex items-end justify-center bg-zawana-950/60 p-0 sm:items-center sm:p-4"
-    onMouseDown={e => {
-      if (e.target === e.currentTarget) onClose()
-    }}
-  >
-    <motion.div
-      ref={dialogRef} tabIndex={-1} aria-label={title}
-      initial={reduced ? false : { opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
-      transition={{ duration: reduced ? 0 : motionTokens.dialog, ease: motionTokens.ease }}
-      role="dialog"
-      aria-modal="true"
-      className="premium-dialog-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-7"
-    >
-      <div className="mb-5 flex items-start justify-between">
-        <div>
-          <p className="eyebrow text-zawana-accent">CENTRAL ACCOUNTS</p>
-          <h2 className="mt-1 text-2xl font-black">{title}</h2>
-        </div>
-        <button aria-label="Close" onClick={onClose} className="rounded-full border p-2">
-          <X size={18} />
-        </button>
-      </div>
-      {children}
-    </motion.div>
-  </motion.div>
+function Avatar({account}:{account:Account}){
+ const image=account.avatar||account.coachProfile?.imageUrl;
+ return <span className="users-avatar" aria-hidden="true">{image?<img src={mediaImageSrc(image)} alt=""/>:account.name.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('')}</span>;
+}
+function State({value}:{value:string}){
+ const state=value.toLowerCase(),positive=['active','paid','confirmed','completed','present'].includes(state),negative=['deleted','inactive','cancelled','coach_declined','failed'].includes(state);
+ const Icon=positive?CheckCircle2:negative?LockKeyhole:Clock3;
+ return <span className="users-state" data-tone={positive?'positive':negative?'muted':'pending'}><Icon size={13} aria-hidden="true"/>{roleLabel(state)}</span>;
+}
+function RecentActivity({activity}:{activity:Activity}){
+ const {locale}=useLanguage(),[visible,setVisible]=useState(10);
+ const day=(date:string)=>formatBookingDate(date,{day:'numeric',month:'short',year:'numeric'},locale);
+ const rows=[
+  ...activity.bookings.map(row=>({key:`booking:${row.id}`,title:row.title,status:row.status,kind:'Booking',icon:CalendarDays,created:row.createdAt||row.date,detail:`${day(row.date)} · ${normalizeBookingTime(row.time)}`})),
+  ...activity.badmintonEnrollments.map(row=>({key:`package:${row.id}`,title:row.packageName,status:row.status,kind:'Package',icon:Package,created:row.createdAt||'',detail:`${row.sessionsRemaining} of ${row.sessionsTotal} sessions left · Valid until ${day(row.expiryDate)}`})),
+  ...activity.transactions.map(row=>({key:`payment:${row.id}`,title:row.item,status:row.status,kind:'Payment',icon:CreditCard,created:row.createdAt||row.date,detail:`${Number(row.finalAmount).toLocaleString(locale)} MMK · ${day(row.date)}`})),
+  ...activity.appointments.map(row=>({key:`appointment:${row.id}`,title:row.type,status:row.status,kind:'Appointment',icon:Stethoscope,created:row.createdAt||row.date,detail:`${day(row.date)} · ${row.time}`})),
+ ].sort((a,b)=>(Date.parse(b.created)||0)-(Date.parse(a.created)||0)||a.key.localeCompare(b.key));
+ return <section className="users-activity" aria-label="Recent account activity"><h3>Recent activity</h3>{!rows.length?<p className="users-empty-activity">No account activity yet.</p>:<><ol>{rows.slice(0,visible).map(({key,title,status,kind,icon:Icon,created,detail})=><li key={key}><span className="users-activity-icon"><Icon size={17} aria-hidden="true"/></span><div><p className="users-activity-type">{kind}{created&&<span> · {timestamp(created,locale)}</span>}</p><h4>{title}</h4><p>{detail}</p></div><State value={status}/></li>)}</ol>{visible<rows.length&&<Button variant="secondary" onClick={()=>setVisible(count=>count+10)}>Show more activity</Button>}</>}</section>;
 }
 
-export default function UserManagement() {
-  const [users, setUsers] = useState<Account[]>([]),
-    [filter, setFilter] = useState("all"),
-    [query, setQuery] = useState(""),
-    [busy, setBusy] = useState(false),
-    [notice, setNotice] = useState(""),
-    [error, setError] = useState(""),
-    [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1),
-    [pageInfo, setPageInfo] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 }),
-    [summary, setSummary] = useState({ members: 0, staff: 0, active: 0 });
-  const [mode, setMode] = useState<"create" | "edit" | "view" | null>(null),
-    [selected, setSelected] = useState<Account | null>(null),
-    [activity, setActivity] = useState<any>(null),
-    [passwordOpen, setPasswordOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null),
-    [confirmationName, setConfirmationName] = useState(""),
-    [deleteError, setDeleteError] = useState("");
-  const [form, setForm] = useState<any>({
-    name: "",
-    email: "",
-    password: "",
-    phone: "",
-    role: "member",
-    coachDepartment: "Badminton"
-  });
-  const [coachImage, setCoachImage] = useState<string | null>(null);
-  const [coachImageDirty, setCoachImageDirty] = useState(false);
-  const [status, setStatus] = useState('current');
-  const load = useCallback(async () => {
-    const result = await get<AccountPage>(
-      `/users?page=${page}&limit=20&status=${status}&role=${encodeURIComponent(filter)}&search=${encodeURIComponent(query)}`
-    );
-    setUsers(result.data);
-    setPageInfo(result.pagination);
-    setSummary(result.summary)
-  }, [page, filter, query, status]);
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    load()
-      .catch((e: any) => {
-        if (active) setError(e.message || "Could not load users.")
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      });
-    return () => {
-      active = false
-    }
-  }, [load]);
-  const openCreate = () => {
-    setError("");
-    setPasswordOpen(true);
-    setCoachImage(null);
-    setCoachImageDirty(false);
-    setSelected(null);
-    setForm({
-      name: "",
-      email: "",
-      password: "",
-      phone: "",
-      role: "member",
-      coachDepartment: "Badminton"
-    });
-    setMode("create")
-  };
-  const openEdit = (u: Account) => {
-    setError("");
-    setPasswordOpen(false);
-    setCoachImage(u.coachProfile?.imageUrl || null);
-    setCoachImageDirty(false);
-    setSelected(u);
-    setForm({
-      name: u.name,
-      email: u.email,
-      phone: u.phone || "",
-      role: u.role,
-      active: u.active,
-      password: "",
-      coachDepartment: u.coachProfile?.department || "Badminton"
-    });
-    setMode("edit")
-  };
-  const openView = async (u: Account) => {
-    setSelected(u);
-    setActivity(null);
-    setMode("view");
-    try {
-      setActivity(await get(`/users/${u.id}/activity`))
-    } catch (e: any) {
-      setError(e.message || "Could not load user activity.")
-    }
-  };
-  const save = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      if (mode === "create") {
-        const created = await post<Account>("/users", form);
-        let imageFailed = false;
-        if (form.role === "coach" && coachImage && created.coachId) {
-          try {
-            await patch(`/coaches/${created.coachId}`, { imageUrl: coachImage })
-          } catch {
-            imageFailed = true
-          }
-        }
-        await load();
-        setMode(null);
-        setNotice(
-          imageFailed
-            ? "Coach account created, but its profile image could not be saved."
-            : "Account created successfully."
-        )
-      } else if (selected) {
-        const { email, ...changes } = form;
-        if (!changes.password) delete changes.password;
-        await patch(`/users/${selected.id}`, changes);
-        if (form.role === "coach" && coachImageDirty && selected.coachProfile?.id)
-          await patch(`/coaches/${selected.coachProfile.id}`, { imageUrl: coachImage });
-        await load();
-        setMode(null);
-        setNotice("Account updated successfully.")
-      }
-    } catch (e: any) {
-      setError(e.message || "Could not save account.")
-    } finally {
-      setBusy(false)
-    }
-  };
-  const toggle = async (u: Account) => {
-    setBusy(true);
-    try {
-      await patch(`/users/${u.id}`, { active: !u.active });
-      await load();
-      setNotice(`${u.name} ${u.active ? "deactivated" : "activated"}.`)
-    } catch (e: any) {
-      setError(e.message || "Could not update account.")
-    } finally {
-      setBusy(false)
-    }
-  };
-  const remove = (u: Account) => {
-    setDeleteTarget(u);
-    setConfirmationName("");
-    setDeleteError("");
-    setError("")
-  };
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    if (confirmationName !== deleteTarget.name) {
-      setDeleteError("The name does not match. Type the user's name exactly to continue.");
-      return }
-    const target = deleteTarget;
-    setBusy(true);
-    setDeleteError("");
-    try {
-      if (target.deletedAt) await post(`/users/${target.id}/release-email`, { confirmationName });
-      else await del(`/users/${target.id}`, { confirmationName });
-      setDeleteTarget(null);
-      setConfirmationName("");
-      setNotice(
-        target.deletedAt
-          ? 'Email released. Sign in with the new Google account and complete a fresh member profile.'
-          : `${target.name} was removed from Users. Their booking and payment history was retained.`
-      );
-      if (users.length === 1 && page > 1) setPage(current => Math.max(1, current - 1));
-      else {
-        try {
-          await load()
-        } catch (e: any) {
-          setError(
-            e.message ||
-              "User was deleted, but the list could not refresh. Refresh the page to see the update."
-          )
-        }
-      }
-    } catch (e: any) {
-      setDeleteError(e.message || "Could not delete user.")
-    } finally {
-      setBusy(false)
-    }
-  };
-  return <Page
-    title="Users"
-    eyebrow="Accounts & identity"
-    actions={
-      <Button onClick={openCreate}>
-        <Plus size={16} /> Create account</Button>
-    }
-  >
-    <div className="member-refined">
-    <p className="users-intro">Manage members, team access, and account activity.</p>
-    <AnimatePresence>{notice && <Toast message={notice} onClose={() => setNotice("")} />}</AnimatePresence>
-    {error &&
-      <div
-        role="alert"
-        className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-      >
-        {error}
-      </div>}
-    <div className="mb-5 grid gap-3 sm:grid-cols-3">
-      <Card className="user-summary p-4">
-        <p className="text-xs text-zawana-500">Matching accounts</p>
-        <b className="text-2xl">{pageInfo.total}</b>
-      </Card>
-      <Card className="user-summary p-4">
-        <p className="text-xs text-zawana-500">Members in results</p>
-        <b className="text-2xl">{summary.members}</b>
-      </Card>
-      <Card className="user-summary p-4">
-        <p className="text-xs text-zawana-500">Active in results</p>
-        <b className="text-2xl">{summary.active}</b>
-      </Card>
-    </div>
-    <Card className="user-list overflow-hidden p-0">
-      <div className="flex flex-col gap-3 border-b p-4 lg:flex-row">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-3 text-zawana-500" />
-          <input
-            aria-label="Search users"
-            className="w-full pl-9"
-            placeholder="Search name, email or phone"
-            value={query}
-            onChange={e => {
-              setQuery(e.target.value);
-              setPage(1)
-            }}
-          />
-        </div>
-        <select className="users-role-filter" aria-label="Account role" value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}>
-          {["all", ...roles].map(value => <option key={value} value={value}>{value === 'all' ? 'All account roles' : label(value)}</option>)}
-        </select>
-        <select aria-label="Account status" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
-          <option value="current">Current accounts</option>
-          <option value="deleted">Deleted accounts</option>
-        </select>
-      </div>
-      {loading ?
-        <div className="animate-pulse p-8 text-sm text-zawana-500">Loading accounts…</div> : users.length ?
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px] text-left text-sm">
-            <thead className="bg-zawana-900 text-[10px] uppercase tracking-wider text-zawana-500">
-              <tr>
-                {["User", "Role", "Status", "Created", "Last login", "Activity", "Actions"].map(
-                  h =>
-                    <th key={h} className="px-4 py-3">
-                      {h}
-                    </th>
-                  )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zawana-950/5">
-              {users.map(u =>
-                <tr key={u.id} className="hover:bg-zawana-900/60">
-                  <td className="px-4 py-4">
-                    <div className="user-name"><span className="user-avatar" aria-hidden="true">{u.name.trim().split(/\s+/).slice(0, 2).map(n => n[0]).join('')}</span><b>{u.name}</b></div>
-                    <p className="text-xs text-zawana-500">
-                      {u.email}
-                      {u.phone ? ` · ${u.phone}` : ""}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4">
-                    <Badge>{label(u.role)}</Badge>
-                  </td>
-                  <td className="px-4 py-4">
-                    <Badge good={u.active}>{u.deletedAt ? 'Deleted' : u.active ? "Active" : "Inactive"}</Badge>
-                  </td>
-                  <td className="px-4 py-4 text-xs">
-                    {new Date(u.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-4 text-xs">{stamp(u.lastLoginAt)}</td>
-                  <td className="px-4 py-4 text-xs">
-                    {u._count?.bookings || 0} bookings · {u._count?.badmintonEnrollments || 0} packages</td>
-                  <td className="px-4 py-4">
-                    <div className="flex gap-1">
-                      {u.deletedAt ? <Button
-                        variant="secondary"
-                        disabled={busy || u.email === `deleted-${u.id}@accounts.invalid`}
-                        onClick={() => remove(u)}
-                      >{u.email === `deleted-${u.id}@accounts.invalid` ? 'Email released' : 'Release email for fresh signup'}</Button> : <>
-                      <button
-                        title="View activity"
-                        onClick={() => openView(u)}
-                        className="rounded-lg p-2 hover:bg-zawana-900"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        title="Edit account"
-                        onClick={() => openEdit(u)}
-                        className="rounded-lg p-2 hover:bg-zawana-900"
-                      >
-                        <Pencil size={16} />
-                      </button>
-                      <Button
-                        variant="secondary"
-                        className="px-2 py-1 text-xs"
-                        disabled={busy}
-                        onClick={() => toggle(u)}
-                      >
-                        {u.active ? "Deactivate" : "Activate"}
-                      </Button>
-                      <Button
-                        variant="danger"
-                        className="px-2 py-1 text-xs"
-                        disabled={busy}
-                        onClick={() => remove(u)}
-                      >
-                        <Trash2 size={14} /> Delete</Button>
-                      </>}
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div> :
-        <Empty title="No users found" body="Adjust your filters or create an account." />}
-      <div className="border-t p-4">
-        <Pagination
-          page={pageInfo.page || page}
-          totalPages={pageInfo.totalPages || 0}
-          total={pageInfo.total || 0}
-          onPage={setPage}
-        />
-      </div>
-    </Card>
-    <AnimatePresence>{mode &&
-      <UserModal
-        title={
-          mode === "create"
-            ? "Create account"
-            : mode === "edit"
-              ? "Edit account"
-              : selected?.name || "User activity"
-        }
-        onClose={() => setMode(null)}
-      >
-        {mode === "view" ?
-          <>
-            {!activity ?
-              <p className="p-8 text-center text-sm text-zawana-500">Loading account activity…</p> :
-              <div className="space-y-5">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Card className="user-summary p-4">
-                    <p className="text-xs text-zawana-500">Bookings</p>
-                    <b className="text-xl">{activity.bookings?.length || 0}</b>
-                  </Card>
-                  <Card className="user-summary p-4">
-                    <p className="text-xs text-zawana-500">Badminton packages</p>
-                    <b className="text-xl">{activity.badmintonEnrollments?.length || 0}</b>
-                  </Card>
-                  <Card className="user-summary p-4">
-                    <p className="text-xs text-zawana-500">Payments & transactions</p>
-                    <b className="text-xl">{activity.transactions?.length || 0}</b>
-                  </Card>
-                </div>
-                <Card className="user-summary p-4">
-                  <h3 className="font-black">Recent activity</h3>
-                  <div className="mt-3 space-y-2">
-                    {[
-                      ...(activity.bookings || []).map((x: any) => ({
-                        key: `b-${x.id}`,
-                        type: "Booking",
-                        title: x.title,
-                        when: `${x.date} · ${x.time}`,
-                        state: x.status
-                      })),
-                      ...(activity.badmintonEnrollments || []).map((x: any) => ({
-                        key: `p-${x.id}`,
-                        type: "Badminton package",
-                        title: x.packageName,
-                        when: `${x.sessionsRemaining}/${x.sessionsTotal} sessions · Expires ${x.expiryDate}`,
-                        state: x.status
-                      })),
-                      ...(activity.appointments || []).map((x: any) => ({
-                        key: `a-${x.id}`,
-                        type: "Clinic appointment",
-                        title: x.type,
-                        when: `${x.date} · ${x.time}`,
-                        state: x.status
-                      })),
-                      ...(activity.transactions || []).map((x: any) => ({
-                        key: `t-${x.id}`,
-                        type: "Payment",
-                        title: x.item,
-                        when: `${x.date} · ${Number(x.finalAmount).toLocaleString()} MMK`,
-                        state: x.status
-                      }))
-                    ]
-                      .slice(0, 20)
-                      .map((x: any) =>
-                        <div
-                          key={x.key}
-                          className="flex items-center justify-between gap-3 rounded-xl bg-zawana-900 p-3"
-                        >
-                          <div>
-                            <p className="text-[10px] font-bold uppercase text-zawana-500">
-                              {x.type}
-                            </p>
-                            <b className="text-sm">{x.title}</b>
-                            <p className="text-xs text-zawana-500">{x.when}</p>
-                          </div>
-                          <Badge>{label(x.state || "recorded")}</Badge>
-                        </div>
-                      )}
-                  </div>
-                </Card>
-              </div>}
-          </> :
-          <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-xs font-bold">Name<input
-                  className="mt-1 w-full"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                />
-              </label>
-              <label className="text-xs font-bold">Email / username<input
-                  className="mt-1 w-full"
-                  type="email"
-                  disabled={mode === "edit"}
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                />
-              </label>
-              <label className="text-xs font-bold">Phone<input
-                  className="mt-1 w-full"
-                  value={form.phone}
-                  onChange={e => setForm({ ...form, phone: e.target.value })}
-                />
-              </label>
-              <label className="text-xs font-bold">Role<Select
-                  className="mt-1 w-full"
-                  value={form.role}
-                  onChange={e => setForm({ ...form, role: e.target.value })}
-                >
-                  {roles.map(r =>
-                    <option value={r} key={r}>
-                      {label(r)}
-                    </option>)}
-                </Select>
-              </label>
-              {form.role === "coach" &&
-                <>
-                  <label className="text-xs font-bold">Coach department<Select
-                      className="mt-1 w-full"
-                      value={form.coachDepartment || "Badminton"}
-                      onChange={e => setForm({ ...form, coachDepartment: e.target.value })}
-                    >
-                      <option>Badminton</option>
-                      <option>Gym</option>
-                    </Select>
-                    <span className="mt-1 block font-normal text-zawana-500">Badminton coaches can be assigned to private courses.</span>
-                  </label>
-                  <div className="sm:col-span-2">
-                    <ImageUpload
-                      label="Coach profile image"
-                      value={coachImage}
-                      onChange={value => {
-                        setCoachImage(value);
-                        setCoachImageDirty(true)
-                      }}
-                    />
-                  </div>
-                </>}
-              {mode === "create" || passwordOpen ?
-                <label className="text-xs font-bold sm:col-span-2">
-                  {mode === "create" ? "Temporary password" : "New password (optional)"}
-                  <input
-                    className="mt-1 w-full"
-                    type="password"
-                    minLength={mode === "create" ? 8 : 0}
-                    autoComplete="new-password"
-                    value={form.password}
-                    onChange={e => setForm({ ...form, password: e.target.value })}
-                  />
-                  <span className="mt-1 block font-normal text-zawana-500">
-                    {mode === "create"
-                      ? "At least 8 characters."
-                      : "Leave blank to keep the current password."} Passwords are hashed before storage.</span>
-                </label> :
-                <button
-                  type="button"
-                  className="text-left text-xs font-bold text-zawana-accent"
-                  onClick={() => setPasswordOpen(true)}
-                >Set a new password</button>}
-              {mode === "edit" &&
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.active}
-                    onChange={e => setForm({ ...form, active: e.target.checked })}
-                  /> Account active</label>}
-            </div>
-            <div className="mt-6 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setMode(null)}>Cancel</Button>
-              <Button
-                disabled={
-                  busy ||
-                  !form.name ||
-                  !form.email ||
-                  (mode === "create" && form.password.length < 8)
-                }
-                onClick={save}
-              >
-                {busy ? "Saving…" : mode === "create" ? "Create account" : "Save changes"}
-              </Button>
-            </div>
-          </>}
-      </UserModal>}</AnimatePresence>
-    <AnimatePresence>{deleteTarget &&
-      <UserModal
-        title={deleteTarget.deletedAt ? 'Release email for fresh signup?' : 'Delete user account?'}
-        onClose={() => {
-          if (!busy) {
-            setDeleteTarget(null);
-            setDeleteError("")
-          }
-        }}
-      >
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">{deleteTarget.deletedAt
-            ? <>Release <b>{deleteTarget.email}</b> so its owner can create a fresh member profile using a new sign-in identity. This account stays deleted, and its bookings, packages, and payments remain archived. Existing sign-in identities stay attached to the deleted account.</>
-            : <>This removes <b>{deleteTarget.name}</b> from the Users list and disables their sign-in. Existing bookings, packages, and payment history are kept for records.</>}</div>
-          <label
-            htmlFor="confirm-delete-user"
-            className="block text-sm font-bold text-zawana-950"
-          >To confirm, type <span className="select-all">{deleteTarget.name}</span>
-            <input
-              id="confirm-delete-user"
-              autoFocus
-              autoComplete="off"
-              className="mt-2 w-full"
-              value={confirmationName}
-              onChange={e => {
-                setConfirmationName(e.target.value);
-                setDeleteError("")
-              }}
-              placeholder={deleteTarget.name}
-              onKeyDown={e => {
-                if (e.key === "Enter" && confirmationName === deleteTarget.name)
-                  void confirmDelete()
-              }}
-            />
-          </label>
-          {deleteError &&
-            <p
-              role="alert"
-              className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-            >
-              {deleteError}
-            </p>}
-          <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
-            <Button variant="secondary" disabled={busy} onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="danger"
-              disabled={busy || confirmationName !== deleteTarget.name}
-              onClick={() => void confirmDelete()}
-            >
-              <Trash2 size={15} />
-              {busy ? 'Processing…' : deleteTarget.deletedAt ? 'Release email' : 'Delete account'}
-            </Button>
-          </div>
-        </div>
-      </UserModal>}</AnimatePresence>
-    <div className="mt-5 flex items-center gap-2 text-xs text-zawana-500">
-      <ShieldCheck size={14} /> Public signups remain members. Staff roles can only be provisioned here by an administrator.<UserRound size={14} />
-    </div>
-    </div>
-  </Page>
+export default function UserManagement(){
+ const {user}=useAuth(),{locale}=useLanguage();
+ const [users,setUsers]=useState<Account[]>([]),[loading,setLoading]=useState(true),[hasLoaded,setHasLoaded]=useState(false),[listError,setListError]=useState(''),[notice,setNotice]=useState(''),[retry,setRetry]=useState(0);
+ const [page,setPage]=useState(1),[pageInfo,setPageInfo]=useState({page:1,limit:PAGE_SIZE,total:0,totalPages:0}),[search,setSearch]=useState(''),[query,setQuery]=useState(''),[role,setRole]=useState('all'),[status,setStatus]=useState('current');
+ const [mode,setMode]=useState<'create'|'edit'|'view'|null>(null),[selected,setSelected]=useState<Account|null>(null),[form,setForm]=useState<Form>(blankForm),[formError,setFormError]=useState(''),[passwordOpen,setPasswordOpen]=useState(false),[showPassword,setShowPassword]=useState(false);
+ const [coachImage,setCoachImage]=useState<string|null>(null),[imageDirty,setImageDirty]=useState(false),[imageBusy,setImageBusy]=useState(false),[busy,setBusy]=useState(false),[openMenu,setOpenMenu]=useState('');
+ const [activity,setActivity]=useState<Activity|null>(null),[activityError,setActivityError]=useState(''),[activityRetry,setActivityRetry]=useState(0);
+ const [deleteTarget,setDeleteTarget]=useState<Account|null>(null),[confirmationName,setConfirmationName]=useState(''),[deleteError,setDeleteError]=useState('');
+ const lock=useRef(false),generation=useRef(0),lastQuery=useRef(''),resultsHeading=useRef<HTMLHeadingElement>(null),paging=useRef(false);
+ useEffect(()=>{const value=search.trim();if(value===query)return;const timer=setTimeout(()=>{setQuery(value);setPage(1);},250);return()=>clearTimeout(timer);},[search,query]);
+ const load=useCallback(async(isLive:()=>boolean=()=>true)=>{
+  const version=++generation.current,params=new URLSearchParams({page:String(page),limit:String(PAGE_SIZE),status,role,search:query});
+  const result=await get<AccountPage>(`/users?${params}`);if(version!==generation.current||!isLive())return;
+  const last=Math.max(1,result.pagination.totalPages);if(page>last){setPage(last);return;}
+  setUsers(result.data);setPageInfo(result.pagination);setHasLoaded(true);setListError('');
+ },[page,status,role,query]);
+ useEffect(()=>{let live=true;const key=JSON.stringify({page,status,role,query});setLoading(true);if(lastQuery.current!==key){lastQuery.current=key;setUsers([]);setHasLoaded(false);setListError('');setOpenMenu('');}void load(()=>live).catch(failure=>{if(live)setListError(message(failure,'Could not load accounts.'));}).finally(()=>{if(live)setLoading(false);});return()=>{live=false;};},[load,page,status,role,query,retry]);
+ useEffect(()=>{if(!loading&&paging.current&&pageInfo.page===page){paging.current=false;resultsHeading.current?.focus({preventScroll:true});resultsHeading.current?.scrollIntoView({block:'start'});}},[loading,pageInfo.page,page]);
+ useEffect(()=>{const close=()=>setOpenMenu('');window.addEventListener('resize',close);return()=>window.removeEventListener('resize',close);},[]);
+ useEffect(()=>{
+  if(mode!=='view'||!selected)return;let live=true;setActivity(null);setActivityError('');
+  void get<Activity>(`/users/${encodeURIComponent(selected.id)}/activity`).then(result=>{if(live)setActivity(result);}).catch(failure=>{if(live)setActivityError(message(failure,'Could not load account activity.'));});return()=>{live=false;};
+ },[mode,selected,activityRetry]);
+ const close=()=>{if(lock.current||imageBusy)return;setMode(null);setSelected(null);setFormError('');setShowPassword(false);};
+ const create=()=>{setMode('create');setSelected(null);setForm(blankForm());setFormError('');setPasswordOpen(true);setShowPassword(false);setCoachImage(null);setImageDirty(false);setOpenMenu('');};
+ const edit=(account:Account)=>{setSelected(account);setForm({name:account.name,email:account.email||'',phone:account.phone||'',role:account.role,active:account.active,password:'',coachDepartment:account.coachProfile?.department||'Badminton'});setMode('edit');setPasswordOpen(false);setShowPassword(false);setFormError('');setCoachImage(account.coachProfile?.imageUrl||null);setImageDirty(false);setOpenMenu('');};
+ const view=(account:Account)=>{setSelected(account);setActivity(null);setActivityError('');setMode('view');setOpenMenu('');};
+ const refreshAfterSave=async()=>{try{await load();}catch{setListError('The account was saved, but the list could not refresh. Retry to load the updated accounts.');}};
+ const save=async()=>{
+  if(lock.current||imageBusy||!['create','edit'].includes(mode||''))return;lock.current=true;setBusy(true);setFormError('');
+  try{
+   const creating=mode==='create';let saved:Account;
+   if(creating){saved=await post<Account>('/users',{name:form.name.trim(),email:form.email.trim(),phone:form.phone.trim(),role:form.role,password:form.password,...(form.role==='coach'?{coachDepartment:form.coachDepartment}:{})});}
+   else{if(!selected)return;const changes={name:form.name.trim(),phone:form.phone.trim(),role:form.role,...(form.role==='coach'?{coachDepartment:form.coachDepartment}:{}),...(form.active!==selected.active?{active:form.active}:{}),...(passwordOpen&&form.password?{password:form.password}:{})};saved=await patch<Account>(`/users/${encodeURIComponent(selected.id)}`,changes);}
+   let imageFailed=false;
+   if(form.role==='coach'&&(creating?!!coachImage:imageDirty)){
+    try{let coachId=saved.coachId||selected?.coachProfile?.id;if(!coachId){const coaches=await get<{id:string;userId:string|null}[]>('/coaches');coachId=coaches.find(coach=>coach.userId===saved.id)?.id;}if(!coachId)throw new Error('Coach profile unavailable');await patch(`/coaches/${encodeURIComponent(coachId)}`,{imageUrl:coachImage});}catch{imageFailed=true;}
+   }
+   setMode(null);setSelected(null);setShowPassword(false);setNotice(imageFailed?'Account saved. The coach image could not be saved; you can try again in Edit account.':creating?'Account created successfully.':'Account updated successfully.');await refreshAfterSave();
+  }catch(failure){setFormError(message(failure,'Could not save this account.'));}finally{lock.current=false;setBusy(false);}
+ };
+ const toggle=async(account:Account)=>{if(lock.current)return;lock.current=true;setBusy(true);setOpenMenu('');setListError('');try{await patch(`/users/${encodeURIComponent(account.id)}`,{active:!account.active});setNotice(`${account.name} ${account.active?'deactivated':'activated'}.`);await refreshAfterSave();}catch(failure){setListError(message(failure,'Could not update this account.'));}finally{lock.current=false;setBusy(false);}};
+ const remove=(account:Account,origin?:HTMLElement)=>{
+  // Keep a connected return target when a menu item opens the confirmation dialog.
+  const menuId=origin?.closest('[role="menu"]')?.id;
+  if(menuId)document.querySelector<HTMLButtonElement>(`button[aria-controls="${CSS.escape(menuId)}"]`)?.focus({preventScroll:true});
+  setOpenMenu('');setDeleteTarget(account);setConfirmationName('');setDeleteError('');
+ };
+ const confirmDelete=async()=>{
+  if(lock.current||!deleteTarget||confirmationName!==deleteTarget.name)return;lock.current=true;setBusy(true);setDeleteError('');
+  try{const target=deleteTarget;if(target.deletedAt)await post(`/users/${encodeURIComponent(target.id)}/release-email`,{confirmationName});else await del(`/users/${encodeURIComponent(target.id)}`,{confirmationName});setDeleteTarget(null);setConfirmationName('');setNotice(target.deletedAt?'Email released for a fresh sign-up. Archived records are retained.':'Account deleted. Booking, package and payment history is retained.');await refreshAfterSave();}catch(failure){setDeleteError(message(failure,'Could not complete this action.'));}finally{lock.current=false;setBusy(false);}
+ };
+ const actions=(account:Account)=><div className="users-actions">{account.deletedAt?<Button variant="secondary" disabled={busy||emailReleased(account)} onClick={()=>remove(account)}>Release email</Button>:<>
+  <Button variant="ghost" aria-label={`View account ${account.name}`} disabled={busy} onClick={()=>view(account)}><Eye size={15} aria-hidden="true"/><span>View</span></Button>
+  <Button variant="secondary" aria-label={`Edit account ${account.name}`} disabled={busy} onClick={()=>edit(account)}><Pencil size={15} aria-hidden="true"/><span>Edit</span></Button>
+  <CourtActionMenu label="More" triggerAriaLabel={`More actions for ${account.name}`} menuLabel={`Actions for ${account.name}`} variant="secondary" disabled={busy} open={openMenu===account.id} onOpenChange={open=>setOpenMenu(open?account.id:'')}>
+   <button role="menuitem" disabled={busy||account.id===user?.id} onClick={()=>void toggle(account)}>{account.active?'Deactivate account':'Activate account'}</button>
+   <button role="menuitem" disabled={busy||account.id===user?.id} className="desk-context-menu__destructive" onClick={event=>remove(account,event.currentTarget)}>Delete account</button>
+  </CourtActionMenu>
+ </>}</div>;
+ const invalid=form.name.trim().length<2||(mode==='create'&&(!form.email.trim()||form.password.length<8))||(passwordOpen&&!!form.password&&form.password.length<8);
+ const blocked=busy||imageBusy;
+ return <Page title="Users" eyebrow="Account management" actions={<Button disabled={busy} onClick={create}><Plus size={16} aria-hidden="true"/>Create account</Button>}><div className="users-page">
+  {notice&&<Toast message={notice} onClose={()=>setNotice('')}/>}
+  <div className="users-tools"><label className="users-search"><Search size={17} aria-hidden="true"/><input type="search" aria-label="Search users" placeholder="Search name, email or phone" value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();setQuery(search.trim());setPage(1);}}}/></label><select aria-label="Account role" value={role} onChange={event=>{setRole(event.target.value);setPage(1);}}><option value="all">All roles</option>{roles.map(value=><option value={value} key={value}>{roleLabel(value)}</option>)}</select><select aria-label="Account status" value={status} onChange={event=>{setStatus(event.target.value);setPage(1);}}><option value="current">Current accounts</option><option value="deleted">Deleted accounts</option></select>{(query||role!=='all'||status!=='current')&&<Button variant="ghost" onClick={()=>{setSearch('');setQuery('');setRole('all');setStatus('current');setPage(1);}}>Clear filters</Button>}</div>
+  {listError&&<div role="alert" className="users-error"><p>{listError}</p><Button variant="secondary" onClick={()=>setRetry(value=>value+1)}>Retry</Button></div>}
+  <h2 className="sr-only" tabIndex={-1} ref={resultsHeading}>User accounts</h2>
+  {loading?<div role="status" className="users-loading"><span className="sr-only">Loading accounts…</span>{[0,1,2].map(item=><div key={item} aria-hidden="true"/>)}</div>:users.length?<section className="users-list" aria-label="User accounts"><div className="users-list-columns" aria-hidden="true"><span>Account</span><span>Role</span><span>Status</span><span>Actions</span></div><ul>{users.map(account=><li key={account.id}><article className="users-row" aria-label={`Account ${account.name}`}><div className="users-identity"><Avatar account={account}/><div><h3>{account.name}</h3><p>{contact(account)}</p>{account.phone&&account.email&&!emailReleased(account)&&<p>{account.phone}</p>}</div></div><p className="users-role"><span className="sr-only">Role: </span>{roleLabel(account.role)}</p><State value={account.deletedAt?'Deleted':account.active?'Active':'Inactive'}/>{actions(account)}</article></li>)}</ul></section>:!listError&&<Empty title="No users found" body="Adjust your filters or create an account."/>}
+  {hasLoaded&&<HistoryPagination page={pageInfo.page} totalPages={pageInfo.totalPages} total={pageInfo.total} pageSize={PAGE_SIZE} noun={pageInfo.total===1?'account':'accounts'} label="User management pagination" disabled={loading||busy} onPage={next=>{paging.current=true;setPage(next);}}/>}
+  {(mode==='create'||mode==='edit')&&<DeskDialog title={mode==='create'?'Create account':'Edit account'} eyebrow={mode==='edit'?selected?.name:undefined} onClose={close} busy={blocked} className="users-dialog" closeLabel="Close account form" actions={<Button type="submit" form="user-account-form" loading={busy} disabled={blocked||invalid}>{mode==='create'?'Create account':'Save changes'}</Button>}>
+   <form id="user-account-form" onSubmit={event=>{event.preventDefault();void save();}}><fieldset disabled={blocked} className="users-form">
+    <label>Name<input required minLength={2} autoComplete="name" value={form.name} onChange={event=>setForm(current=>({...current,name:event.target.value}))}/></label>
+    <label>Email<input required type="email" autoComplete="email" disabled={mode==='edit'} value={form.email} onChange={event=>setForm(current=>({...current,email:event.target.value}))}/></label>
+    <label>Phone <span className="users-optional">Optional</span><input type="tel" autoComplete="tel" value={form.phone} onChange={event=>setForm(current=>({...current,phone:event.target.value}))}/></label>
+    <label>Role<Select aria-label="Role" value={form.role} onChange={event=>setForm(current=>({...current,role:event.target.value}))}>{roles.map(value=><option key={value} value={value}>{roleLabel(value)}</option>)}</Select></label>
+    {form.role==='coach'&&<label>Coach department<Select aria-label="Coach department" value={form.coachDepartment} onChange={event=>setForm(current=>({...current,coachDepartment:event.target.value}))}><option>Badminton</option><option>Gym</option></Select></label>}
+    {(mode==='create'||passwordOpen)?<label className="users-form-wide">{mode==='create'?'Temporary password':'New password (optional)'}<div className="users-password"><input aria-label={mode==='create'?'Temporary password':'New password (optional)'} type={showPassword?'text':'password'} required={mode==='create'} minLength={8} autoComplete="new-password" value={form.password} onChange={event=>setForm(current=>({...current,password:event.target.value}))}/><button type="button" aria-label={showPassword?'Hide password':'Show password'} onClick={()=>setShowPassword(value=>!value)}>{showPassword?<EyeOff size={16} aria-hidden="true"/>:<Eye size={16} aria-hidden="true"/>}</button></div><span className="users-field-note">{mode==='create'?'At least 8 characters.':'Leave blank to keep the current password.'}</span></label>:<button type="button" className="users-password-link users-form-wide" onClick={()=>setPasswordOpen(true)}><LockKeyhole size={14} aria-hidden="true"/>Set a new password</button>}
+    {mode==='edit'&&<label className="users-active users-form-wide"><input type="checkbox" disabled={selected?.id===user?.id} checked={form.active} onChange={event=>setForm(current=>({...current,active:event.target.checked}))}/>Account active</label>}
+    {form.role==='coach'&&<details className="users-form-wide users-coach-image"><summary>Coach profile image <span>Optional</span></summary><ImageUpload label="Coach profile image" value={coachImage} onBusyChange={setImageBusy} onChange={value=>{setCoachImage(value);setImageDirty(true);}}/></details>}
+   </fieldset></form>{formError&&<p role="alert" className="users-inline-error">{formError}</p>}
+  </DeskDialog>}
+  {mode==='view'&&selected&&<DeskDialog title="Account details" heading={selected.name} eyebrow={roleLabel(selected.role)} onClose={close} className="users-dialog users-dialog--activity" cancelLabel="Done" closeLabel="Close account details" actions={<Button variant="secondary" onClick={()=>edit(selected)}><Pencil size={14} aria-hidden="true"/>Edit account</Button>}>
+   <section className="users-account-profile" aria-label="Account profile"><Avatar account={selected}/><div><p>{contact(selected)}</p>{selected.phone&&selected.email&&<p>{selected.phone}</p>}</div><State value={selected.active?'Active':'Inactive'}/></section>
+   <dl className="users-account-dates"><div><dt>Created</dt><dd>{timestamp(selected.createdAt,locale)}</dd></div><div><dt>Last sign-in</dt><dd>{timestamp(selected.lastLoginAt,locale)}</dd></div></dl>
+   {activityError?<div role="alert" className="users-error"><p>{activityError}</p><Button variant="secondary" onClick={()=>setActivityRetry(value=>value+1)}>Retry activity</Button></div>:activity?<RecentActivity key={selected.id} activity={activity}/>:<p role="status" className="users-activity-loading">Loading account activity…</p>}<p className="users-timezone">Times shown in Yangon.</p>
+  </DeskDialog>}
+  {deleteTarget&&<DeskDialog title={deleteTarget.deletedAt?'Release email?':'Delete account?'} eyebrow="Account management" size="compact" className="users-dialog" busy={busy} onClose={()=>{if(!lock.current)setDeleteTarget(null);}} closeLabel="Close account confirmation" actions={<Button variant="danger" loading={busy} disabled={busy||confirmationName!==deleteTarget.name} onClick={()=>void confirmDelete()}>{deleteTarget.deletedAt?<ShieldCheck size={15} aria-hidden="true"/>:<Trash2 size={15} aria-hidden="true"/>}{deleteTarget.deletedAt?'Release email':'Delete account'}</Button>}>
+   <div className="users-delete-identity"><Avatar account={deleteTarget}/><div><strong>{deleteTarget.name}</strong><p>{contact(deleteTarget)}</p></div></div><p className="users-delete-note">{deleteTarget.deletedAt?'Allows a fresh sign-up with this email. Original sign-in identities and history stay attached to the archived account.':'Sign-in will be disabled. Existing bookings, packages and payments stay in history.'}</p><label className="users-confirm-name">Type the full name to confirm<input aria-label="Type the full name to confirm" autoComplete="off" value={confirmationName} placeholder={deleteTarget.name} disabled={busy} onChange={event=>{setConfirmationName(event.target.value);setDeleteError('');}} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();void confirmDelete();}}}/></label>{deleteError&&<p role="alert" className="users-inline-error">{deleteError}</p>}
+  </DeskDialog>}
+ </div></Page>;
 }

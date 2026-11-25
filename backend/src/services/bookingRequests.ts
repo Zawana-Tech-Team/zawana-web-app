@@ -1,17 +1,20 @@
 import { rentalDestinationPrice } from './rentalPricing.js';
+import { notifyBadmintonStaff } from './notificationEvents.js';
 import { affectedBookingMessage, requestMessage, requestScheduleMessage } from '../domain/requestMessages.js';
 import { replacementSlots } from './rescheduleAvailability.js';
 import { paidRentalAmount } from './rentalPaymentBalance.js';
 import type { Booking, BookingRescheduleRequest, Prisma, PrismaClient } from '@prisma/client';
-import { bookingFailure as fail } from './courtBooking.js';
+import { bookingFailure as fail, occupyingStatuses } from './courtBooking.js';
 import { assertDestination, digest, validateDestination, type Actor } from './deskMoves.js';
-import { range } from './courtPolicy.js';
+import { range, today } from './courtPolicy.js';
+import { paymentMetadata, simulatedMethod } from './manualPayments.js';
 import { rescheduleEligibility, scheduleInstant } from './courtChanges.js';
 type Tx = Prisma.TransactionClient;
 export const requestSnapshot = (b: Booking) => ({ id: b.id, courtId: b.courtId, coachId: b.coachId, date: b.date, time: b.time, status: b.status, price: b.price, paymentStatus: b.paymentStatus });
 const asJson = (v: unknown) => JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
 export async function requestStaffNotice(tx: Tx, id: string, title: string, body: string) {
-  await tx.notification.createMany({ data: ['admin','badminton_fo'].map(audience => ({ userId: null, audience, title, body, link: `/${audience === 'admin' ? 'admin/court-rentals' : 'badminton-fo/bookings'}?request=${id}`, entityType: 'reschedule_request', entityId: id, type: 'reschedule' })) });
+  const event=await tx.rescheduleRequestEvent.findFirst({where:{requestId:id},orderBy:[{createdAt:'desc'},{id:'desc'}],select:{id:true}});
+  await notifyBadmintonStaff(tx,`request:${id}:${event?.id||title}`,title,body,`?request=${id}`,'reschedule_request',id);
 }
 export async function requestEvent(tx: Tx, id: string, actorId: string, status: string, detail: unknown) {
   await tx.rescheduleRequestEvent.create({ data: { requestId:id, actorId,status,detail:asJson(detail) } });
@@ -44,7 +47,10 @@ async function createStaffRequestInTransaction(tx: Tx, actor: Actor, bookingId: 
   }
   const row=await tx.bookingRescheduleRequest.create({data:{bookingId,activeKey:bookingId,customerId:b.userId,requestedById:actor.id,kind:b.kind,reason,oldSchedule:notify?requestSnapshot(b):{...requestSnapshot(b),courtName:b.court?.name||null},oldPaid:await paidRentalAmount(tx,b),expiresAt:new Date(Date.now()+7*86400000)}});
   await requestEvent(tx,row.id,actor.id,row.status,{reason,notes,message:notify?requestMessage(reason):affectedBookingMessage(reason),...(!notify?{messageVersion:'AFFECTED_NOTICE_V1'}:{}),original:requestSnapshot(b)});
-  if (notify) await tx.notification.create({data:{userId:b.userId,audience:'member',title:'Reschedule Request',body:`${requestMessage(reason)}\n\n${requestScheduleMessage({court:b.court?.name,date:b.date,time:b.time})}`,link:`/bookings?request=${row.id}`,type:'reschedule',entityType:'reschedule_request',entityId:row.id}});
+  if (notify) {
+   await tx.notification.create({data:{dedupeKey:`request-created:${row.id}:member`,userId:b.userId,audience:'member',title:'Reschedule Request',body:`${requestMessage(reason)}\n\n${requestScheduleMessage({court:b.court?.name,date:b.date,time:b.time})}`,link:`/bookings?request=${row.id}`,type:'reschedule',entityType:'reschedule_request',entityId:row.id}});
+   await requestStaffNotice(tx,row.id,'Booking change request sent',`${b.code} · Awaiting customer response.`);
+  }
   return {request:row,created:true};
 }
 export async function createStaffRequest(db:PrismaClient,actor:Actor,bookingId:string,reason='',notes=''){
@@ -93,7 +99,8 @@ export async function createStaffRequests(db: PrismaClient, actor: Actor, bookin
       await tx.bookingRequestBatch.create({ data: { id, senderId: actor.id, recipientId, reason } });
       await tx.bookingRescheduleRequest.updateMany({ where: { id: { in: children.map(row => row.id) } }, data: { batchId: id } });
       for (const child of children) child.batchId = id;
-      await tx.notification.create({ data: { userId: recipientId, audience: 'member', title: `${children.length} ${children.length===1?'Request':'Requests'}`, body: affectedBookingMessage(reason), link: `/bookings?batch=${id}`, type: 'reschedule', entityType: 'reschedule_batch', entityId: id } });
+      await tx.notification.create({ data: { dedupeKey:`batch-created:${id}:member`,userId: recipientId, audience: 'member', title: `${children.length} ${children.length===1?'Request':'Requests'}`, body: affectedBookingMessage(reason), link: `/bookings?batch=${id}`, type: 'reschedule', entityType: 'reschedule_batch', entityId: id } });
+      await notifyBadmintonStaff(tx,`batch-created:${id}`,`${children.length} booking requests sent`,'One grouped notice sent to the customer.',`?batch=${id}`,'reschedule_batch',id);
     }
     const createdCount = results.filter(result => result.created).length;
     const result = {requests:results.map(result => result.request),createdCount,existingCount:results.length-createdCount};
@@ -131,7 +138,7 @@ export async function startMemberReschedule(db:PrismaClient,actor:Actor,bookingI
  await listBookingRequests(db,actor,bookingId);
  return db.$transaction(async tx=>{
   await tx.$executeRaw`UPDATE "Booking" SET date=date WHERE id=${bookingId}`;
-  const booking=await tx.booking.findUnique({where:{id:bookingId},include:{court:{select:{name:true}},coach:{select:{name:true}}}});
+  const booking=await tx.booking.findUnique({where:{id:bookingId},include:{court:{select:{name:true}},coach:{select:{id:true,name:true,status:true,user:{select:{active:true,role:true}}}}}});
   if(!booking||booking.userId!==actor.id||!['court','private_course'].includes(booking.kind))throw fail(404,'Booking not found.');
   let row=await tx.bookingRescheduleRequest.findUnique({where:requestId?{id:requestId}:{activeKey:bookingId}});
   if(requestId&&(!row||row.bookingId!==bookingId||row.customerId!==actor.id))throw fail(404,'Request not found.');
@@ -144,12 +151,13 @@ export async function startMemberReschedule(db:PrismaClient,actor:Actor,bookingI
    await requestEvent(tx,row.id,actor.id,row.status,{origin:'member',bookingUnchanged:true});
   }
   enforceMemberTiming(row,booking);
+  if(booking.kind==='private_course'&&(!booking.coach||booking.coach.status!=='active'||!booking.coach.user?.active||booking.coach.user.role!=='coach'))throw fail(409,'Your assigned coach is unavailable. Please contact staff.');
   if(booking.kind==='private_course'&&await tx.privateRescheduleRequest.findFirst({where:{pendingKey:bookingId}}))throw fail(409,'A proposal is already awaiting your coach. Withdraw it from Requests before choosing another session.');
-  return {id:row.id,bookingId,kind:row.kind,reason:row.reason,status:row.status,original:row.oldSchedule,booking:{code:booking.code,title:booking.title,price:booking.price,courtName:booking.court?.name,coachName:booking.coach?.name},staffRequested:row.requestedById!==actor.id};
+  return {id:row.id,bookingId,kind:row.kind,reason:row.reason,status:row.status,original:row.oldSchedule,booking:{id:booking.id,code:booking.code,title:booking.title,price:booking.price,courtId:booking.courtId,date:booking.date,time:booking.time,status:booking.status,paymentStatus:booking.paymentStatus,courtName:booking.court?.name,coachName:booking.coach?.name,coach:booking.coach,coachId:booking.coachId},eligibility:{eligible:true,message:row.requestedById!==actor.id?'Staff invited you to choose a replacement session.':rescheduleEligibility(booking).message},staffRequested:row.requestedById!==actor.id};
  });
 }
-function enforceMemberTiming(row:{requestedById:string;customerId:string},booking:Booking){
- if(row.requestedById===row.customerId){const policy=rescheduleEligibility(booking);if(!policy.eligible)throw fail(409,policy.message);}
+function enforceMemberTiming(_row:{requestedById:string;customerId:string},booking:Booking){
+ const policy=rescheduleEligibility(booking);if(!policy.eligible)throw fail(409,policy.message);
 }
 async function own(tx:Tx,actor:Actor,id:string){
  const row=await tx.bookingRescheduleRequest.findUnique({where:{id},include:{booking:true}});
@@ -209,10 +217,26 @@ async function quote(tx:Tx,actor:Actor,id:string,target:CustomerTarget){
  return {row,booking:b,target,newPrice,paidAmount:paid,priceDifference:difference,revision:digest({original:requestSnapshot(b),target,newPrice,paid,status:row.status,updatedAt:row.updatedAt,history:await tx.bookingChangeHistory.count({where:{bookingId:b.id}})}),courtName:court.name};
 }
 export async function quoteCustomerRequest(db:PrismaClient,actor:Actor,id:string,target:CustomerTarget){return db.$transaction(async tx=>{const q=await quote(tx,actor,id,target);return {revision:q.revision,newPrice:q.newPrice,paidAmount:q.paidAmount,priceDifference:q.priceDifference,courtName:q.courtName};});}
+/** Same calendar payload as normal booking, scoped to an owned rescheduling request. */
+export async function requestCalendar(db:PrismaClient,actor:Actor,id:string,month:string){
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw fail(400,'Choose a month in YYYY-MM format.');
+ const from=`${month}-01`,to=`${month}-${new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),0)).getUTCDate()}`;
+ return db.$transaction(async tx=>{
+  const row=await own(tx,actor,id);enforceMemberTiming(row,row.booking);
+  const [courts,bookings,blocks,holidays,overrides]=await Promise.all([
+   tx.court.findMany({where:{status:{not:'inactive'}},orderBy:{name:'asc'}}),
+   tx.booking.findMany({where:{id:{not:row.bookingId},date:{gte:from,lte:to},status:{in:occupyingStatuses}},select:{date:true,time:true,courtId:true,coachId:true,status:true}}),
+   tx.courtBlock.findMany({where:{active:true,OR:[{date:{gte:from,lte:to}},{dayOfWeek:{not:null}}]},select:{id:true,date:true,dayOfWeek:true,effectiveFrom:true,effectiveUntil:true,excludedDates:true,type:true,categoryCode:true,start:true,end:true,courtId:true,active:true}}),
+   tx.holidayRate.findMany({where:{date:{gte:from,lte:to},active:true},select:{date:true,title:true,price:true,active:true}}),
+   tx.courtDateOverride.findMany({where:{date:{gte:from,lte:to}},select:{date:true,type:true,title:true,weeklyOnly:true,holidayActive:true,categoryCodes:true,suspendedBlockIds:true}}),
+  ]);
+  return {courts,bookings,blocks,holidays,overrides};
+ },{maxWait:10000,timeout:20000});
+}
 export async function requestAvailability(db:PrismaClient,actor:Actor,id:string,date:string,courtId:string){
  return db.$transaction(async tx => { const row = await own(tx, actor, id); enforceMemberTiming(row,row.booking); return replacementSlots(tx, row.booking, date, courtId); });
 }
-export async function confirmCustomerRequest(db:PrismaClient,actor:Actor,id:string,target:CustomerTarget,revision:string,acknowledged:boolean){
+export async function confirmCustomerRequest(db:PrismaClient,actor:Actor,id:string,target:CustomerTarget,revision:string,acknowledged:boolean,paymentConfirmed=false){
  return db.$transaction(async tx=>{
   const initial=await tx.bookingRescheduleRequest.findUnique({where:{id},include:{booking:true}});if(!initial||initial.customerId!==actor.id||actor.role!=='member')throw fail(404,'Request not found.');
   for(const courtId of [...new Set([initial.booking.courtId,target.courtId].filter((x):x is string=>!!x))].sort())await tx.$executeRaw`UPDATE "Court" SET status=status WHERE id=${courtId}`;
@@ -222,9 +246,14 @@ export async function confirmCustomerRequest(db:PrismaClient,actor:Actor,id:stri
   if(q.revision!==revision)throw fail(409,'The price or request changed. Review a fresh quote.');
   if(q.row.kind!=='court')throw fail(400,'Private course replacements require coach approval.');
   if(q.priceDifference!=null&&q.priceDifference<0&&!acknowledged)throw fail(400,'Acknowledge that the price difference is non-refundable.');
-  const needsStaff=q.priceDifference==null||q.priceDifference>0;
+  const surcharge=q.priceDifference!=null&&q.priceDifference>0&&paymentConfirmed?q.priceDifference:0;
+  if(surcharge){
+   const customer=await tx.user.findUniqueOrThrow({where:{id:actor.id},select:{name:true}});
+   await tx.transaction.create({data:{...paymentMetadata({...actor,role:'member'},'member_reschedule',id),userId:actor.id,date:today(),customer:customer.name,business:'Badminton',item:`Rescheduling difference · ${q.booking.code}`,amount:surcharge,discount:0,tax:0,finalAmount:surcharge,paymentMethod:simulatedMethod,staff:actor.name,status:'paid'}});
+  }
+  const needsStaff=q.priceDifference==null||(q.priceDifference>0&&!paymentConfirmed);
   const status=needsStaff?q.priceDifference==null?'ADMIN_HANDLING':'AWAITING_ADDITIONAL_PAYMENT':'COMPLETED';
-  if(!needsStaff){await tx.booking.update({where:{id:q.booking.id},data:{courtId:target.courtId,date:target.date,time:target.time,title:q.courtName,price:Math.max(q.booking.price,q.paidAmount||0)}});await tx.bookingChangeHistory.create({data:{bookingId:q.booking.id,action:'CUSTOMER_REQUEST_RESCHEDULED',requestedById:actor.id,previous:JSON.stringify(requestSnapshot(q.booking)),current:JSON.stringify({target,priceAcknowledged:acknowledged,priceDifference:q.priceDifference}),reason:q.row.reason||'Customer accepted staff reschedule request'}});}
+  if(!needsStaff){await tx.booking.update({where:{id:q.booking.id},data:{courtId:target.courtId,date:target.date,time:target.time,title:q.courtName,price:Math.max(q.booking.price,(q.paidAmount||0)+surcharge)}});await tx.bookingChangeHistory.create({data:{bookingId:q.booking.id,action:'CUSTOMER_REQUEST_RESCHEDULED',requestedById:actor.id,previous:JSON.stringify(requestSnapshot(q.booking)),current:JSON.stringify({target,priceAcknowledged:acknowledged,priceDifference:q.priceDifference,requestId:id,surcharge,confirmationMode:surcharge?'SIMULATED':undefined}),reason:q.row.reason||'Customer accepted staff reschedule request'}});}
   const result=await tx.bookingRescheduleRequest.update({where:{id},data:{status,response:'RESCHEDULE',proposed:target,newPrice:q.newPrice,priceDifference:q.priceDifference,oldPaid:q.paidAmount,priceAcknowledged:acknowledged,...(!needsStaff?{activeKey:null,completedAt:new Date()}:{})}});
   await requestEvent(tx,id,actor.id,status,{target,paid:q.paidAmount,newPrice:q.newPrice,difference:q.priceDifference,acknowledged});if(!needsStaff)await tx.notification.create({data:{userId:actor.id,title:'Booking rescheduled',body:`${q.courtName} · ${target.date} · ${target.time}`,link:'/bookings',type:'booking',entityType:'booking',entityId:q.booking.id}});await requestStaffNotice(tx,id,status==='COMPLETED'?'Customer rescheduled booking':'Reschedule needs payment assistance',`${q.booking.code} · ${target.date} · ${target.time}`);
   return result;

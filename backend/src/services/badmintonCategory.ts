@@ -32,7 +32,7 @@ async function resolveCategoryEnrollment(tx: Prisma.TransactionClient, memberId:
   const valid = candidates.filter(e => e.status === 'active' && e.startDate <= date && e.expiryDate >= date);
   const enrollment = valid.find(e => e.sessionsRemaining > 0);
   if (enrollment) return enrollment;
-  if (valid.length) throw changeError('NO_SESSIONS', `Your ${categoryCode.toLowerCase()} packages have no sessions remaining.`);
+  if (valid.length||candidates.some(e=>e.status==='inactive'&&e.startDate<=date&&e.expiryDate>=date&&e.sessionsRemaining<=0)) throw changeError('NO_SESSIONS', `Your ${categoryCode.toLowerCase()} packages have no sessions remaining.`);
   if (candidates.length) throw changeError('PACKAGE_EXPIRED', `No ${categoryCode.toLowerCase()} package is currently active, started and unexpired.`);
   throw changeError('NO_CATEGORY_PACKAGE', `You do not have a ${categoryCode.toLowerCase()} package. Please visit the front desk.`);
 }

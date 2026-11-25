@@ -60,6 +60,19 @@ test('phases 6–8: categories, targeted holidays, member privacy and package in
  assert.equal(searched.data.rows.find((row:{id:string})=>row.id===legacy.id).member.email,member.email);
  assert.equal((await request(`/packages/${pkg.id}/members`,'GET',undefined,'fo')).status,200);assert.equal((await request(`/packages/${pkg.id}/members`,'GET',undefined,'member')).status,403);
  });
+ await t.test('active-student names are unique by identity, package scoped and private',async()=>{
+ await make(pkg.id,'FOUNDATION');
+ for(const studentId of ['walk-in-a','walk-in-b'])await db.badmintonEnrollment.create({data:{studentId,studentName:'Same student name',phone:'private phone',packageId:pkg.id,packageName:'Foundation',sessionsTotal:5,sessionsRemaining:5,startDate:today(),expiryDate:addDateKeyDays(today(),30),categoryCode:'FOUNDATION'}});
+ const inactive=await db.user.create({data:{name:'Inactive student',email:'inactive@students.test',role:'member',active:false}});
+ await db.badmintonEnrollment.create({data:{studentId:inactive.id,userId:inactive.id,studentName:inactive.name,phone:'',packageId:pkg.id,packageName:'Foundation',sessionsTotal:5,sessionsRemaining:5,startDate:today(),expiryDate:addDateKeyDays(today(),30)}});
+ const exhausted=await make(pkg.id,'FOUNDATION');await db.badmintonEnrollment.update({where:{id:exhausted.id},data:{sessionsRemaining:0}});
+ const before=await db.badmintonEnrollment.findMany({orderBy:{id:'asc'}});
+ const result=await request(`/packages/${pkg.id}/active-students?pageSize=1`);assert.equal(result.status,200);assert.equal(result.data.total,3);assert.equal(result.data.rows.length,1);assert.deepEqual(Object.keys(result.data.rows[0]).sort(),['id','name']);
+ const all=await request(`/packages/${pkg.id}/active-students`,'GET',undefined,'fo');assert.equal(all.data.rows.filter((row:{id:string})=>row.id===member.id).length,1);assert.equal(all.data.rows.filter((row:{name:string})=>row.name==='Same student name').length,2);assert.equal(all.data.rows.some((row:{id:string})=>row.id===inactive.id),false);
+ assert.equal((await request(`/packages/${otherPkg.id}/active-students`)).data.total,1);
+ assert.equal((await request(`/packages/${pkg.id}/active-students`,'GET',undefined,'member')).status,403);assert.equal((await request('/packages/missing/active-students')).status,404);assert.equal((await request(`/packages/${pkg.id}/active-students?pageSize=101`)).status,400);
+ assert.deepEqual(await db.badmintonEnrollment.findMany({orderBy:{id:'asc'}}),before);
+ });
  await t.test('targeted holidays preserve other classes; edits and removals retain restoration conflicts',async()=>{
  const courts=await Promise.all([1,2].map(i=>db.court.create({data:{name:`Court ${i}`,price:20000,type:'Standard',surface:'',features:[]}})));
  const date=addDateKeyDays(today(),3),dayOfWeek=new Date(`${date}T12:00:00Z`).getUTCDay();

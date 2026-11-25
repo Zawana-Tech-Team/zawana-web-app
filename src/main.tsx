@@ -1,3 +1,4 @@
+import { OperationalActionsProvider } from './context/OperationalActionsContext';
 import { MotionConfig } from 'framer-motion';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -16,7 +17,7 @@ import { LanguageProvider } from './context/LanguageContext';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MotionConfig reducedMotion="user"><BrowserRouter>
-      <AuthProvider>
+      <AuthProvider><OperationalActionsProvider>
         <AppProvider>
           <OperationsProvider>
             <LanguageProvider>
@@ -24,7 +25,7 @@ createRoot(document.getElementById('root')!).render(
             </LanguageProvider>
           </OperationsProvider>
         </AppProvider>
-      </AuthProvider>
+      </OperationalActionsProvider></AuthProvider>
     </BrowserRouter></MotionConfig>
   </StrictMode>
 );

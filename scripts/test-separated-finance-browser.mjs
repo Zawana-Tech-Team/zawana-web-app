@@ -67,6 +67,22 @@ try {
     const paymentTable=finance.getByRole('table',{name:'Payment records',exact:true});await paymentTable.waitFor();
     assert.equal(await paymentTable.getByText('refunded',{exact:false}).count(),0);
     await finance.getByText('Payments total · 42,000 MMK',{exact:true}).waitFor();
+    const filterPanel=finance.getByRole('region',{name:'Transaction filters',exact:true});
+    assert.equal(await finance.getByRole('link',{name:'Private course bookings',exact:true}).count(),0);
+    assert.equal(await filterPanel.getByRole('combobox',{name:'Payment method',exact:true}).isVisible(),true);
+    assert.equal(await filterPanel.getByRole('combobox',{name:'Payment status',exact:true}).isVisible(),true);
+    const current=new Date(`${data.date}T12:00:00Z`);current.setUTCDate(current.getUTCDate()-2);const currentDate=current.toISOString().slice(0,10);
+    const dateButtons=filterPanel.getByRole('group',{name:'Transaction date range',exact:true});
+    const todayRequest=finance.waitForResponse(response=>response.url().includes('/transactions?')&&new URL(response.url()).searchParams.get('from')===currentDate);
+    await dateButtons.getByRole('button',{name:'Today',exact:true}).click();const todayParams=new URL((await todayRequest).url()).searchParams;assert.equal(todayParams.get('to'),currentDate);assert.equal(todayParams.get('business'),'Badminton');
+    const monthRequest=finance.waitForResponse(response=>response.url().includes('/transactions?')&&new URL(response.url()).searchParams.get('from')===`${currentDate.slice(0,7)}-01`);
+    await dateButtons.getByRole('button',{name:'This month',exact:true}).click();const monthParams=new URL((await monthRequest).url()).searchParams;assert.equal(monthParams.get('to'),`${currentDate.slice(0,7)}-${new Date(Number(currentDate.slice(0,4)),Number(currentDate.slice(5,7)),0).getDate()}`);
+    await filterPanel.getByRole('button',{name:'Reset filters',exact:true}).click();await finance.getByText('Payments total · 42,000 MMK',{exact:true}).waitFor();
+    await finance.getByRole('button',{name:/^More filters/}).click();await filterPanel.getByLabel('From date',{exact:true}).fill(data.date);await filterPanel.getByLabel('To date',{exact:true}).fill(data.date);
+    await finance.locator('select[aria-label="Sort transactions"]').selectOption('amount_desc',{force:true});await finance.getByText('Payments total · 42,000 MMK',{exact:true}).waitFor();
+    for(const width of [1440,768,390,320]){await finance.setViewportSize({width,height:1000});assert.ok(await finance.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await filterPanel.screenshot({path:join(artifacts,`fo-finance-filters-${width}.png`)});}
+    await finance.setViewportSize({width:1440,height:1000});await filterPanel.getByRole('button',{name:'Reset filters',exact:true}).click();await finance.getByRole('button',{name:/^More filters/}).click();await finance.getByText('Payments total · 42,000 MMK',{exact:true}).waitFor();
+
     await finance.getByRole('button',{name:/^View payment for /}).first().click();
     let dialog=finance.getByRole('dialog',{name:'Transaction details',exact:true});await dialog.getByText('Original payment method',{exact:true}).waitFor();await finance.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
     await finance.getByRole('button',{name:'Next',exact:true}).click();
@@ -80,8 +96,8 @@ try {
     dialog=finance.getByRole('dialog',{name:'Transaction details',exact:true});await dialog.getByText('Recorded refund method',{exact:true}).waitFor();await finance.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
     await finance.getByText('More filters',{exact:true}).click();
     assert.equal(await finance.locator('select[aria-label="Payment status"] option[value="paid"]').count(),0);
-    await finance.getByRole('button',{name:'Reset filters',exact:true}).click();
-    await finance.locator('summary').filter({hasText:'More filters'}).click();
+    assert.equal(await finance.getByRole('button',{name:'Reset filters',exact:true}).count(),0,'Reset is shown only while filters are applied');
+    await finance.getByRole('button',{name:/^More filters/}).click();
     await finance.evaluate(()=>scrollTo(0,0));
     await finance.screenshot({path:join(artifacts,'fo-refunds-desktop.png')});
     for(const [width,height] of [[768,1024],[390,844],[320,640]]){

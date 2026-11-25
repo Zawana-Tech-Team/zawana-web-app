@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { Express, Request, RequestHandler, Response } from "express";
 import type { PrismaClient, Role } from "@prisma/client";
 import { addDateKeyDays, isDateKey } from "../utils/dateKeys.js";
@@ -68,6 +69,7 @@ export function registerBookingQueryRoutes({
           ? { coachId: coach?.id || "__no_coach__" }
           : { userId: req.user!.id };
       if (req.user!.role === 'badminton_fo') filters.AND = [{ kind: { in: ['court', 'private_course'] } }];
+      if(req.query.booking)filters.id=z.string().min(1).max(200).parse(req.query.booking);
       const q = String(req.query.q || "").trim();
       if (q)
         filters.OR = [
@@ -179,7 +181,7 @@ export function registerBookingQueryRoutes({
           await prisma.booking.findMany({
             where,
             include,
-            orderBy: { createdAt: "desc" },
+            orderBy: [{ createdAt: "desc" },{ id:"desc" }],
             take: 100
           })
         );
@@ -188,7 +190,7 @@ export function registerBookingQueryRoutes({
         prisma.booking.findMany({
           where,
           include,
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" },{ id:"desc" }],
           skip: (page - 1) * limit,
           take: limit
         }),

@@ -51,14 +51,14 @@ export function CourtChangeDialog({ bookingId, onClose, onChanged }: { bookingId
   const feedback = error ? <Toast placement="inline" message={error} type="error" onClose={() => setError('')} />
     : notice ? <Toast placement="inline" message={notice} onClose={() => setNotice('')} /> : null;
 
-  return <DeskDialog title="Court booking details" eyebrow="Court rental" onClose={onClose} busy={busy} className="desk-court-details" cancelLabel={mode==='details'?'Done':'Cancel'}
+  return <DeskDialog title="Court booking details" heading={detail?.booking.title || 'Court rental'} eyebrow={detail?.booking.code} onClose={onClose} busy={busy} className="desk-court-details" cancelLabel={mode==='details'?'Done':'Cancel'}
     summary={detail&&<p>{mode==='cancel'?'Refunds require separate approval.':'Yangon time · UTC+6:30'}</p>}
     actions={detail&&mode==='cancel'&&<><Button variant="ghost" disabled={busy} onClick={()=>setMode('details')}>Back</Button><Button variant="danger" loading={busy} disabled={busy||reason.trim().length<3} onClick={cancel}>{detail.booking.paymentStatus==='pending'?'Confirm cancellation':'Submit cancellation request'}</Button></>} bodyClassName="space-y-5">
     {feedback}
 
     {!detail ? <p role="status" className="z-empty">{error ? 'Booking details could not be loaded.' : 'Loading reservation…'}</p> : <>
       <section aria-label="Current reservation">
-        <div className="z-booking-summary"><div><p className="z-reference">{detail.booking.code}</p><h3 className="z-session-title">{detail.booking.title}</h3></div><span className={`z-status z-status--${label(detail.booking.status)}`}>{label(detail.booking.status)}</span></div>
+        <div className="z-booking-summary"><span className={`z-status z-status--${label(detail.booking.status)}`}>{label(detail.booking.status)}</span></div>
         <div className="z-session-meta"><span><CalendarDays size={14} strokeWidth={1.5} />{dateLabel(detail.booking.date)}</span><span><Clock3 size={14} strokeWidth={1.5} />{detail.booking.time}</span></div>
         {mode === 'details' ? <dl className="z-booking-facts"><div className="z-fact"><dt>Reserved for</dt><dd>{courtBookingCustomer(detail)}</dd></div><div className="z-fact"><dt>Booking amount</dt><dd>{detail.booking.price.toLocaleString()} MMK</dd></div><div className="z-fact"><dt>Payment</dt><dd className="capitalize">{label(detail.booking.paymentStatus)}</dd></div></dl> : <p className="z-caption mt-4">{courtBookingCustomer(detail)} · {detail.booking.price.toLocaleString()} MMK · {label(detail.booking.paymentStatus)}</p>}
         <div className="z-policy">{detail.eligibility.eligible ? <CheckCircle2 size={14} strokeWidth={1.5} /> : <Info size={14} strokeWidth={1.5} />}<div>{staffAllowed ? 'Desk staff can reschedule before the session starts without a 24-hour restriction.' : detail.eligibility.message}{!staffAllowed && detail.eligibility.deadline && <small>Change by {stamp(detail.eligibility.deadline)} · Yangon</small>}</div></div>
@@ -79,7 +79,7 @@ export function CourtChangeDialog({ bookingId, onClose, onChanged }: { bookingId
             {staff && c.status === 'requested' && <div className="mt-4"><label className="z-field">Review reason<input disabled={busy} value={reason} placeholder="Add a brief review note" onChange={e => setReason(e.target.value)} /></label><div className="z-request-actions"><Button className="z-dialog-primary" disabled={busy || reason.trim().length < 3} onClick={() => review(c.id, true)}>Approve cancellation</Button><Button className="z-dialog-secondary" disabled={busy || reason.trim().length < 3} onClick={() => review(c.id, false)}>Reject request</Button></div></div>}
           </div>)}
         </section>}
-        <section className={detail.cancellations.length ? 'z-section' : ''}><div className="z-section-heading"><h3 className="z-section-title">Booking history</h3><span className="z-caption">Yangon time</span></div>
+        <section className={detail.cancellations.length ? 'z-section' : ''}><div className="z-section-heading"><h3 className="z-section-title">Booking history</h3></div>
           {!detail.history.length ? <p className="z-empty">No booking changes recorded.</p> : <ol className="z-timeline">{detail.history.map(h => <li key={h.id}><div className="z-timeline-title"><h4>{label(h.action)}{h.policyException ? ' · Manager exception' : ''}</h4><time dateTime={h.createdAt}>{stamp(h.createdAt)}</time></div><p>{h.reason}</p>{h.action === 'rescheduled' && <p>{describe(h.previous)} → {describe(h.current)}</p>}{h.approvedById && <p>Approved by {h.approvedById}</p>}</li>)}</ol>}
         </section>
       </>}

@@ -17,12 +17,12 @@ import { courtAvailability } from '../src/services/courtAvailability.js';
 import { today, formatRange, businessNow } from '../src/services/courtPolicy.js';
 import { createBadmintonVisit, correctBadmintonVisit } from '../src/services/badmintonAttendance.js';
 
-test('Yangon rescheduling policy includes exactly 24 hours and confirmed status aliases', () => {
+test('Yangon rescheduling policy excludes exactly 24 hours and confirmed status aliases', () => {
   for (const status of ['confirmed', 'CONFIRMED'] as const) {
     const b = { date: '2030-04-02', time: '10:00 AM — 11:00 AM', status };
     const start = scheduleInstant(b.date, b.time).getTime();
     assert.equal(new Date(start).toISOString(), '2030-04-02T03:30:00.000Z');
-    for (const [minutes, expected] of [[1500, true], [1440, true], [1439, false]] as const)
+    for (const [minutes, expected] of [[1500, true], [1440, false], [1439, false]] as const)
       assert.equal(rescheduleEligibility(b, new Date(start - minutes * 60000)).eligible, expected);
   }
   for (const status of ['cancelled', 'CANCELLED', 'completed', 'COMPLETED', 'pending'] as const)

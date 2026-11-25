@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { get, patch, post, del } from '../api';
-import { useAuth } from '../context/AuthContext';
+import { get } from '../api';
 export type BadmintonCategory = { id: string; code: string | null; name: string; active: boolean; description?:string };
 export const categoryLabel = (code?: string | null) => code ? code.charAt(0) + code.slice(1).toLowerCase() : 'Category needs review';
 export function BadmintonCategoryField({ value, onChange, useCode=false }: { value?: string | null; onChange: (value: string) => void; useCode?:boolean }) {
@@ -8,16 +7,4 @@ export function BadmintonCategoryField({ value, onChange, useCode=false }: { val
   useEffect(() => { let active = true; get<BadmintonCategory[]>('/packages/badminton/categories').then(rows => { if (active) setCategories(rows); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, []);
   return <label className="text-sm">Category<select required aria-label="Badminton category" value={value || ''} onChange={e => onChange(e.target.value)} className="mt-2 w-full"><option value="">Choose category</option>{categories.filter(c => c.active && c.code).map(c => <option key={c.id} value={useCode?c.code!:c.id}>{c.name} · {c.code}</option>)}</select>{error && <span role="alert" className="text-xs text-red-700">{error}</span>}</label>;
 }
-export function BadmintonCategorySettings({onChanged}:{onChanged?:()=>Promise<void>}) {
- const {user}=useAuth();const[categories,setCategories]=useState<BadmintonCategory[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
- const [name,setName]=useState(''),[code,setCode]=useState(''),[description,setDescription]=useState('');
- const load=async()=>setCategories(await get<BadmintonCategory[]>('/packages/badminton/categories'));
- useEffect(()=>{let live=true;if(user?.role==='admin')void get<BadmintonCategory[]>('/packages/badminton/categories').then(rows=>{if(live)setCategories(rows);}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[user?.role]);
- const run=async(task:()=>Promise<unknown>)=>{if(busy)return;setBusy(true);setError('');setNotice('');try{await task();await load();await onChanged?.();setNotice('Category saved. Historical records and existing session balances are preserved.');}catch(e){setError(e instanceof Error?e.message:'Could not save category.');}finally{setBusy(false);}};
- if(user?.role!=='admin')return null;
- return <details className="rounded-2xl border border-zawana-border bg-white p-5"><summary className="cursor-pointer text-sm font-semibold">Manage package categories</summary><p className="mt-3 text-sm text-zawana-500">Stable codes identify entitlements. Archive categories to stop new sales while preserving history.</p>
- <form className="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();void run(async()=>{await post('/packages/badminton/categories',{name,code,description});setName('');setCode('');setDescription('');});}}>
- <label>Category name<input required maxLength={120} value={name} onChange={e=>setName(e.target.value)}/></label><label>Stable category code<input required pattern="[A-Z][A-Z0-9_]+" maxLength={40} value={code} onChange={e=>setCode(e.target.value.toUpperCase())}/></label><label className="sm:col-span-2">Description<textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)}/></label><button disabled={busy} className="min-h-11 rounded-lg border px-4 font-semibold">Create category</button></form>
- <div className="mt-5 grid gap-4 md:grid-cols-2">{categories.map(c=><form key={c.id} className="rounded-xl border p-4 space-y-3" onSubmit={e=>{e.preventDefault();void run(()=>patch(`/packages/badminton/categories/${c.id}`,{name:c.name,description:c.description||''}));}}><p className="text-xs font-semibold">{c.code||'Legacy category'} · {c.active?'Active':'Archived'}</p><label className="block">Name<input required maxLength={120} aria-label={`${c.code} display name`} value={c.name} onChange={e=>setCategories(rows=>rows.map(row=>row.id===c.id?{...row,name:e.target.value}:row))}/></label><label className="block">Description<textarea maxLength={2000} value={c.description||''} onChange={e=>setCategories(rows=>rows.map(row=>row.id===c.id?{...row,description:e.target.value}:row))}/></label><div className="flex gap-3"><button disabled={busy} className="min-h-11 rounded-lg border px-4">Save category</button><button type="button" disabled={busy} className="min-h-11 rounded-lg border px-4" onClick={()=>void run(()=>c.active?del(`/packages/badminton/categories/${c.id}`):patch(`/packages/badminton/categories/${c.id}`,{active:true}))}>{c.active?'Archive':'Reactivate'}</button></div></form>)}</div>
- {error&&<p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}{notice&&<p role="status" className="mt-3 text-sm">{notice}</p>}</details>;
-}
+export { BadmintonCategoryManager as BadmintonCategorySettings } from './BadmintonCategoryManager';

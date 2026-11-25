@@ -22,7 +22,8 @@ const json = (value:unknown) => JSON.parse(JSON.stringify(value)) as Prisma.Inpu
 async function load(tx:Tx,bookingId:string) {
   const b=await tx.booking.findUnique({where:{id:bookingId},include:{user:{select:{id:true,name:true,phone:true,role:true}},court:{select:{id:true,name:true,floor:true}},coach:{select:{id:true,name:true}},privateCoursePayment:true,refundRecord:true}});
   if(!b||!['court','private_course'].includes(b.kind))throw fail(404,'Court rental or private course not found.');
-  const sales=await tx.transaction.findMany({where:{status:'paid',OR:[{resourceType:'booking',resourceId:b.id},...(b.privateCoursePayment?.transactionId?[{id:b.privateCoursePayment.transactionId}]:[])]},orderBy:{createdAt:'asc'}});
+  const memberRequests=await tx.bookingRescheduleRequest.findMany({where:{bookingId:b.id,status:'COMPLETED'},select:{id:true}});
+  const sales=await tx.transaction.findMany({where:{status:'paid',OR:[{resourceType:'booking',resourceId:b.id},{resourceType:'member_reschedule',resourceId:{in:memberRequests.map(row=>row.id)}},...(b.privateCoursePayment?.transactionId?[{id:b.privateCoursePayment.transactionId}]:[])]},orderBy:{createdAt:'asc'}});
   const payments=sales.filter(s=>s.finalAmount>0).map(s=>({id:s.id,amount:s.finalAmount,method:s.paymentMethod}));
   const seen=new Set<string>();
   for(const h of await tx.bookingChangeHistory.findMany({where:{bookingId:b.id,action:'DESK_BATCH_RESCHEDULED'}})){

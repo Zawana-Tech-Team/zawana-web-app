@@ -503,8 +503,8 @@ test("badminton private courses: independent availability, concurrency, acceptan
       assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).sessionsRemaining, 10);
       const renewed = await request(`/badminton/enrollments/${enrollment.id}/renew`, 'POST', { packageId: pkg.id, paymentMethod: 'Cash' }, qrSession.accessToken);
       assert.equal(renewed.status, 200);
-      assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).status, 'active');
-      assert.equal(await db.badmintonEnrollment.count({ where: { userId: user.id, status: 'active', categoryCode: 'SOCIAL' } }), 3);
+      assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).status, 'inactive');
+      assert.equal(await db.badmintonEnrollment.count({ where: { userId: user.id, status: 'active', categoryCode: 'SOCIAL' } }), 2);
       const qrToken = issued.value.token;
       assert.equal(
         (

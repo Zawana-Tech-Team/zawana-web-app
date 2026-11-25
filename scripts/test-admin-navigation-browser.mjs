@@ -61,12 +61,12 @@ try {
   assert.equal(await badminton.getAttribute('aria-expanded'), 'false');
   assert.equal(await page.getByRole('button', { name: 'Gym', exact: true }).count(), 0);
   await badminton.click();
-  await page.getByRole('link', { name: 'Coach Packages', exact: true }).click();
-  await page.getByRole('heading', { name: 'Badminton Coaches management', exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Coaches', exact: true }).click();
+  await page.getByRole('heading', { name: 'Badminton coaches', exact: true }).waitFor();
   await page.getByText('QA Badminton Coach', { exact: true }).waitFor();
   assert.equal(await page.getByText('QA Gym Coach', { exact: true }).count(), 0);
   await page.getByRole('link', { name: 'Court Rentals', exact: true }).click();
-  await page.getByRole('heading', { name: 'Court Rentals & Time Setup', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Court rentals', exact: true }).waitFor();
   await page.getByLabel('Operating day').fill(data.dates[0]);
   await page.getByRole('button', { name: /Court 1 Standard court/ }).click();
   const time = page.getByRole('button', { name: '8:00 AM — 9:00 AM available', exact: true });

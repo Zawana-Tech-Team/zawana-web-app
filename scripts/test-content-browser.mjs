@@ -83,7 +83,7 @@ try {
   uploadedFiles.push(join(root, 'backend', uploadData.url));
   await admin.getByRole('button', { name: 'Save story', exact: true }).click();
   await admin.getByRole('dialog').waitFor({ state: 'hidden' });
-  const row = admin.getByRole('row').filter({ hasText: 'Training together. Achieving together.' });
+  const row = admin.getByRole('article', { name: 'Content Training together. Achieving together.', exact: true });
   await row.waitFor();
   assert.ok(await row.getByText('Draft', { exact: true }).count());
   const draft = (await (await request('/admin/content', { token: data.tokens.admin })).json()).find(story => story.title === 'Training together. Achieving together.');

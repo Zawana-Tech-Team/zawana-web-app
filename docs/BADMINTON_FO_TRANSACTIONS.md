@@ -19,7 +19,7 @@ Validation:
 Files:
 
 - `src/components/RoleLayout.tsx`: remove duplicate Badminton FO navigation entries.
-- `src/components/badminton/BadmintonTransactions.tsx`: filters, table/cards, transaction details and course-operations entry point.
+- `src/components/badminton/BadmintonTransactions.tsx`: filters, table/cards, transaction details and refund-record access.
 - `src/pages/Operations.tsx`: use the centralized Badminton ledger; show Cash / Online Payment labels in package sales.
 - `src/pages/StaffPrivateCourses.tsx`: replace the free-text payment-method filter with the two supported choices.
 - `backend/src/server.ts`: category/method/date/sort query support and front-office business scope.
@@ -27,3 +27,12 @@ Files:
 - `backend/src/routes/privateCourseFinance.ts`: recognize legacy method aliases in contextual course filters.
 - `backend/tests/manual-payments.integration.test.ts`, `backend/tests/transaction-presentation.test.ts`: real API/database and presentation regression coverage.
 - `scripts/test-badminton-transactions-browser.mjs`: desktop/mobile browser regression checks; screenshots go to the OS temporary preview directory.
+
+
+## Finance filter refinement
+
+The Badminton FO Finance screen now keeps search, category, payment method and status visible together in one responsive filter panel. All dates / Today / This month shortcuts apply the existing date-range API fields. More filters groups custom start/end dates and sorting; its applied count identifies hidden selections. Reset appears when needed, restores defaults and returns to page one. A dedicated refresh control reloads the current view.
+
+The Private course bookings shortcut and private-course Open booking link were removed from Finance. Existing financial records, category filtering, payment/refund tabs, totals, pagination, receipt audits and refund-processing dialogs remain available. No transaction records or financial rules were changed.
+
+Verified with frontend build, stabilization lint, the real-API separated-finance browser journey, desktop/touch Finance UI fixtures, the existing booking-refund browser regression, and git diff checks. Coverage includes date shortcuts, custom ranges, sorting, reset, API parameters, status options, permission scope, payment/refund separation, totals, errors/retry, modal focus, and 1440/768/390/320px layouts. Local screenshots were reviewed.

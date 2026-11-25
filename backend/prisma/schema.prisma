@@ -673,6 +673,9 @@ model BadmintonPackageCategory {
 }
 
 model BadmintonEnrollment {
+  renewalOfId String? @unique
+  renewalOf BadmintonEnrollment? @relation("BadmintonRenewals", fields:[renewalOfId], references:[id], onDelete:Restrict, onUpdate:NoAction)
+  renewal BadmintonEnrollment? @relation("BadmintonRenewals")
   @@index([packageId, status, expiryDate])
   categoryQrRedemptions BadmintonQrRedemption[]
   categoryCode String?

@@ -1,7 +1,8 @@
+import { operationalActions } from '../services/operationalActions.js';
 import { operationalReasons } from '../domain/rescheduleReasons.js';
 import { previewRefundBatch, completeRefundBatch, completeRefund, refundDetails, listRefunds, memberRefunds, refundInput, deliverRefundNotifications } from '../services/bookingRefunds.js';
 import { removeClassOccurrences, removeWeeklyClasses } from '../services/weeklyRemoval.js';
-import { startMemberReschedule, cancelStaffRequest, staffBookingDetail, createStaffRequest, createStaffRequests, listBookingRequests, customerRequestAction, quoteCustomerRequest, requestAvailability, confirmCustomerRequest } from '../services/bookingRequests.js';
+import { startMemberReschedule, cancelStaffRequest, staffBookingDetail, createStaffRequest, createStaffRequests, listBookingRequests, customerRequestAction, quoteCustomerRequest, requestCalendar, requestAvailability, confirmCustomerRequest } from '../services/bookingRequests.js';
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
@@ -11,10 +12,13 @@ import { asyncRoute } from '../utils/asyncRoute.js';
 import { quoteDeskMoves, confirmDeskMoves, moveInput } from '../services/deskMoves.js';
 import { privateReplacementAvailability, listPrivateReschedules, invitePrivateReschedule, proposePrivateReschedule, decidePrivateReschedule } from '../services/privateRescheduling.js';
 import { deskPaymentInput } from '../services/deskPayment.js';
+import { deskMoveAvailability, deskMoveAvailabilityInput } from '../services/deskMoveAvailability.js';
 export function createReschedulingRouter(db: PrismaClient, authenticate = auth) {
   const r = Router();
   r.use(authenticate, roles('member', 'coach', 'admin', 'badminton_fo'));
   r.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
+  r.get('/actions', roles('admin', 'badminton_fo', 'coach'), asyncRoute(async (req: AuthRequest, res) => res.json(await operationalActions(db, req.user!))));
+  r.post('/moves/availability', roles('admin', 'badminton_fo'), asyncRoute(async (req: AuthRequest, res) => res.json(await deskMoveAvailability(db, req.user!, deskMoveAvailabilityInput.parse(req.body)))));
   r.post('/moves/quote', roles('admin', 'badminton_fo'), asyncRoute(async (req: AuthRequest, res) => res.json(await quoteDeskMoves(db, req.user!, moveInput.extend({ reason: z.enum(operationalReasons) }).parse(req.body)))));
   r.post('/moves/confirm', roles('admin', 'badminton_fo'), asyncRoute(async (req: AuthRequest, res) => {
     const b = z.object({ input: moveInput.extend({ reason: z.enum(operationalReasons) }), revision: z.string().min(1), requestKey: z.string().uuid(), payment: deskPaymentInput.optional() }).strict().parse(req.body);
@@ -48,17 +52,18 @@ export function createReschedulingRouter(db: PrismaClient, authenticate = auth) 
   r.post('/requests/:id/cancel', roles('admin','badminton_fo'), asyncRoute(async(req:AuthRequest,res)=>res.json(await cancelStaffRequest(db,req.user!,String(req.params.id)))));
   r.post('/requests/:id/respond', roles('member'), asyncRoute(async(req:AuthRequest,res)=>{const b=z.object({action:z.enum(['ADMIN_HANDLING','REFUND_REQUESTED','DECLINED','ACKNOWLEDGED'])}).strict().parse(req.body);res.json(await customerRequestAction(db,req.user!,String(req.params.id),b.action));}));
   const customerTarget=z.object({courtId:z.string().min(1),date:z.string(),time:z.string()}).strict();
+  r.get('/requests/:id/calendar',roles('member'),asyncRoute(async(req:AuthRequest,res)=>res.json(await requestCalendar(db,req.user!,String(req.params.id),String(req.query.month||'')))));
   r.get('/requests/:id/availability', roles('member'), asyncRoute(async(req:AuthRequest,res)=>res.json(await requestAvailability(db,req.user!,String(req.params.id),String(req.query.date||''),String(req.query.courtId||'')))));
   r.post('/requests/:id/quote', roles('member'), asyncRoute(async(req:AuthRequest,res)=>res.json(await quoteCustomerRequest(db,req.user!,String(req.params.id),customerTarget.parse(req.body)))));
   r.post('/requests/:id/confirm', roles('member'), asyncRoute(async(req:AuthRequest,res)=>{
-    const b=z.object({target:customerTarget,revision:z.string().min(1),acknowledged:z.boolean().default(false)}).strict().parse(req.body),id=String(req.params.id);
+    const b=z.object({target:customerTarget,revision:z.string().min(1),acknowledged:z.boolean().default(false),paymentConfirmed:z.boolean().default(false)}).strict().parse(req.body),id=String(req.params.id);
     const row=await db.bookingRescheduleRequest.findFirst({where:{id,customerId:req.user!.id}});if(!row)return res.status(404).json({message:'Request not found.'});
     if(row.kind==='private_course'){
       const q=await quoteCustomerRequest(db,req.user!,id,b.target);if(q.revision!==b.revision)return res.status(409).json({message:'Review a fresh quote.'});
       await proposePrivateReschedule(db,req.user!,row.bookingId,{...b.target,reason:row.reason||'Customer responded to staff request',staffRequestId:id});
       return res.json(await db.bookingRescheduleRequest.findUnique({where:{id}}));
     }
-    res.json(await confirmCustomerRequest(db,req.user!,id,b.target,b.revision,b.acknowledged));
+    res.json(await confirmCustomerRequest(db,req.user!,id,b.target,b.revision,b.acknowledged,b.paymentConfirmed));
   }));
   r.get('/private', asyncRoute(async (req: AuthRequest, res) => res.json(await listPrivateReschedules(db, req.user!, req.query.bookingId ? String(req.query.bookingId) : undefined))));
   r.post('/private/:bookingId/invite', roles('admin', 'badminton_fo'), asyncRoute(async (req: AuthRequest, res) => res.json(await invitePrivateReschedule(db, req.user!, String(req.params.bookingId), z.object({ reason: z.enum(operationalReasons) }).strict().parse(req.body).reason))));

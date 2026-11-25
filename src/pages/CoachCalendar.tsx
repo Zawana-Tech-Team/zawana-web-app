@@ -1,3 +1,6 @@
+import { ActionRequiredIndicator } from '../components/operational-actions/OperationalActionUI';
+import { bookingClock, normalizeBookingTime } from '../utils/bookingTime';
+import { bookingStatusLabel } from '../components/BookingStatusBadge';
 import { useBookingRevision } from '../hooks/useBookingRevision';
 import { SegmentedControl, SelectionContent } from '../components/Interactions';
 import { useEffect, useMemo, useState } from 'react';
@@ -5,6 +8,7 @@ import { ChevronLeft, ChevronRight, Clock3, CalendarDays } from 'lucide-react';
 import { Badge, Button, Card, Page } from '../components/UI';
 import { get } from '../api';
 
+const businessDate=()=>new Date(`${bookingClock().date}T12:00:00`);
 const key = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const add = (d: Date, n: number) => {
@@ -33,13 +37,13 @@ const mins = (s: string) => {
   return h * 60 + +m[2]
 };
 const eventRange = (s: string) => {
-  const p = String(s || '').split(/\s*(?:—|–|-)\s*/);
+  const p = normalizeBookingTime(String(s || '')).split(/\s*(?:—|–|-)\s*/);
   return p.length === 2 ? [mins(p[0]), mins(p[1])] : [NaN, NaN]
 };
 const hourLabel = (h: number) => `${h % 12 || 12}:00 ${h >= 12 ? 'PM' : 'AM'}`;
 
 export function CoachCalendar() {
-  const [date, setDate] = useState(new Date()),
+  const [date, setDate] = useState(businessDate),
     [view, setView] = useState<'day' | 'week' | 'month'>('week'),
     [data, setData] = useState<any>({ bookings: [] }),
     [error, setError] = useState('');
@@ -106,12 +110,12 @@ export function CoachCalendar() {
       }}
       key={event.id}
     >
-      <b className="block truncate">{event.title}</b>
+      <ActionRequiredIndicator bookingId={event.id}/><b className="block truncate">{event.title}</b>
       <span className="block truncate">
         {event.user?.name || event.kindLabel} · {event.court?.name || event.location}
       </span>
       <span className="block truncate">
-        {event.time} · {event.status.replaceAll('_', ' ')}
+        {event.time} · {bookingStatusLabel(event.status)}
       </span>
     </div>
   ];
@@ -149,7 +153,7 @@ export function CoachCalendar() {
     <Card className="overflow-hidden">
       <div className="flex flex-col justify-between gap-4 border-b p-4 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2">
-          <Button variant="secondary" className="px-3 py-2" onClick={() => setDate(new Date())}>Today</Button>
+          <Button variant="secondary" className="px-3 py-2" onClick={() => setDate(businessDate())}>Today</Button>
           <button
             aria-label="Previous"
             className="rounded-lg border p-2"

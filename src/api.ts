@@ -1,3 +1,4 @@
+import { SESSION_EXPIRED_EVENT } from './services/sessionEvents';
 import { BOOKING_CHANGED, bookingMutation } from './services/bookingSync';
 import { verifyPackageAccount } from './services/packageReauthentication';
 import type { User } from "./types";
@@ -59,11 +60,15 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   let response = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include', ...options, headers });
   if (response.status === 401 && sentToken && !explicitAuthorization && (!path.startsWith('/auth/') || path === '/auth/me' || path === '/auth/mfa/status')) {
     // Concurrent requests share one rotation; a late 401 uses the already refreshed token.
-    if (token === sentToken) await refreshSession();
+    if (token === sentToken) {
+      try { await refreshSession(); }
+      catch(error){if((error as {status?:number}).status===401&&token===sentToken){setToken(null);window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));}throw error;}
+    }
     headers.set('Authorization', `Bearer ${token}`);
     response = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include', ...options, headers });
   }
   const data = await response.json().catch(() => null);
+  if(response.status===401&&sentToken&&!explicitAuthorization&&headers.get('Authorization')===`Bearer ${token}`&&!path.startsWith('/auth/')){setToken(null);window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));}
   if (!response.ok) {
     const requestId = data?.requestId || response.headers.get('X-Request-Id');
     const message = data?.message || `Request failed (${response.status})`;
@@ -79,7 +84,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (typeof window !== 'undefined' && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && !path.startsWith('/notifications')) {
     window.dispatchEvent(new Event('zawana-notifications-refresh'));
   }
-  if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:holidays|rescheduling|payments|staff\/court-desk|store\/orders|cafe\/orders|gym\/enrollments|badminton\/enrollments|member\/(?:badminton-packages|private-courses))/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
+  if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:holidays|rescheduling|payments|staff\/court-desk|store\/orders|cafe\/orders|gym\/enrollments|badminton\/enrollments|member\/(?:badminton-packages|badminton-enrollments|private-courses))/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
   if (typeof window !== 'undefined' && method !== 'GET' && /^\/(?:bookings|court-booking|courts|court-blocks)/.test(path)) window.dispatchEvent(new Event('zawana-payments-refresh'));
   if (typeof window !== 'undefined' && bookingMutation(path, method)) window.dispatchEvent(new Event(BOOKING_CHANGED));
   if (paymentRetrySlot) sessionStorage.removeItem(paymentRetrySlot);

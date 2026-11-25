@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type SelectHTMLAttributes } from 'react';
+import { useEffect, useLayoutEffect, useId, useRef, useState, type SelectHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Check, ChevronDown } from 'lucide-react';
@@ -37,15 +37,16 @@ export function Select({ children, className = '', ...props }: SelectHTMLAttribu
     setFieldLabel(sourceLabel ? [...sourceLabel.childNodes].filter(node => node !== select && !(node instanceof HTMLElement && node.contains(select)))
       .map(node => node.textContent).join(' ').trim() : '');
   }, [props.value, props.defaultValue, children]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
       const rect = trigger.current!.getBoundingClientRect();
-      const availableBelow = window.innerHeight - rect.bottom - 12;
-      const above = availableBelow < 180 && rect.top > availableBelow;
-      const maxHeight = Math.min(280, Math.max(80, above ? rect.top - 12 : availableBelow));
-      setPosition({ top: above ? rect.top - Math.min(maxHeight, choices.length * 38 + 10) - 6 : rect.bottom + 6,
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)), width: rect.width, maxHeight });
+      const viewport=window.visualViewport;
+      const top=viewport?.offsetTop||0,left=viewport?.offsetLeft||0,height=viewport?.height||innerHeight,width=viewport?.width||innerWidth;
+      const availableBelow=Math.max(0,top+height-rect.bottom-14),availableAbove=Math.max(0,rect.top-top-14);
+      const above=availableBelow<Math.min(280,choices.length*38+10)&&availableAbove>availableBelow;
+      const maxHeight=Math.min(280,above?availableAbove:availableBelow),popupWidth=Math.min(rect.width,width-16);
+      setPosition({top:above?rect.top-Math.min(maxHeight,choices.length*38+10)-6:rect.bottom+6,left:Math.max(left+8,Math.min(rect.left,left+width-popupWidth-8)),width:popupWidth,maxHeight});
     };
     place();
     const outside = (event: PointerEvent) => {
@@ -54,11 +55,11 @@ export function Select({ children, className = '', ...props }: SelectHTMLAttribu
     };
     const scroll = (event: Event) => { if (!popup.current?.contains(event.target as Node)) setOpen(false); };
     document.addEventListener('pointerdown', outside);
-    window.addEventListener('resize', place);
+    window.addEventListener('resize', place);window.visualViewport?.addEventListener('resize',place);window.visualViewport?.addEventListener('scroll',place);
     window.addEventListener('scroll', scroll, true);
     return () => {
       document.removeEventListener('pointerdown', outside);
-      window.removeEventListener('resize', place);
+      window.removeEventListener('resize', place);window.visualViewport?.removeEventListener('resize',place);window.visualViewport?.removeEventListener('scroll',place);
       window.removeEventListener('scroll', scroll, true);
     };
   }, [open, choices.length]);

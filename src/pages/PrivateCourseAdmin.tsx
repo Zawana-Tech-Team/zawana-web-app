@@ -1,8 +1,12 @@
+import { useOperationalActions } from '../context/OperationalActionsContext';
+import { PendingActionCounter } from '../components/operational-actions/OperationalActionUI';
 import { Link } from 'react-router-dom';
 import { SegmentedControl, SelectionContent } from "../components/Interactions";
-import { DialogSurface } from "../components/Interactions";
+import { DeskDialog } from "../components/court-desk/DeskDialog";
+import { PrivateCourseRequests } from "../components/PrivateCourseRequests";
+import "./private-course-management.css";
 import { Select } from "../components/Select";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Pencil,
   Plus,
@@ -14,7 +18,7 @@ import {
   Clock3,
   DollarSign,
 } from "lucide-react";
-import { Badge, Button, Card, Empty, Page, Pagination } from "../components/UI";
+import { Badge, Button, Card, Empty, Page } from "../components/UI";
 import { del, get, patch, post } from "../api";
 import { mediaImageSrc } from "../components/ImageUpload";
 
@@ -29,6 +33,7 @@ const blank = {
 };
 
 export function PrivateCourseAdmin() {
+  const { counts: operationalCounts } = useOperationalActions();
   const [editorOpen, setEditorOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [items, setItems] = useState<any[]>([]),
@@ -41,6 +46,11 @@ export function PrivateCourseAdmin() {
     [loading, setLoading] = useState(true),
     [query, setQuery] = useState(""),
     [activeTab, setActiveTab] = useState<"catalog" | "requests">("catalog");
+  const saveLock = useRef(false);
+  const [formError, setFormError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [removing, setRemoving] = useState<any>(null);
+  const [imageReading, setImageReading] = useState(false);
   const load = () => {
     setLoading(true);
     setError("");
@@ -65,6 +75,7 @@ export function PrivateCourseAdmin() {
     void load();
   }, []);
   const start = (c?: any) => {
+    setFormError("");
     setEditorOpen(true);
     setEditing(c?.id || null);
     setImage(c?.imageUrl || "");
@@ -83,35 +94,44 @@ export function PrivateCourseAdmin() {
     );
   };
   const save = async () => {
+    if (saveLock.current || imageReading) return;
+    saveLock.current = true;
     setBusy(true);
-    setError("");
+    setFormError("");
+    let detailsSaved = false;
     try {
+      const upload = image.startsWith('data:image/');
+      const payload = { ...form, ...(!upload ? { imageUrl: image || null } : {}) };
       const saved = editing
-        ? await patch<any>(`/private-courses/${editing}`, form)
-        : await post<any>("/private-courses", form);
-      if (image) await post(`/private-courses/${saved.id}/image`, { image });
-      start();
+        ? await patch<any>(`/private-courses/${editing}`, payload)
+        : await post<any>("/private-courses", payload);
+      setEditing(saved.id);
+      detailsSaved = true;
+      if (upload) await post(`/private-courses/${saved.id}/image`, { image });
       setEditorOpen(false);
+      setNotice(editing ? "Course updated." : "Course created.");
       await load();
     } catch (e: any) {
-      setError(e.message || "Could not save course.");
+      setFormError(detailsSaved ? `Course details saved. ${e.message || "The image could not be uploaded."} Save again to retry the image.` : e.message || "Could not save course.");
+      if (detailsSaved) await load();
     } finally {
+      saveLock.current = false;
       setBusy(false);
     }
   };
-  const remove = async (c: any) => {
-    if (
-      !window.confirm(
-        `Remove ${c.title} from the selectable course catalog? Historical bookings will be preserved.`,
-      )
-    )
-      return;
+  const mutateCourse = async (course: any, action: "remove" | "status") => {
+    if (saveLock.current) return;
+    saveLock.current = true; setBusy(true); setError(""); setFormError("");
     try {
-      await del(`/private-courses/${c.id}`);
+      if (action === "remove") await del(`/private-courses/${course.id}`);
+      else await patch(`/private-courses/${course.id}`, { status: course.status === "active" ? "inactive" : "active" });
+      setRemoving(null);
+      setNotice(action === "remove" ? "Course removed from the catalog. Existing bookings are preserved." : "Course availability updated.");
       await load();
-    } catch (e: any) {
-      setError(e.message || "Could not remove course.");
-    }
+    } catch (cause: any) {
+      if (action === "remove") setFormError(cause.message || "Could not remove course.");
+      else setError(cause.message || "Could not update course availability.");
+    } finally { saveLock.current = false; setBusy(false); }
   };
   const visibleItems = items.filter(
     (c) =>
@@ -122,55 +142,28 @@ export function PrivateCourseAdmin() {
   );
   return (
     <Page
-      title="Private course management"
-      eyebrow="Administration · Badminton"
-    >
-      <Link className="mb-4 inline-block underline" to="/admin/course-finance">Create booking · Finance & settlements</Link>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Coaching, thoughtfully managed.
-          </h2>
-          <p className="mt-1 text-sm text-zawana-500">
-            Create courses, assign coaches and keep every session request in
-            view.
-          </p>
-        </div>
-        <Button
-          onClick={() => {
-            setActiveTab("catalog");
-            start();
-          }}
-        >
-          <Plus size={16} /> New course
-        </Button>
-      </div>
+      title="Private courses"
+      eyebrow="Badminton"
+      actions={<div className="private-course-heading-actions"><Link className="private-course-booking-link" to="/admin/court-rentals">Create a private booking</Link><Button disabled={busy} onClick={() => { setActiveTab('catalog'); start(); }}><Plus size={16} aria-hidden="true"/>New course</Button></div>}
+    ><div className="private-course-management">
       <SegmentedControl
         value={activeTab}
-        onChange={setActiveTab}
+        onChange={value => { setActiveTab(value); setNotice(""); }}
         label="Course views"
         className="mb-6 w-fit"
         options={[
-          { value: "catalog", label: `Course catalog · ${items.length}` },
-          { value: "requests", label: "Booking requests" },
+          { value: "catalog", label: "Course catalog" },
+          { value: "requests", label: <>Booking requests<PendingActionCounter count={operationalCounts.private_course} label="Private course requests"/></> },
         ]}
       />
+      {notice && <p role="status" className="private-course-notice">{notice}</p>}
       <SelectionContent value={activeTab}>
         {activeTab === "requests" ? (
           <PrivateCourseRequests coaches={coaches} />
         ) : (
           <div className="space-y-6">
             <section>
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">
-                    Course catalog
-                  </h2>
-                  <p className="mt-1 text-sm text-zawana-500">
-                    Inactive courses leave member booking while history remains
-                    available.
-                  </p>
-                </div>
+              <div className="private-course-catalog-tools">
                 <div className="relative w-full sm:max-w-xs">
                   <Search
                     size={16}
@@ -184,12 +177,7 @@ export function PrivateCourseAdmin() {
                     onChange={(e) => setQuery(e.target.value)}
                   />
                 </div>
-              </div>
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-zawana-500">
-                  {items.filter((c) => c.status === "active").length} active ·{" "}
-                  {items.length} total courses
-                </p>
+
                 <Select
                   aria-label="Course status"
                   className="min-w-40 text-sm"
@@ -201,12 +189,12 @@ export function PrivateCourseAdmin() {
                   <option value="inactive">Inactive</option>
                 </Select>
               </div>
-              {error && (
+              {error && !editorOpen && (
                 <p
                   role="alert"
                   className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700"
                 >
-                  {error}
+                  {error} <Button variant="secondary" onClick={() => void load()}>Retry courses</Button>
                 </p>
               )}
               {loading ? (
@@ -218,40 +206,40 @@ export function PrivateCourseAdmin() {
                     />
                   ))}
                 </div>
-              ) : visibleItems.length ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              ) : error && !items.length ? null : visibleItems.length ? (
+                <div className="private-course-catalog-grid">
                   {visibleItems.map((c) => (
-                    <Card key={c.id} className="overflow-hidden p-0">
+                    <article key={c.id} aria-label={`Course ${c.title}`} className="private-course-card">
                       {c.imageUrl ? (
                         <img
-                          src={c.imageUrl}
+                          src={mediaImageSrc(c.imageUrl)}
                           alt=""
-                          className="h-40 w-full object-cover"
+                          className="private-course-card-image"
                         />
                       ) : (
                         <div className="flex h-20 items-center gap-2 border-b border-zawana-border bg-zawana-gold/5 px-5">
                           <Clock3 size={17} className="text-zawana-500" />
                           <span className="text-xs font-medium text-zawana-500">
-                            Private coaching · {c.duration} min
+                            Private coaching
                           </span>
                         </div>
                       )}
-                      <div className="p-5">
+                      <div className="private-course-card-body">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-xs font-black uppercase tracking-widest text-zawana-accent">
                               {c.category}
                             </p>
-                            <h3 className="mt-1 text-lg font-semibold tracking-tight">
+                            <h2 className="mt-1 text-lg font-semibold tracking-tight">
                               {c.title}
-                            </h3>
+                            </h2>
                           </div>
                           <Badge good={c.status === "active"}>{c.status}</Badge>
                         </div>
                         <p className="mt-2 line-clamp-2 text-sm text-zawana-500">
-                          {c.description || "No description yet."}
+                          {c.description}
                         </p>
-                        <div className="mt-4 grid grid-cols-2 gap-2">
+                        <div className="private-course-card-facts">
                           <div className="rounded-xl bg-zawana-950/[.04] p-3">
                             <Clock3 size={14} className="text-zawana-accent" />
                             <b className="mt-1 block text-sm">
@@ -279,10 +267,12 @@ export function PrivateCourseAdmin() {
                             </span>
                           ))}
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-2 border-t border-zawana-border pt-3">
+                        <div className="private-course-card-actions">
                           <Button
                             variant="secondary"
                             className="px-3 py-2"
+                            disabled={busy}
+                            aria-label={`Edit course ${c.title}`}
                             onClick={() => start(c)}
                           >
                             <Pencil size={14} /> Edit
@@ -290,34 +280,30 @@ export function PrivateCourseAdmin() {
                           <Button
                             variant="secondary"
                             className="px-3 py-2"
-                            onClick={async () => {
-                              await patch(`/private-courses/${c.id}`, {
-                                status:
-                                  c.status === "active" ? "inactive" : "active",
-                              });
-                              await load();
-                            }}
+                            disabled={busy}
+                            onClick={() => void mutateCourse(c, "status")}
                           >
                             <Power size={14} />
                             {c.status === "active" ? "Deactivate" : "Activate"}
                           </Button>
                           <button
-                            aria-label="Delete course"
+                            aria-label={`Remove course ${c.title}`}
+                            disabled={busy}
                             className="ml-auto rounded-xl p-2 text-red-700 hover:bg-red-50"
-                            onClick={() => remove(c)}
+                            onClick={() => { setFormError(""); setRemoving(c); }}
                           >
                             <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
-                    </Card>
+                    </article>
                   ))}
                 </div>
               ) : (
                 <Empty
-                  title={query ? "No matching courses" : "No private courses"}
+                  title={query || statusFilter !== "all" ? "No matching courses" : "No private courses"}
                   body={
-                    query
+                    query || statusFilter !== "all"
                       ? "Try a different search."
                       : "Create the first badminton coaching service."
                   }
@@ -325,35 +311,9 @@ export function PrivateCourseAdmin() {
               )}
             </section>
             {editorOpen && (
-              <DialogSurface
-                title={
-                  editing ? "Edit private course" : "Create private course"
-                }
-                onClose={() => {
-                  if (!busy) setEditorOpen(false);
-                }}
-                className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-5 sm:p-7"
-              >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-zawana-accent">
-                        {editing ? "EDIT COURSE" : "NEW COURSE"}
-                      </p>
-                      <h3 className="mt-1 text-xl font-semibold tracking-tight">
-                        {editing ? "Update service" : "Build a service"}
-                      </h3>
-                    </div>
-                    <button
-                      aria-label="Cancel editing"
-                      className="rounded-lg p-2 hover:bg-zawana-950/5"
-                      disabled={busy}
-                      onClick={() => setEditorOpen(false)}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                  <div className="mt-5 space-y-4">
+              <DeskDialog title={editing ? 'Edit private course' : 'Create private course'} heading={editing ? 'Edit course' : 'New course'} onClose={() => setEditorOpen(false)} busy={busy || imageReading} className="private-course-editor" actions={<Button type="submit" form="private-course-editor-form" disabled={busy||imageReading||form.title.trim().length<3||!Number.isInteger(form.duration)||form.duration<30||form.duration>180||!Number.isInteger(form.price)||form.price<0||form.coachIds.length===0} loading={busy}>{editing?'Save changes':'Create course'}</Button>}>
+              <form id="private-course-editor-form" onSubmit={event=>{event.preventDefault();void save();}}><fieldset disabled={busy || imageReading}>
+                  <div className="private-course-fields space-y-4">
                     <label className="block text-xs font-bold">
                       Course name
                       <input
@@ -362,12 +322,15 @@ export function PrivateCourseAdmin() {
                         onChange={(e) =>
                           setForm({ ...form, title: e.target.value })
                         }
+                        required
+                        minLength={3}
                         placeholder="Beginner Private Training"
                       />
                     </label>
                     <label className="block text-xs font-bold">
                       Description
                       <textarea
+                        aria-label="Description"
                         className="mt-1 w-full"
                         rows={3}
                         value={form.description}
@@ -393,6 +356,7 @@ export function PrivateCourseAdmin() {
                         <input
                           className="mt-1 w-full"
                           type="number"
+                          required
                           min={30}
                           max={180}
                           step={30}
@@ -406,12 +370,14 @@ export function PrivateCourseAdmin() {
                         />
                       </label>
                     </div>
-                    <label className="block text-xs font-bold">
+                    <label className="private-course-price block text-xs font-bold">
                       Price · MMK
                       <input
                         className="mt-1 w-full"
                         type="number"
+                        required
                         min={0}
+                        step={1}
                         value={form.price}
                         onChange={(e) =>
                           setForm({ ...form, price: Number(e.target.value) })
@@ -428,7 +394,7 @@ export function PrivateCourseAdmin() {
                         </span>
                       </div>
                       {coaches.length ? (
-                        <div className="grid max-h-56 gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-1">
+                        <div className="private-course-coach-options">
                           {coaches.map((c) => {
                             const selected = form.coachIds.includes(c.id);
                             return (
@@ -453,9 +419,7 @@ export function PrivateCourseAdmin() {
                                   <b className="block truncate text-xs">
                                     {c.name}
                                   </b>
-                                  <span className="block truncate text-[10px] text-zawana-500">
-                                    {c.specialty || "Badminton coach"}
-                                  </span>
+
                                 </span>
                                 <span
                                   className={`grid h-5 w-5 place-items-center rounded-full text-xs ${selected ? "bg-zawana-950 text-white" : "bg-zawana-950/5"}`}
@@ -487,29 +451,31 @@ export function PrivateCourseAdmin() {
                               const f = e.target.files?.[0];
                               if (!f) return;
                               if (f.size > 5 * 1024 * 1024) {
-                                setError(
-                                  "Course images must be 5 MB or smaller.",
-                                );
+                                setFormError("Course images must be 5 MB or smaller.");
                                 return;
                               }
+                              if (!["image/png", "image/jpeg", "image/webp"].includes(f.type)) { setFormError("Choose a PNG, JPG or WebP image."); return; }
                               const reader = new FileReader();
-                              reader.onload = () =>
-                                setImage(String(reader.result || ""));
+                              setImageReading(true);
+                              reader.onerror = () => setFormError("Could not read this image. Please try another file.");
+                              reader.onload = () => { setImage(String(reader.result || "")); setFormError(""); };
+                              reader.onloadend = () => setImageReading(false);
                               reader.readAsDataURL(f);
                             }}
                           />
                         </span>
                       </label>
+                      {imageReading && <p role="status" className="mt-2 text-xs text-zawana-500">Reading image…</p>}
                       {image && (
                         <div className="relative mt-2">
                           <img
-                            src={image}
+                            src={mediaImageSrc(image)}
                             alt="Course preview"
-                            className="h-36 w-full rounded-xl object-cover"
+                            className="h-44 w-full rounded-xl object-cover"
                           />
                           <button
                             type="button"
-                            className="absolute right-2 top-2 rounded-full bg-white p-2 shadow"
+                            className="absolute right-2 top-2 grid min-h-11 min-w-11 place-items-center rounded-full bg-white p-2 shadow"
                             onClick={() => setImage("")}
                             aria-label="Remove course image"
                           >
@@ -531,310 +497,26 @@ export function PrivateCourseAdmin() {
                       />
                       Selectable by members
                     </label>
-                    {error && (
+                    {formError && (
                       <p
                         role="alert"
                         className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
                       >
-                        {error}
+                        {formError}
                       </p>
                     )}
-                    <div className="flex gap-2">
-                      <Button
-                        disabled={
-                          busy ||
-                          form.title.trim().length < 3 ||
-                          form.duration < 30 ||
-                          form.price < 0 ||
-                          form.coachIds.length === 0
-                        }
-                        onClick={save}
-                        className="flex-1"
-                      >
-                        {busy
-                          ? "Saving…"
-                          : editing
-                            ? "Save changes"
-                            : "Create course"}
-                      </Button>
-                      {editing && (
-                        <Button
-                          variant="secondary"
-                          disabled={busy}
-                          onClick={() => setEditorOpen(false)}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                    </div>
                   </div>
-                </div>
-              </DialogSurface>
+              </fieldset></form>
+              </DeskDialog>
             )}
           </div>
         )}
       </SelectionContent>
-    </Page>
-  );
-}
-
-function PrivateCourseRequests({ coaches }: { coaches: any[] }) {
-  const [rows, setRows] = useState<any[]>([]),
-    [page, setPage] = useState(1),
-    [info, setInfo] = useState<any>({ total: 0, totalPages: 0 }),
-    [error, setError] = useState(""),
-    [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    q: "",
-    status: "",
-    coachId: "",
-    from: "",
-    to: "",
-  });
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    const p = new URLSearchParams({
-      kind: "private_course",
-      page: String(page),
-      limit: "10",
-    });
-    for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
-    get<any>(`/bookings?${p}`)
-      .then((r) => {
-        if (!active) return;
-        setRows(r.data || []);
-        setInfo(r.pagination || { total: 0, totalPages: 0 });
-        setError("");
-      })
-      .catch((e: any) => {
-        if (active)
-          setError(e.message || "Could not load private course bookings.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [page, filters]);
-  const change = (key: string, value: string) => {
-    setPage(1);
-    setFilters((f) => ({ ...f, [key]: value }));
-  };
-  const status = (s: string) =>
-    (
-      ({
-        PENDING_COACH_CONFIRMATION: "Awaiting coach",
-        AWAITING_PAYMENT: "Payment due",
-        CONFIRMED: "Confirmed",
-        COACH_DECLINED: "Declined",
-        EXPIRED: "Expired",
-        CANCELLED: "Cancelled",
-        COMPLETED: "Completed",
-      }) as Record<string, string>
-    )[s] || s.replaceAll("_", " ");
-  return (
-    <section>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase tracking-widest text-zawana-accent">
-            Booking operations
-          </p>
-          <h2 className="mt-1 text-2xl font-black">Private course requests</h2>
-          <p className="mt-1 text-sm text-zawana-500">
-            {info.total || 0} total requests · review payment and booking
-            status.
-          </p>
-        </div>
-      </div>
-      <Card className="mb-4 p-3">
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <input
-            aria-label="Search course requests"
-            placeholder="Search member, course or court"
-            value={filters.q}
-            onChange={(e) => change("q", e.target.value)}
-          />
-          <Select
-            aria-label="Booking status"
-            value={filters.status}
-            onChange={(e) => change("status", e.target.value)}
-          >
-            <option value="">All statuses</option>
-            {[
-              "PENDING_COACH_CONFIRMATION",
-              "AWAITING_PAYMENT",
-              "CONFIRMED",
-              "COACH_DECLINED",
-              "EXPIRED",
-              "CANCELLED",
-              "COMPLETED",
-            ].map((x) => (
-              <option key={x} value={x}>
-                {status(x)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Coach"
-            value={filters.coachId}
-            onChange={(e) => change("coachId", e.target.value)}
-          >
-            <option value="">All coaches</option>
-            {coaches.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-          <input
-            type="date"
-            aria-label="From date"
-            value={filters.from}
-            onChange={(e) => change("from", e.target.value)}
-          />
-          <input
-            type="date"
-            aria-label="To date"
-            value={filters.to}
-            onChange={(e) => change("to", e.target.value)}
-          />
-        </div>
-      </Card>
-      {error && (
-        <p
-          role="alert"
-          className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700"
-        >
-          {error}
-        </p>
-      )}
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((n) => (
-            <Card key={n} className="h-24 animate-pulse bg-zawana-950/5" />
-          ))}
-        </div>
-      ) : rows.length ? (
-        <>
-          <div className="hidden md:block">
-            <div className="overflow-x-auto rounded-2xl border bg-white">
-              <table className="w-full min-w-[900px] text-left text-sm">
-                <thead>
-                  <tr className="border-b bg-zawana-950/[.02]">
-                    {[
-                      "Member",
-                      "Course & coach",
-                      "Session",
-                      "Court",
-                      "Payment",
-                      "Status",
-                    ].map((h) => (
-                      <th
-                        key={h}
-                        className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-zawana-500"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {rows.map((b) => (
-                    <tr key={b.id} className="hover:bg-zawana-950/[.02]">
-                      <td className="px-4 py-4">
-                        <b>{b.user?.name || "Member"}</b>
-                        <p className="text-xs text-zawana-500">
-                          {b.user?.email || b.user?.phone || "—"}
-                        </p>
-                        <p className="mt-1 text-[10px] text-zawana-400">
-                          Requested {new Date(b.createdAt).toLocaleDateString()}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4">
-                        <b>{b.title}</b>
-                        <p className="text-xs text-zawana-500">
-                          {b.coach?.name || "Coach pending"}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4">
-                        {b.date}
-                        <p className="text-xs text-zawana-500">{b.time}</p>
-                      </td>
-                      <td className="px-4 py-4">
-                        {b.court?.name || b.location || "—"}
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge>{b.paymentStatus || "—"}</Badge>
-                        {b.paymentExpiresAt && (
-                          <p className="mt-1 text-[10px] text-zawana-500">
-                            Due{" "}
-                            {new Date(b.paymentExpiresAt).toLocaleDateString()}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge good={b.status === "CONFIRMED"}>
-                          {status(b.status)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="grid gap-3 md:hidden">
-            {rows.map((b) => (
-              <Card key={b.id} className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <b>{b.title}</b>
-                    <p className="mt-1 text-xs text-zawana-500">
-                      {b.user?.name || "Member"} ·{" "}
-                      {b.coach?.name || "Coach pending"}
-                    </p>
-                  </div>
-                  <Badge good={b.status === "CONFIRMED"}>
-                    {status(b.status)}
-                  </Badge>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-xs text-zawana-500">Date / time</span>
-                    <p className="font-bold">
-                      {b.date} · {b.time}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-zawana-500">Court</span>
-                    <p className="font-bold">
-                      {b.court?.name || b.location || "—"}
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-zawana-500">
-                  Payment {b.paymentStatus || "—"} · requested{" "}
-                  {new Date(b.createdAt).toLocaleDateString()}
-                </p>
-              </Card>
-            ))}
-          </div>
-        </>
-      ) : (
-        <Empty
-          title="No requests found"
-          body="Try a different status, coach or date range."
-        />
-      )}
-      <Pagination
-        page={page}
-        totalPages={info.totalPages || 0}
-        total={info.total || 0}
-        onPage={setPage}
-      />
-    </section>
+      {removing && <DeskDialog title="Remove private course?" heading="Remove course?" size="compact" onClose={() => setRemoving(null)} busy={busy} actions={<Button loading={busy} onClick={() => void mutateCourse(removing, "remove")}>Remove course</Button>}>
+        <p className="text-sm leading-relaxed text-zawana-500">Remove <strong className="text-zawana-950">{removing.title}</strong> from the catalog? Existing bookings and their history will be preserved.</p>
+        {formError && <p role="alert" className="private-course-error">{formError}</p>}
+      </DeskDialog>}
+    </div></Page>
   );
 }
 

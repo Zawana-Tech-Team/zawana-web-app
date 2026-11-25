@@ -1,0 +1,142 @@
+import assert from 'node:assert/strict';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { createServer } from 'node:net';
+
+const require = createRequire(new URL('../tooling/gym/package.json', import.meta.url));
+const { chromium } = require('playwright');
+const root = fileURLToPath(new URL('..', import.meta.url));
+const frontOffice = process.env.COURT_DESK_ROLE === 'badminton_fo';
+const courtDeskPath = frontOffice ? '/badminton-fo/courts' : '/admin/court-rentals';
+const bookingPath = frontOffice ? '/badminton-fo/bookings' : '/admin/court-rentals';
+const temp = mkdtempSync(join(tmpdir(), 'zawana-court-desk-'));
+const artifacts = process.env.COURT_DESK_ARTIFACTS || join(temp, 'artifacts');
+mkdirSync(artifacts, { recursive: true });
+const freePort = async () => { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const port = s.address().port; await new Promise(r => s.close(r)); return port; };
+const apiPort = await freePort(), uiPort = await freePort();
+const ui = `http://127.0.0.1:${uiPort}`, api = `http://127.0.0.1:${apiPort}/api`;
+const fixture = join(temp, 'fixture.json'), database = join(temp, 'qa.db');
+writeFileSync(database, '');
+const env = { ...process.env, DATABASE_URL: `file:${database.replaceAll('\\', '/')}`, NODE_ENV: 'test', AUTH_MODE: 'database', JWT_SECRET: 'court-desk-isolated-test-secret-more-than-thirty-two-characters', PORT: String(apiPort), CLIENT_URL: ui, PUBLIC_API_URL: `http://127.0.0.1:${apiPort}`, VITE_AUTH_MODE: 'database', VITE_API_URL: api, COURT_DESK_FIXTURE: fixture };
+const children = [], errors = [];
+let browser;
+const start = (args, cwd) => { const child = spawn(process.execPath, args, { cwd, env, stdio: 'ignore' }); children.push(child); };
+const ready = async url => { for (let i = 0; i < 160; i++) { if (children.some(c => c.exitCode !== null)) throw new Error('A QA server exited'); if (await fetch(url).then(r => r.ok).catch(() => false)) return; await new Promise(r => setTimeout(r, 125)); } throw new Error('QA server did not start'); };
+try {
+  execFileSync(process.execPath, ['node_modules/prisma/build/index.js', 'migrate', 'deploy'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  execFileSync(process.execPath, ['--import', 'tsx', 'tests/court-desk-browser-fixture.ts'], { cwd: join(root, 'backend'), env, stdio: 'pipe' });
+  const data = JSON.parse(readFileSync(fixture, 'utf8'));
+  start(['--import', 'tsx', 'src/server.ts'], join(root, 'backend'));
+  start(['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(uiPort), '--strictPort'], root);
+  await Promise.all([ready(`${api}/health`), ready(ui)]);
+  const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(existsSync);
+  browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1100 }, reducedMotion: 'reduce' });
+  await context.addInitScript(({ token, origin }) => { if (location.origin === origin) { localStorage.setItem('zawana_access_token', token); localStorage.setItem('zawana_language', 'en'); } }, { token: frontOffice ? data.foToken : data.token, origin: ui });
+  const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
+
+
+  const { PrismaClient } = createRequire(new URL('../backend/package.json', import.meta.url))('@prisma/client');
+  const db = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  page.setDefaultTimeout(15000);
+  try {
+    await db.user.update({ where: { id: data.memberId }, data: { phone: '099123456' } });
+    const bookingsBefore = await db.booking.findMany({ orderBy: { id: 'asc' } });
+    const ledgerBefore = await db.transaction.findMany({ orderBy: { id: 'asc' } });
+    let detailsRequests = 0;
+    page.on('request', request => { if (/\/rescheduling\/bookings\/[^/]+\/details$/.test(request.url())) detailsRequests++; });
+    await page.goto(`${ui}${courtDeskPath}`);
+    const day = page.getByLabel('Operating day', { exact: true });
+    await day.fill(data.date);
+    assert.equal(await page.getByRole('link', { name: 'Manage courts', exact: true }).count(), frontOffice ? 0 : 1);
+    await page.waitForFunction(() => document.querySelector('.court-timetable')?.getAttribute('aria-busy') === 'false');
+    const bar = page.locator('[aria-label="Court selection actions"]');
+    const expectEmptySelection = async () => {
+      await bar.getByText('0 rentals selected', { exact: false }).waitFor();
+      assert.equal(await bar.getByRole('button', { name: 'View Details', exact: true }).isDisabled(), true);
+      assert.equal(await bar.getByRole('button', { name: 'Clear Selection', exact: true }).isDisabled(), true);
+      assert.equal(await bar.getByRole('button', { name: 'Actions (0 Sessions Selected)', exact: true }).isDisabled(), true);
+    };
+    await expectEmptySelection();
+    const cell = (court, date, time) => page.getByRole('button', { name: `${court}, ${date}, ${time}, Available`, exact: true });
+    const first = cell('Court 1', data.date, '7:00 AM — 8:00 AM');
+    await first.click();
+    await bar.getByText('1 session selected', { exact: false }).waitFor();
+    assert.equal(await first.getAttribute('aria-pressed'), 'true');
+    assert.equal(await bar.getByRole('list', { name: 'Selection tray' }).count(), 0);
+    assert.equal(await bar.getByText('Court 1', { exact: true }).count(), 0, 'Court is not repeated below the matrix');
+    const next = new Date(`${data.date}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 1); const nextDate = next.toISOString().slice(0, 10);
+    await day.fill(nextDate);
+    await cell('Court 5', nextDate, '8:00 AM — 9:00 AM').click();
+    await page.locator('select[aria-label="Court floor"]').selectOption('6th floor', { force: true });
+    await bar.getByRole('button', { name: 'View Details', exact: true }).click();
+    const manager = page.getByRole('dialog', { name: 'Selection details', exact: true });
+    assert.equal(await manager.getByRole('listitem').count(), 2);
+    await manager.getByRole('button', { name: `Remove Court 1 ${data.date} 7:00 AM — 8:00 AM`, exact: true }).click();
+    assert.equal(await manager.getByRole('listitem').count(), 1, 'Offscreen sessions can be removed');
+    await manager.getByRole('button', { name: 'Done', exact: true }).click();
+    await bar.getByRole('button', { name: 'Clear Selection', exact: true }).click();
+    await expectEmptySelection();
+    await page.locator('select[aria-label="Court floor"]').selectOption('all', { force: true });
+    await day.fill(data.date);
+    const events = page.locator('.court-timetable__event').filter({ hasText: 'Alex Tan' });
+    await events.nth(1).waitFor(); await events.first().click();
+    await bar.getByRole('button', { name: 'View Details', exact: true }).waitFor();
+    assert.equal(await page.getByRole('region', { name: 'Selected booking details', exact: true }).count(), 0);
+    assert.equal(await bar.getByText('Alex Tan', { exact: true }).count(), 0);
+    assert.equal(detailsRequests, 0, 'Selecting bookings does not fetch duplicate detail summaries');
+    await page.route('**/api/rescheduling/bookings/*/details', route => route.fulfill({ status: 503, json: { message: 'Details temporarily unavailable' } }));
+    await bar.getByRole('button', { name: 'View Details', exact: true }).click();
+    const details = page.getByRole('dialog', { name: 'Booking details', exact: true });
+    await details.getByRole('alert').getByText('Details temporarily unavailable', { exact: true }).waitFor();
+    await page.unroute('**/api/rescheduling/bookings/*/details');
+    await details.getByRole('button', { name: 'Retry details', exact: true }).click();
+    await details.getByText('099123456', { exact: true }).waitFor();
+    await details.getByRole('link', { name: 'Call Customer', exact: true }).waitFor();
+    await details.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.waitForFunction(() => document.activeElement?.textContent === 'View Details');
+    await events.nth(1).click();
+    assert.equal(await bar.getByRole('button', { name: 'View Details', exact: true }).count(), 1);
+    await bar.getByRole('button', { name: 'Booking Actions', exact: true }).click();
+    for (const label of ['Reschedule selected sessions', 'Request Reschedule', 'Refund Selected']) await page.getByRole('menuitem').filter({ hasText: label }).waitFor();
+    await page.keyboard.press('Escape');
+    for (const width of [1440, 768, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth + 1);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Page fits ${width}`);
+      assert.ok(await bar.evaluate(element => element.scrollWidth <= element.clientWidth + 1), `Bar fits ${width}`);
+      await page.screenshot({ path: join(artifacts, `admin-selection-${width}.png`) });
+      await bar.getByRole('button', { name: 'View Details', exact: true }).click();
+      assert.equal(await manager.getByRole('listitem').count(), 2);
+      assert.ok(await manager.evaluate(element => { const box = element.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight + 1 && element.scrollWidth <= element.clientWidth + 1; }), `Manager fits ${width}`);
+      if (width === 320) {
+        await manager.getByRole('button', { name: 'View Details', exact: true }).first().click();
+        await details.getByText('099123456', { exact: true }).waitFor();
+        await details.getByRole('button', { name: 'Close', exact: true }).click();
+        await manager.getByRole('button', { name: 'View Details', exact: true }).first().waitFor();
+      }
+      await manager.getByRole('button', { name: 'Done', exact: true }).click();
+    }
+    await bar.getByRole('button', { name: 'View Details', exact: true }).click();
+    await manager.getByRole('button', { name: /^Remove / }).first().click();
+    await manager.getByRole('button', { name: 'Done', exact: true }).click();
+    assert.equal(await page.locator('.court-timetable__event[aria-pressed="true"]').count(), 1);
+    await bar.getByRole('button', { name: 'Clear Selection', exact: true }).click();
+    await expectEmptySelection();
+    assert.deepEqual(await db.booking.findMany({ orderBy: { id: 'asc' } }), bookingsBefore);
+    assert.deepEqual(await db.transaction.findMany({ orderBy: { id: 'asc' } }), ledgerBefore);
+    await page.getByRole('button', { name: 'Holiday', exact: true }).click();
+    assert.equal(await page.getByRole('heading', { name: 'Holiday Management', exact: true }).count(), 1, 'Holiday has one page heading');
+    assert.equal(await page.getByRole('group', { name: 'Court rental view', exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Back to Court Rental', exact: true }).click();
+    await expectEmptySelection();
+    assert.deepEqual(errors, []);
+    console.log(JSON.stringify({ ok: true, checks: ['compact admin selection bar without repeated court/contact summaries', 'cross-date and floor selections, individual removal and clear', 'on-demand booking details with retry, contact link and restored focus', 'booking action menus preserved', '1440/768/390/320 layouts and nested details', 'selection and details preserve bookings and ledger'], artifacts }));
+  } catch (error) { await page.screenshot({ path: join(artifacts, 'admin-selection-failure.png') }).catch(() => {}); throw error; }
+  finally { await db.$disconnect(); }
+} finally { await browser?.close(); children.forEach(child => child.kill()); }

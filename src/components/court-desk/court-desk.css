@@ -256,6 +256,7 @@
 .desk-dialog label.desk-acknowledgment { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; font-size: 12px; line-height: 1.6; cursor: pointer; }
 .desk-court-details { --dialog-ink: var(--desk-ink); --dialog-muted: var(--desk-muted); --dialog-line: var(--desk-line); --dialog-surface: var(--desk-surface); }
 .desk-court-details .z-session-title { font-size: 18px; }
+.desk-court-details .desk-dialog__title{font-size:24px;font-weight:650;letter-spacing:-.035em;overflow-wrap:anywhere}.desk-court-details .desk-dialog__eyebrow{overflow-wrap:anywhere}.desk-court-details .z-booking-summary{margin-bottom:14px}.desk-court-details .z-session-meta{font-size:13px}.desk-court-details .z-booking-facts{padding-block:18px}
 .desk-toolbar__tools { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
 .desk-selection-chip { min-width: 0; padding: 10px 12px; border: 1px solid var(--desk-line); border-radius: var(--ui-radius-sm, 8px); background: var(--desk-surface); font-size: 11px; line-height: 1.5; }
 .desk-selection-chip b { font-weight: 600; }
@@ -270,3 +271,29 @@
   .court-timetable__event > strong { font-size: 11px; }
   .court-timetable__event > .desk-event-time-compact { font-size: 10px; }
 }
+
+.desk-history-title{font-size:13px;font-weight:550;line-height:1.7;overflow-wrap:anywhere}.desk-history-secondary{font-size:11px;color:var(--desk-muted);line-height:1.7;margin-top:4px}.desk-history td{vertical-align:middle}.desk-history td .zawana-button{min-height:44px;font-size:11px}.desk-history table th{font-weight:500}
+
+.desk-history-tools{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:20px}.desk-history-tools>p{font-size:13px;color:var(--desk-muted)}.desk-history-tools>div{display:flex;gap:8px}.desk-history-advanced{grid-column:1/-1;border-top:1px solid var(--desk-line);padding-top:12px}.desk-history-advanced>summary{cursor:pointer;min-height:44px;align-content:center;font-size:12px;color:var(--desk-ink)}.desk-history-date-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding-top:12px}.desk-history-date-fields label{font-size:11px;color:var(--desk-muted);min-width:0}.desk-history-date-fields input{width:100%;min-width:0;margin-top:6px}.desk-history-loading{display:grid;place-items:center;min-height:200px;border:1px solid var(--desk-line);border-radius:16px;background:white;color:var(--desk-muted);font-size:14px}.desk-history-follow-up{margin-top:36px;padding-top:24px;border-top:1px solid var(--desk-line)}.desk-history-organized [aria-label="Booking history records"]{min-width:0}.desk-history-advanced summary:focus-visible{outline:2px solid var(--color-zawana-gold);outline-offset:2px}@media(max-width:600px){.desk-history-tools{align-items:flex-start}.desk-history-date-fields{grid-template-columns:minmax(0,1fr)}.desk-history-tools>div{width:100%;justify-content:flex-end}}
+
+.desk-history-organized .desk-history-filters>.premium-select{padding:0;border:0;background:transparent}.desk-history-organized .desk-history-filters>.premium-select>.premium-select__trigger{min-height:48px;border-radius:10px}.desk-history-organized .desk-history-filters>input{min-height:48px;height:48px;font-size:12px;border-radius:10px}
+
+/* Keep the selected timetable cells as the only default booking summary. */
+.court-desk .desk-selection-actions--compact{padding:10px 14px;gap:10px 16px;box-shadow:none}
+.desk-selection-count{margin:0;font-size:12px;color:#6f7c65;line-height:1.8}
+.desk-selection-count>strong{font-size:15px;font-weight:600;color:#526449;margin-right:3px}
+.desk-selection-actions--compact>div{min-width:0;max-width:100%}
+.desk-selection-actions--compact button{min-height:44px;padding-inline:12px;font-size:12px}
+.desk-selection-feedback{flex-basis:100%;font-size:11px;line-height:1.8;color:#8c6c38;margin:0}
+.desk-selection-manager .desk-dialog__title{font-size:21px;font-weight:600;letter-spacing:-.025em}
+.desk-selection-manager__list{list-style:none;padding:0;margin:0}
+.desk-selection-manager__list>li{display:flex;align-items:start;justify-content:space-between;gap:14px;padding:14px 0;border-bottom:1px solid #e0e6da;min-width:0}
+.desk-selection-manager__list>li:first-child{padding-top:0}
+.desk-selection-manager__list>li:last-child{border-bottom:0}
+.desk-selection-manager__list>li>div:first-child{min-width:0}
+.desk-selection-manager__list strong{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.desk-selection-manager__list p{font-size:12px;line-height:1.8;color:#6f7c65;margin-top:5px;overflow-wrap:anywhere}
+.desk-selection-manager__list .desk-selection-manager__invalid{color:#9b5c51}
+.desk-selection-manager__actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.desk-selection-manager__actions>button{min-height:44px;font-size:12px}
+@media(max-width:650px){.desk-selection-actions--compact>div{width:100%}.desk-selection-manager__list>li{flex-direction:column}.desk-selection-manager__actions{flex-wrap:wrap;width:100%}}

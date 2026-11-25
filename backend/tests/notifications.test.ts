@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { notifyBadmintonStaff } from '../src/services/notificationEvents.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -69,6 +71,36 @@ test('notifications automatically archive viewed, expired and completed items', 
       await db.booking.update({ where: { id: booking.id }, data: { status: 'completed' } });
       assert.equal((await request(admin)).data.some((n: any) => n.id === done.id), false);
       assert.equal((await db.notification.findUniqueOrThrow({ where: { id: done.id } })).activeInInbox, false);
+      const outcome=await notice('Coach declined your private course',{userId:member.id,audience:'member',entityType:'booking',entityId:booking.id});
+      assert.equal((await request(member)).data.some((row:any)=>row.id===outcome.id),true,'Informational outcomes must remain visible after the booking becomes terminal');
+    });
+    await t.test('group notices show remaining requests, archive handled groups and isolate recipients',async()=>{
+      const batch=await db.bookingRequestBatch.create({data:{id:randomUUID(),senderId:admin.id,recipientId:member.id,reason:'MAINTENANCE'}});
+      const children=[];
+      for(let index=0;index<3;index++){
+        const booking=await db.booking.create({data:{code:`NOTIFICATION-GROUP-${index}`,userId:member.id,kind:'court',title:'Rental',date:'2099-01-01',time:'8:00 AM — 9:00 AM',location:'Court',price:100,status:'CONFIRMED'}});
+        children.push(await db.bookingRescheduleRequest.create({data:{batchId:batch.id,bookingId:booking.id,activeKey:booking.id,customerId:member.id,requestedById:admin.id,kind:'court',oldSchedule:{},reason:'MAINTENANCE',expiresAt:new Date(Date.now()+86400000)}}));
+      }
+      const grouped=await db.notification.create({data:{userId:member.id,audience:'member',title:'Original title',body:'Original body',entityType:'reschedule_batch',entityId:batch.id,link:`/bookings?batch=${batch.id}`}});
+      const individual=await db.notification.create({data:{userId:member.id,audience:'member',title:'Reschedule Request',body:'Choose a response',entityType:'reschedule_request',entityId:children[0].id}});
+      let visible=(await request(member)).data.find((row:any)=>row.id===grouped.id);assert.equal(visible.title,'3 Requests');assert.match(visible.body,/Dear Valued Customer/);assert.match(visible.link,new RegExp(batch.id));
+      assert.equal((await request(otherAdmin)).data.some((row:any)=>row.id===grouped.id),false);
+      await db.bookingRescheduleRequest.update({where:{id:children[0].id},data:{status:'ADMIN_HANDLING',response:'ADMIN_HANDLING'}});
+      visible=(await request(member)).data.find((row:any)=>row.id===grouped.id);assert.equal(visible.title,'2 Requests');assert.match(visible.body,/2 Requests awaiting response/);
+      assert.equal((await request(member)).data.some((row:any)=>row.id===individual.id),false);
+      await db.bookingRescheduleRequest.updateMany({where:{batchId:batch.id},data:{status:'COMPLETED',activeKey:null}});
+      assert.equal((await request(member)).data.some((row:any)=>row.id===grouped.id),false);
+      assert.equal((await request(member,'/notifications?history=1')).data.some((row:any)=>row.id===grouped.id),true);
+    });
+    await t.test('event retries do not duplicate staff notices or reset another administrator’s read state',async()=>{
+      const send=()=>db.$transaction(tx=>notifyBadmintonStaff(tx,'retry-event','Customer requested assistance','Booking reference only','?request=owned-id','system_event','event-id'));
+      await send();await send();assert.equal(await db.notification.count({where:{dedupeKey:{startsWith:'badminton:retry-event:'}}}),2);
+      const row=await db.notification.findUniqueOrThrow({where:{dedupeKey:'badminton:retry-event:admin'}});
+      assert.match(row.link!,/^\/admin\/court-rentals\?request=/);
+      assert.equal((await request(admin,'/notifications/read',{ids:[row.id]})).status,200);await send();
+      assert.equal((await request(admin)).data.some((item:any)=>item.id===row.id),false);
+      assert.equal((await request(otherAdmin)).data.some((item:any)=>item.id===row.id),true);
+      assert.equal((await request(member)).data.some((item:any)=>item.id===row.id),false);
     });
     await t.test('QR expiry and revocation remove stale QR notices', async () => {
       const qr = await db.badmintonEntryQr.create({ data: { tokenHash: 'notification-test-hash', createdById: admin.id, kind: 'CATEGORY', categoryCode: 'SOCIAL', expiresAt: new Date(Date.now() + 60000) } });

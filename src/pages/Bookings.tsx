@@ -1,3 +1,5 @@
+import { BookingStatusBadge, bookingStatusLabel as statusLabel } from '../components/BookingStatusBadge';
+import { HistoryPagination } from '../components/member-booking/HistoryPagination';
 import { ArrowUpRight, CalendarDays, ChevronDown, Clock3, Search, SlidersHorizontal, UserRound } from 'lucide-react';
 import '../components/member-booking/booking-history.css';
 import { useBookingRevision } from '../hooks/useBookingRevision';
@@ -14,8 +16,8 @@ import { normalizeBookingTime } from "../utils/bookingTime";
 import { SegmentedControl } from '../components/Interactions';
 import { Select } from '../components/Select';
 import { useCallback, useEffect, useState, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Button, Badge, Page, Empty, Pagination } from "../components/UI";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Button, Page, Empty } from "../components/UI";
 import { get, patch, post } from "../api";
 import { formatBookingDate, localDateKey, type BookingDatePreset } from "../utils/bookingDates";
 import { useLanguage } from "../context/LanguageContext";
@@ -33,7 +35,8 @@ type BookingFilter = {
 type PageInfo = { page: number; limit: number; total: number; totalPages: number };
 type DateCounts = Record<BookingDatePreset, number>;
 const EMPTY_COUNTS: DateCounts = { today: 0, yesterday: 0, upcoming: 0, all: 0 };
-const EMPTY_PAGE: PageInfo = { page: 1, limit: 20, total: 0, totalPages: 0 };
+const PAGE_SIZE=10;
+const EMPTY_PAGE: PageInfo = { page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 };
 const ACTIVE_STATUSES = [
   "confirmed",
   "CONFIRMED",
@@ -44,8 +47,10 @@ const ACTIVE_STATUSES = [
 
 export function Bookings() {
   const { locale } = useLanguage();
+  const navigate=useNavigate();
   const [searchParams] = useSearchParams();
   const categoryParam = searchParams.get('kind') || '';
+  const focusedCode=searchParams.get('q')||'';const focusedBooking=useRef('');
   const requestId = searchParams.get('request');
   const batchId = searchParams.get('batch');
   const refundId = searchParams.get('refund');
@@ -54,6 +59,8 @@ export function Bookings() {
   const revision = useBookingRevision();
   const loadGeneration = useRef(0);
   const lastQuery = useRef('');
+  const resultsHeading=useRef<HTMLHeadingElement>(null);
+  const paging=useRef(false);
   const [bookings, setBookings] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [coaches, setCoaches] = useState<any[]>([]);
@@ -71,7 +78,7 @@ export function Bookings() {
   const [dateCounts, setDateCounts] = useState<DateCounts>(EMPTY_COUNTS);
   const [filters, setFilters] = useState<BookingFilter>({
     datePreset: "all",
-    q: "",
+    q: focusedCode,
     kind: ['court','private_course','class'].includes(categoryParam) ? categoryParam : '',
     status: "",
     courtId: "",
@@ -94,11 +101,14 @@ export function Bookings() {
       .catch(() => undefined);
   }, []);
 
+  useEffect(()=>{if(!focusedCode){focusedBooking.current='';return;}setView('bookings');setPage(1);setFilters(current=>({...current,q:focusedCode,datePreset:'all',kind:['court','private_course','class'].includes(categoryParam)?categoryParam:current.kind}));},[focusedCode,categoryParam]);
+  useEffect(()=>{if(!focusedCode||focusedBooking.current===focusedCode)return;const booking=bookings.find(row=>row.code===focusedCode);if(!booking)return;const element=document.getElementById(`booking-${booking.id}`) as HTMLDetailsElement|null;if(element){focusedBooking.current=focusedCode;element.open=true;element.querySelector('summary')?.focus();element.scrollIntoView({block:'center'});}},[bookings,focusedCode]);
+
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
     const params = new URLSearchParams({
       page: String(page),
-      limit: "20",
+      limit: String(PAGE_SIZE),
       referenceDate: localDateKey(),
       datePreset: filters.datePreset
     });
@@ -106,6 +116,8 @@ export function Bookings() {
       if (value && key !== "datePreset") params.set(key, value);
     const result = await get<any>(`/bookings?${params}`);
     if (generation !== loadGeneration.current) return;
+    const lastPage=Math.max(1,result.pagination?.totalPages||0);
+    if(page>lastPage){setPage(lastPage);return;}
     setBookings(result.data || []);
     setPageInfo(result.pagination || EMPTY_PAGE);
     setDateCounts({ ...EMPTY_COUNTS, ...(result.dateCounts || {}) });
@@ -135,6 +147,8 @@ export function Bookings() {
       window.clearTimeout(timer);
     };
   }, [load, filters, page, revision]);
+
+  useEffect(()=>{if(!loading&&paging.current&&pageInfo.page===page){paging.current=false;resultsHeading.current?.focus({preventScroll:true});resultsHeading.current?.scrollIntoView({block:'start'});}},[loading,pageInfo.page,page]);
 
 
   const updateFilters = (next: Partial<BookingFilter>) => {
@@ -180,33 +194,22 @@ export function Bookings() {
     }
   };
 
-  const statusLabel = (value: string) =>
-    ({
-        PENDING: "Pending",
-        PENDING_COACH_CONFIRMATION: "Waiting for coach",
-        AWAITING_PAYMENT: "Payment required",
-        COACH_DECLINED: "Coach declined",
-        EXPIRED: "Expired",
-        CONFIRMED: "Confirmed",
-        COMPLETED: "Completed",
-        CANCELLED: "Cancelled"
-      } as Record<string, string>
-    )[value.toUpperCase()] || String(value).replaceAll("_", " ");
   const presets: { id: BookingDatePreset; label: string }[] = [
     { id: "today", label: "Today" },
     { id: "yesterday", label: "Yesterday" },
     { id: "upcoming", label: "Upcoming" },
-    { id: "all", label: "All" }
+    { id: "all", label: "All dates" }
   ];
 
   return <Page title="Booking history" eyebrow="Your activity" actions={<Link className="booking-history-new" to="/book/court">Book a court <ArrowUpRight size={16} aria-hidden="true"/></Link>}>
     <div className="booking-history">
       <SegmentedControl label="Booking management" className="member-booking-management mb-6" value={view} onChange={setView} options={[{value:'bookings',label:'Bookings'},{value:'requests',label:'Requests'},{value:'refunds',label:'Refunds'}]} />
       {view === 'refunds' && <MemberRefundHistory onViewRequests={() => setView('requests')} />}
-      {view === 'requests' && <><BookingRequestInbox /><PrivateRescheduleInbox memberView onChanged={() => { void load(); }} /></>}
+      {view === 'requests' && <BookingRequestInbox />}
+      {view === 'bookings' && <PrivateRescheduleInbox memberView onChanged={() => { void load(); }} />}
       {privateChange && <PrivateRescheduleDialog booking={privateChange} onClose={() => setPrivateChange(null)} onChanged={() => { setMessage('Your proposal was sent to the coach. Your original session stays booked.'); setView('requests'); void load(); }} />}
 
-    {error &&
+    {error && !cancelCandidate && !paymentCandidate &&
       <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">
         {error}
       </p>}
@@ -218,20 +221,13 @@ export function Bookings() {
         {message}
       </p>}
     {view === 'bookings' && <>
-    <section className="booking-history-overview" aria-label="Booking overview">
-      <div className="booking-history-intro"><span className="booking-history-symbol"><CalendarDays size={23} strokeWidth={1.5} aria-hidden="true"/></span><div><h2>Your sessions, at a glance.</h2><p>Keep track of your courts, coaching and schedule changes.</p></div></div>
-      <div className="booking-history-metrics">{[{id:'today' as const,label:'Today'},{id:'upcoming' as const,label:'Upcoming'},{id:'all' as const,label:'All bookings'}].map(item => <button key={item.id} type="button" onClick={() => setPreset(item.id)} aria-pressed={filters.datePreset === item.id && !filters.from && !filters.to}><span>{item.label}</span><strong>{loading ? '—' : dateCounts[item.id].toLocaleString(locale)}</strong></button>)}</div>
-    </section>
     <SegmentedControl label="Booking category" className="member-booking-categories mb-5" value={filters.kind} onChange={kind => updateFilters({kind})} options={[{value:'',label:'All bookings'},{value:'court',label:'Court rental'},{value:'private_course',label:'Private course'},{value:'class',label:'Weekly class'}]} />
+    <SegmentedControl label="Booking dates" className="booking-history-date-tabs" value={filters.from || filters.to ? 'custom' : filters.datePreset} onChange={value => setPreset(value as BookingDatePreset)} options={presets.map(preset=>({value:preset.id,label:<>{preset.label}{' '}<span className="booking-history-date-count">{loading?'—':dateCounts[preset.id].toLocaleString(locale)}</span></>}))}/>
     <div className="booking-history-tools">
       <label className="booking-history-search"><Search size={18} aria-hidden="true"/><input aria-label="Search bookings" placeholder="Search booking, court or coach" value={filters.q} onChange={event => updateFilters({q:event.target.value})}/></label>
 
       <details className="booking-history-filters"><summary className="member-booking-disclosure"><SlidersHorizontal size={16} aria-hidden="true"/>Filters{Object.entries(filters).some(([key,value]) => !['datePreset','kind'].includes(key) && value) ? ' · Active' : ''}</summary>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      <div className="booking-history-dates"><Select aria-label="Booking dates" value={filters.from || filters.to ? 'custom' : filters.datePreset} onChange={event => setPreset(event.target.value as BookingDatePreset)}>
-        {(filters.from || filters.to) && <option value="custom">Custom dates</option>}
-        {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.label} · {dateCounts[preset.id]}</option>)}
-      </Select></div>
         <Select
           aria-label="Booking status"
           value={filters.status}
@@ -315,40 +311,26 @@ export function Bookings() {
         >Clear filters</button>}
       </details>
     </div>
-    <div className="booking-history-list-heading"><h2>{filters.datePreset === 'upcoming' ? 'Upcoming sessions' : filters.datePreset === 'today' ? 'Today’s sessions' : 'Your sessions'}</h2><span>{loading ? 'Updating…' : `${pageInfo.total.toLocaleString(locale)} booking${pageInfo.total === 1 ? '' : 's'}`}</span></div>
+    <h2 className="sr-only" tabIndex={-1} ref={resultsHeading}>Booking results</h2>
     {loading ?
       <div className="booking-history-loading" role="status"><span className="sr-only">Loading bookings…</span>{[0,1,2].map(item => <div key={item} className="booking-history-skeleton" aria-hidden="true"><span/><div><i/><i/></div></div>)}</div> :
       <div className="space-y-3">
-        {bookings.map(booking =>
-          <details key={booking.id} className="member-booking-row">
+        {bookings.map(booking => {
+          const isPrivate=booking.kind==='private_course';
+          const eligibility=isPrivate&&booking.status.toLowerCase()==='confirmed'?deskRescheduleEligibility('member',booking.date,booking.time):null;
+          const title=booking.kind==='court'?booking.court?.name||booking.title||booking.location:booking.title||booking.court?.name||booking.location;
+          const paymentSource=({SIMULATED:'Simulated payment',ONLINE:'Paid online',BADMINTON_FO:'Paid at Badminton Front Office',COACH:'Paid directly to Coach'} as Record<string,string>)[booking.privateCoursePayment?.paymentSource];
+          return <details id={`booking-${booking.id}`} key={booking.id} className="member-booking-row" data-status={booking.status.toLowerCase()}>
             <summary className="booking-history-card-summary">
               <span className="booking-history-date" aria-hidden="true"><span>{formatBookingDate(booking.date, {month:'short'}, locale)}</span><strong>{formatBookingDate(booking.date, {day:'2-digit'}, locale)}</strong><small>{formatBookingDate(booking.date, {year:'numeric'}, locale)}</small></span>
-              <div className="booking-history-card-main"><p className="booking-history-kind">{booking.kind === 'private_course' ? <UserRound size={13} aria-hidden="true"/> : <CalendarDays size={13} aria-hidden="true"/>}{({court:'Court rental',private_course:'Private course',pt:'Other booking',class:'Weekly class'} as Record<string,string>)[booking.kind] || booking.kind}</p><h3>{booking.court?.name || booking.title || booking.location}</h3><p className="booking-history-session"><Clock3 size={14} aria-hidden="true"/><span>{normalizeBookingTime(booking.time || '')}</span></p><span className="sr-only">{formatBookingDate(booking.date, {month:'long',day:'numeric',year:'numeric'}, locale)}</span>{booking.coach && <p className="booking-history-coach">With {booking.coach.name}</p>}</div>
-              <div className="booking-history-card-state"><span className="booking-history-status" data-tone={['confirmed','completed'].includes(String(booking.status).toLowerCase()) ? 'confirmed' : ['cancelled','expired','coach_declined'].includes(String(booking.status).toLowerCase()) ? 'muted' : 'pending'}><span aria-hidden="true"/>{statusLabel(booking.status)}</span><p className="booking-history-price">{Number(booking.price).toLocaleString(locale)} <small>MMK</small></p><span className="booking-history-payment">{booking.paymentStatus === 'paid' ? 'Paid' : booking.paymentStatus === 'refunded' ? 'Refunded' : 'Payment pending'}</span></div>
+              <div className="booking-history-card-main"><p className="booking-history-kind">{isPrivate ? <UserRound size={13} aria-hidden="true"/> : <CalendarDays size={13} aria-hidden="true"/>}{({court:'Court rental',private_course:'Private course',pt:'Other booking',class:'Weekly class'} as Record<string,string>)[booking.kind] || booking.kind}</p><h3>{title}</h3><p className="booking-history-session"><Clock3 size={14} aria-hidden="true"/><span>{normalizeBookingTime(booking.time || '')}</span></p><span className="sr-only">{formatBookingDate(booking.date, {month:'long',day:'numeric',year:'numeric'}, locale)}</span>{booking.kind!=='court'&&booking.court?.name&&booking.court.name!==title&&<p className="booking-history-coach">{booking.court.name}</p>}{booking.coach && <p className="booking-history-coach">With {booking.coach.name}</p>}</div>
+              <div className="booking-history-card-state"><BookingStatusBadge status={booking.status}/><p className="booking-history-price">{Number(booking.price).toLocaleString(locale)} <small>MMK</small></p><span className="booking-history-payment">{booking.paymentStatus === 'paid' ? 'Paid' : booking.paymentStatus === 'refunded' ? 'Refunded' : 'Payment pending'}</span></div>
               <span className="booking-history-expand"><span className="member-booking-row__more">View booking</span><span className="member-booking-row__less">Hide details</span><ChevronDown size={18} aria-hidden="true"/></span>
             </summary>
             <div className="booking-history-card-details">
-            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-              <div>
-                <h4 className="mb-2 text-sm font-semibold">{booking.title}</h4>
-                <div className="flex flex-wrap items-center gap-2">
-                  {booking.kind === "private_course" &&
-                    <Badge>
-                      {booking.paymentStatus === "paid"
-                        ? "Paid"
-                        : booking.status === "AWAITING_PAYMENT"
-                          ? "Payment required"
-                          : booking.status === "CONFIRMED" && booking.paymentStatus !== "paid"
-                            ? "Payment due at venue"
-                            : booking.status === "PENDING_COACH_CONFIRMATION"
-                              ? "Court reserved"
-                              : "Private course"}
-                    </Badge>}
-                </div>
-                {booking.kind === 'private_course' && booking.paymentStatus !== 'pending' && <p className="mt-2 text-xs text-zawana-500">{({ SIMULATED: 'Simulated payment', ONLINE: 'Paid Online', BADMINTON_FO: 'Paid at Badminton Front Office', COACH: 'Paid directly to Coach' } as Record<string, string>)[booking.privateCoursePayment?.paymentSource] || 'Legacy Payment — Source Unknown'}</p>}
-                {booking.coach && <p className="mt-2 text-sm text-zawana-500">Coach: {booking.coach.name}</p>}
-                <p className="mt-1 text-xs text-zawana-500">
-                  {booking.code} · {Number(booking.price).toLocaleString(locale)} MMK</p>
+              <div className="booking-history-reference"><span>Booking reference</span><strong>{booking.code}</strong></div>
+              <div className="booking-history-guidance">
+                {isPrivate && booking.paymentStatus === 'paid' && paymentSource && <p>{paymentSource}</p>}
                 {booking.kind === "private_course" && booking.status === "AWAITING_PAYMENT" &&
                   <p className="mt-2 text-sm font-bold text-amber-800">Coach accepted. Confirm manual/simulated payment within 24 hours to confirm your session.</p>}
                 {booking.kind === "private_course" &&
@@ -358,14 +340,12 @@ export function Bookings() {
                 {booking.kind === "private_course" &&
                   booking.status === "PENDING_COACH_CONFIRMATION" &&
                     <p className="mt-2 text-sm text-amber-800">Waiting for coach confirmation. Your selected court and time are reserved.</p>}
+                {eligibility && <p>{eligibility.eligible ? 'Your original session stays reserved until your coach approves the new schedule.' : 'Requests require at least 24 hours before the session.'}</p>}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {booking.kind === 'private_course' && booking.status.toLowerCase() === 'confirmed' && <div className="space-y-2">
-                  <Button variant="secondary" disabled={!deskRescheduleEligibility('member', booking.date, booking.time).eligible} onClick={() => setPrivateChange(booking)}>Change Date / Time</Button>
-                  <p className="max-w-xs text-xs text-zawana-500">{deskRescheduleEligibility('member', booking.date, booking.time).eligible ? 'Your coach approves the new schedule. Your original session stays reserved.' : 'Requests require at least 24 hours before the session.'}</p>
-                </div>}
+              <div className="booking-history-card-actions">
+                {eligibility && <Button variant="secondary" disabled={!eligibility.eligible} onClick={() => setPrivateChange(booking)}>Change Date / Time</Button>}
                 {booking.kind === "court" && <Button variant="secondary" onClick={() => setChangeBooking(booking.id)}>Details & history</Button>}
-                {booking.kind === "court" && booking.status.toLowerCase() === "confirmed" && <Link to={courtReschedulePath(booking.id)}><Button variant="secondary">Change Date / Time</Button></Link>}
+                {booking.kind === "court" && booking.status.toLowerCase() === "confirmed" && <Button variant="secondary" onClick={()=>navigate(courtReschedulePath(booking.id))}>Change Date / Time</Button>}
                 {booking.kind !== 'court' && booking.paymentStatus === 'pending' && (booking.status === 'AWAITING_PAYMENT' || (booking.kind !== 'private_course' && booking.status.toLowerCase() === 'confirmed')) &&
                   <Button loading={paying === booking.id} disabled={!!paying} onClick={() => { setError(''); setPaymentCandidate(booking); }}>
                     {paying === booking.id ? "Starting payment…" : "Confirm manual payment"}
@@ -380,23 +360,22 @@ export function Bookings() {
                   </Button>}
               </div>
             </div>
-            </div>
-          </details>)}
+          </details>;})}
         {!bookings.length &&
           <Empty
             title="No bookings match these filters"
             body="Try another date or clear a filter. New court rentals and private courses will appear here."
-            action={
-              <Link to={filters.kind === 'private_course' ? '/private-course' : '/book/court'}>
-                <Button>{filters.kind === 'private_course' ? 'Book a private course' : 'Book a court'}</Button>
-              </Link>
-            }
+            action={filters.kind === 'private_course' ? <Button onClick={()=>navigate('/private-course')}>Book a private course</Button> : undefined}
           />}
-        <Pagination
+        <HistoryPagination
           page={pageInfo.page || page}
           totalPages={pageInfo.totalPages || 0}
           total={pageInfo.total || 0}
-          onPage={setPage}
+          pageSize={PAGE_SIZE}
+          noun={pageInfo.total===1?'booking':'bookings'}
+          label="Booking history pagination"
+          disabled={loading}
+          onPage={next=>{paging.current=true;setPage(next);}}
         />
       </div>}
     </>}

@@ -1,0 +1,64 @@
+.rental-change-dialog{--rental-line:#e0e6da;--rental-muted:#6f7c65;max-width:850px}
+.rental-request-dialog{max-width:650px!important}
+.rental-change-dialog .desk-dialog__title{font-size:25px;font-weight:650;letter-spacing:-.035em;overflow-wrap:anywhere}
+.rental-change-dialog .desk-dialog__close{min-height:44px;min-width:44px;margin-top:-5px}
+.rental-change-fields{display:grid;gap:22px;margin:0;padding:0;border:0;min-width:0}
+.rental-change-bookings{display:grid;gap:24px}
+.rental-change-booking{min-width:0}
+.rental-change-booking>h3{font-size:12px;font-weight:600;color:var(--rental-muted);margin-bottom:12px}
+.rental-change-schedule{min-width:0;padding:20px;border-radius:12px;background:#f3f5ef;color:#506147}
+.rental-change-schedule>span{display:block;font-size:11px;color:var(--rental-muted);margin-bottom:10px}
+.rental-change-schedule>strong{display:block;font-size:20px;font-weight:650;line-height:1.5;letter-spacing:-.035em;overflow-wrap:anywhere}
+.rental-change-schedule>p{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.8;margin-top:8px}
+.rental-change-schedule>p>svg{flex-shrink:0;color:#819471}
+.rental-change-schedule[data-replacement=true]{background:#edf4e5;border:1px solid #dce8cf}
+.rental-change-schedule[data-replacement=true]>span{color:#5e7e47}
+.rental-change-destination{display:grid;grid-template-columns:1.15fr .85fr 1.1fr;gap:14px;margin-top:20px}
+.rental-change-field{display:grid;gap:8px;font-size:12px;color:#526449;min-width:0;font-weight:500}
+.rental-change-dialog .rental-change-field>input,.rental-change-dialog .rental-change-field>select,.rental-change-dialog .rental-change-field>textarea{min-width:0;width:100%;min-height:46px;padding:11px 12px;border:1px solid var(--rental-line);border-radius:10px;background:white;font-size:13px;font-weight:400}
+.rental-change-dialog .rental-change-field>textarea{resize:vertical;line-height:1.8;min-height:90px}
+.rental-change-dialog :focus-visible{outline:2px solid var(--color-zawana-gold);outline-offset:3px}
+.rental-change-dialog .rental-change-field>select{padding-right:24px}
+.rental-change-review{display:grid;gap:22px}
+.rental-change-comparison{padding-bottom:20px;border-bottom:1px solid var(--rental-line)}
+.rental-change-comparison-slots{display:grid;grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr);gap:14px;align-items:center}
+.rental-change-comparison-slots>svg{color:#91a180}
+.rental-change-comparison-slots .rental-change-schedule{align-self:stretch}
+.rental-change-prices{display:flex;align-items:start;gap:16px 30px;flex-wrap:wrap;padding:18px 4px 0}
+.rental-change-prices dt{font-size:11px;color:var(--rental-muted);margin-bottom:6px}
+.rental-change-prices dd{font-size:13px;color:#526449;font-weight:500;font-variant-numeric:tabular-nums}
+.rental-change-reason-summary{display:flex;gap:16px;justify-content:space-between;align-items:center;font-size:12px;padding:0 4px}
+.rental-change-reason-summary>span{color:var(--rental-muted)}
+.rental-change-reason-summary>strong{font-weight:500;color:#526449}
+.rental-change-total{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:22px;border:1px solid #dce8cf;border-radius:12px;background:#f1f6eb}
+.rental-change-total>div>span{display:block;font-size:12px;color:#6d7f5f;margin-bottom:8px}
+.rental-change-total strong{font-size:32px;font-weight:600;letter-spacing:-.045em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.rental-change-total strong>small{font-size:11px;font-weight:400;color:#6d7f5f;letter-spacing:0}
+.rental-change-total>span{font-size:11px;color:#6d7f5f}
+.rental-change-hint{display:flex;align-items:start;gap:9px;font-size:12px;line-height:1.9;color:var(--rental-muted)}
+.rental-change-hint>svg{flex-shrink:0;margin-top:3px}
+.rental-change-reservation-note{font-size:11px;line-height:1.8;color:var(--rental-muted);margin-top:20px}
+.rental-change-error{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;background:#fff0ee;color:#994e42;font-size:13px;line-height:1.8;padding:16px;border-radius:12px;margin-bottom:20px}
+.rental-change-loading{padding:40px 12px;text-align:center;font-size:13px;color:var(--rental-muted)}
+.rental-change-success{display:flex;align-items:center;flex-direction:column;gap:16px;text-align:center;padding:30px 10px;color:#5e7e47}
+.rental-change-success>h3{font-size:21px;font-weight:600;letter-spacing:-.025em}
+.rental-change-success>p{font-size:13px;color:var(--rental-muted);line-height:1.9}
+.rental-change-dialog .desk-payment-fields{background:white;border:1px solid var(--rental-line);border-radius:12px;padding:18px}
+.rental-change-dialog .desk-payment-fields legend{font-size:12px;font-weight:500;color:#526449;padding:0 5px}
+.rental-change-dialog .desk-payment-fields>.premium-segments{margin:6px 0 14px}
+.rental-change-dialog .desk-payment-confirm{font-size:12px;font-weight:400;line-height:1.8;color:var(--rental-muted)}
+.rental-request-bookings{list-style:none;padding:0;margin:0;display:grid;gap:20px}
+.rental-request-bookings>li{min-width:0}
+.rental-request-bookings header{display:flex;align-items:start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.rental-request-bookings header strong{display:block;font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.rental-request-bookings header a{display:inline-flex;align-items:center;gap:7px;font-size:12px;min-height:44px;color:#6d7f5f;text-decoration:underline;text-underline-offset:3px}
+.rental-request-bookings header>span{font-size:10px;color:var(--rental-muted);overflow-wrap:anywhere}
+.rental-request-warning,.rental-request-existing{font-size:12px;line-height:1.8;padding:12px;border-radius:10px;margin-top:12px;background:#fcf5e9;color:#8c6c38}
+.rental-request-existing{background:#f0f4eb;color:#6d7f5f}
+.rental-request-disclosure{border-top:1px solid var(--rental-line);padding-top:4px}
+.rental-request-disclosure>summary{display:flex;align-items:center;gap:8px;min-height:44px;font-size:12px;color:var(--rental-muted);cursor:pointer;width:fit-content}
+.rental-request-disclosure[open]>summary{margin-bottom:10px}
+.rental-request-message{white-space:pre-line;padding:18px;background:#f4f6f0;border-radius:12px;font-size:12px;line-height:1.9;color:#6d7f5f}
+@media(max-width:650px){.rental-change-destination{grid-template-columns:minmax(0,1fr);gap:18px}.rental-change-comparison-slots{grid-template-columns:minmax(0,1fr);gap:12px}.rental-change-comparison-slots>svg{transform:rotate(90deg);justify-self:center}.rental-change-schedule{padding:18px}.rental-change-schedule>strong{font-size:19px}.rental-change-prices{gap:18px 26px}.rental-change-dialog .desk-dialog__actions{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.rental-change-dialog .desk-dialog__actions>button{min-width:0;white-space:normal;min-height:44px}.rental-change-dialog .desk-dialog__actions>button:last-child:nth-child(3){grid-column:1/-1}.rental-change-dialog .desk-dialog__actions>button:only-child{grid-column:1/-1}.rental-change-total{padding:18px}.rental-change-dialog .desk-dialog__title{font-size:23px}.rental-request-bookings header{gap:8px}}
+.desk-dialog.rental-change-dialog .desk-dialog__title{font-size:25px;font-weight:650;letter-spacing:-.035em}.rental-request-customer>strong{display:block;font-size:17px;font-weight:600;overflow-wrap:anywhere}.rental-request-customer>a{display:inline-flex;gap:7px;align-items:center;min-height:44px;font-size:12px;color:#6d7f5f;text-decoration:underline;text-underline-offset:3px}.rental-request-bookings header:has(>span:only-child){margin-bottom:8px}@media(max-width:650px){.desk-dialog.rental-change-dialog .desk-dialog__title{font-size:23px}}
+.rental-change-customer{font-size:15px;font-weight:600;line-height:1.8;overflow-wrap:anywhere;margin-bottom:20px}

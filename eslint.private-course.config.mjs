@@ -8,6 +8,8 @@ export default [
   {
     files: [
       "src/pages/StaffPrivateCourses.tsx",
+      "src/pages/PrivateCourseAdmin.tsx",
+      "src/components/PrivateCourseRequests.tsx",
       "backend/src/services/privateCourseFinance.ts",
       "backend/src/routes/privateCourseFinance.ts",
       "backend/tests/private-course-finance.test.ts",

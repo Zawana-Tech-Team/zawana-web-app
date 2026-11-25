@@ -1,3 +1,5 @@
+import { authErrorMessage as firebaseMessage, SESSION_EXPIRED } from '../services/authErrors';
+import { SESSION_EXPIRED_EVENT } from '../services/sessionEvents';
 import { createFirebaseSessionExchange } from '../services/firebaseSession';
 import {
   createContext,
@@ -65,60 +67,7 @@ type Ctx = {
 };
 
 const C = createContext<Ctx | null>(null);
-const firebaseMessage = (error: any) => {
-  const known: Record<string, string> = {
-    'auth/invalid-credential':
-      'Firebase did not accept this email and password. If an Admin created this account before automatic Firebase linking was enabled, ask them to edit it in Users and save a new password. Otherwise use Forgot password and check that you are signing into the right Firebase project.',
-    'auth/user-not-found':
-      'No Firebase login exists for this email. For an older Admin-created account, ask an Admin to edit it in Users and save a new password to link its login.',
-    'auth/wrong-password':
-      'Firebase did not accept this password. Use Forgot password, or ask an Admin to edit this older account in Users and save a new password to link its login.',
-    'auth/email-already-in-use':
-      'An account with this email already exists. Sign in or reset your password.',
-    'auth/operation-not-allowed':
-      'The selected sign-in provider is disabled for this Firebase project. Enable it under Firebase Authentication → Sign-in method.',
-    'auth/user-disabled':
-      'This account has been disabled. Contact an administrator to restore access.',
-    'auth/internal-error':
-      'Firebase encountered an internal sign-in error (auth/internal-error). Try again. If it persists, share the failed Identity Toolkit request’s response error code with an administrator.',
-    'auth/invalid-login-credentials':
-      'The email or password was not accepted. Check your details or use Forgot password.',
-    'auth/invalid-oauth-client-id':
-      'Google sign-in has an invalid OAuth client configuration. Ask an administrator to check the Google provider’s Web SDK configuration in Firebase Authentication.',
-    'auth/invalid-idp-response':
-      'Firebase could not accept the sign-in provider’s response. Retry sign-in; if it persists, ask an administrator to check the provider’s OAuth configuration.',
-    'auth/configuration-not-found':
-      'Firebase Authentication is not configured for this project yet. Enable Email/Password under Firebase Console → Authentication → Sign-in method.',
-    'auth/invalid-api-key':
-      'The Firebase web API key is invalid. Copy the web app configuration from the same Firebase project and restart the frontend.',
-    'auth/api-key-not-valid.-please-pass-a-valid-api-key.':
-      'The Firebase web API key is invalid. Copy the web app configuration from the same Firebase project and restart the frontend.',
-    'auth/unauthorized-domain':
-      'This site is not authorized for Firebase sign-in. Add its hostname under Firebase Authentication → Settings → Authorized domains.',
-    'auth/weak-password': 'Choose a password with at least 8 characters.',
-    'auth/invalid-email': 'Enter a valid email address.',
-    'auth/popup-closed-by-user': 'Google sign-in was closed before it finished.',
-    'auth/popup-blocked':
-      'Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.',
-    'auth/cancelled-popup-request':
-      'A Google sign-in window is already open. Finish it or close it before retrying.',
-    'auth/account-exists-with-different-credential':
-      'This email already uses another sign-in method. Sign in with that method first, then link Google from account settings.',
-    'auth/too-many-requests': 'Too many attempts. Wait a little and try again.',
-    'auth/network-request-failed': 'Network error. Check your connection and try again.',
-  };
-  const code = String(error?.code || '').toLowerCase();
-  if (known[code]) return known[code];
-  if (code === 'auth/invalid-api-key' || code.includes('api-key-not-valid'))
-    return 'The Firebase web API key is invalid. Copy the web app configuration from the same Firebase project and restart the frontend.';
-  const message = String(error?.message || '');
-  if (code.startsWith('auth/') || message.startsWith('Firebase: Error')) {
-    // Keep the diagnostic code without exposing provider responses or account data.
-    const diagnosticCode = /^auth\/[a-z0-9.-]+$/.test(code) ? ` (${code})` : '';
-    return `Firebase could not complete sign-in${diagnosticCode}. Try again. If it persists, share this code and the failed Identity Toolkit request’s response error code with an administrator.`;
-  }
-  return message || 'Authentication could not be completed. Please try again.';
-};
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -220,6 +169,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }).catch(error => { if (alive) { reportSessionError(error); setLoading(false); } });
     return () => { alive = false; ++version; unsubscribe?.(); exchangeRef.current?.cancel(); };
   }, [syncFirebaseUser, reportSessionError]);
+
+  useEffect(()=>{
+    const expired=()=>{sessionOwner.current=null;accountRef.current=null;exchangeRef.current?.cancel();setUser(null);setToken(null);setSessionError(SESSION_EXPIRED);setCanRetrySession(false);setLoading(false);};
+    window.addEventListener(SESSION_EXPIRED_EVENT,expired);
+    return()=>window.removeEventListener(SESSION_EXPIRED_EVENT,expired);
+  },[]);
 
   const login = async (email: string, password: string): Promise<SignInResult> => {
     if (databaseAuthMode) {

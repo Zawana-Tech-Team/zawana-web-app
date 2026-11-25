@@ -14,8 +14,8 @@ async function getBooking(tx: Tx, id: string, actor: Actor) {
   if ((actor.role === 'member' && b.userId !== actor.id) || (actor.role === 'coach' && b.coach?.userId !== actor.id) || !['member', 'coach', 'admin', 'badminton_fo'].includes(actor.role)) throw fail(403, 'This booking is not assigned to you.');
   return b;
 }
-async function notice(tx: Tx, userId: string, title: string, body: string, bookingId: string, coach = false) {
-  await tx.notification.create({ data: { userId, title, body, link: coach ? '/coach/bookings' : '/bookings', type: 'reschedule', entityType: 'private_reschedule', entityId: bookingId } });
+async function notice(tx: Tx, userId: string, title: string, body: string, bookingId: string, coach = false, proposalId?:string) {
+  await tx.notification.create({ data: { dedupeKey:proposalId?`private-proposal:${proposalId}:coach`:undefined,userId, title, body, link: coach ? `/coach/bookings${proposalId?`?proposal=${proposalId}`:''}` : '/bookings', type: 'reschedule', entityType: proposalId?'private_proposal':'private_reschedule', entityId: proposalId||bookingId } });
 }
 export async function expirePrivateReschedules(db: PrismaClient) {
   const pending = await db.privateRescheduleRequest.findMany({ where: { status: 'PENDING', booking: { date: { lte: today() } } }, include: { booking: true } });
@@ -55,7 +55,7 @@ export async function proposePrivateReschedule(db: PrismaClient, actor: Actor, b
     if (staffRequest && !explicitScope && Object.entries(snapshot(b)).some(([key,value]) => (staffRequest!.oldSchedule as Record<string,unknown>)[key] !== value)) staffRequest = null;
     if (target.staffRequestId && !explicitScope) throw fail(403, 'This staff request does not authorize a response.');
     if (staffRequest && Object.entries(snapshot(b)).some(([key,value]) => (staffRequest.oldSchedule as Record<string,unknown>)[key] !== value)) throw fail(409, 'The original booking changed. Ask staff to review.');
-    if (!policy.eligible && (!explicitScope || explicitScope.requestedById === actor.id)) throw fail(409, policy.message);
+    if (!policy.eligible) throw fail(409, policy.message);
     if (scheduleInstant(b.date, b.time) <= new Date()) throw fail(409, 'The original session has started.');
     if (!b.coachId || !b.coach?.userId || b.coach.status !== 'active' || b.paymentStatus === 'refunded') throw fail(409, 'This course needs staff review before rescheduling.');
     const duration = range(b.time)!; validateDestination(target, duration.end - duration.start);
@@ -68,7 +68,7 @@ export async function proposePrivateReschedule(db: PrismaClient, actor: Actor, b
       await requestEvent(tx, staffRequest.id, actor.id, 'CUSTOMER_SELECTING', { proposalId: request.id, awaitingCoach: true });
       await requestStaffNotice(tx, staffRequest.id, 'Customer proposed a private course replacement', `${b.code} · Awaiting assigned coach approval.`);
     }
-    await notice(tx, b.coach.userId, 'Reschedule proposal awaiting review', `${b.title} · ${target.date} · ${target.time}. The original session stays reserved.`, b.id, true);
+    await notice(tx, b.coach.userId, 'Reschedule proposal awaiting review', `${b.title} · ${target.date} · ${target.time}. The original session stays reserved.`, b.id, true, request.id);
     return request;
   }, { maxWait: 10000, timeout: 15000 });
 }

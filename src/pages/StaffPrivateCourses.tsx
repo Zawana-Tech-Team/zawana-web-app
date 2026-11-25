@@ -1,3 +1,4 @@
+import { BookingStatusBadge } from '../components/BookingStatusBadge';
 import { useBookingRevision } from '../hooks/useBookingRevision';
 import { RefundDialog } from '../components/RefundWorkflow';
 import { startPayment } from '../services/paymentFlow';
@@ -205,6 +206,7 @@ export default function StaffPrivateCourses() {
   const [view, setView] = useState("book");
   const location = useLocation();
   const focusedBooking = new URLSearchParams(location.search).get('booking');
+  useEffect(()=>{if(focusedBooking)setView('bookings');},[focusedBooking]);
   const [catalog, setCatalog] = useState<{
     courses: Course[];
     courts: Person[];
@@ -233,12 +235,14 @@ export default function StaffPrivateCourses() {
   const loadSequence = useRef(0);
   const params = new URLSearchParams(
     Object.entries(filters).filter(([, v]) => v),
-  ).toString();
+  );
+  if(focusedBooking)params.set('booking',focusedBooking);
+  const query=params.toString();
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      const data = await get<Report>(`${base}/finance?${params}`);
+      const data = await get<Report>(`${base}/finance?${query}`);
       if (sequence === loadSequence.current) {
         setReport(data);
         setError("");
@@ -248,7 +252,7 @@ export default function StaffPrivateCourses() {
     } finally {
       if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [params]);
+  }, [base,query]);
   useEffect(() => {
     let active = true;
     get<typeof catalog>(`${base}/catalog`)
@@ -718,7 +722,7 @@ export default function StaffPrivateCourses() {
                         <small>{b.time}</small>
                       </div>
                       <div className="pc-payment-cell">
-                        <Status value={b.paymentStatus} />
+                        <BookingStatusBadge status={b.status} /><Status value={b.paymentStatus} />
                         <small>{shortSources[b.source]}</small>
                       </div>
                       <strong className="pc-amount-cell">
@@ -729,7 +733,6 @@ export default function StaffPrivateCourses() {
                     <div className="pc-booking-detail">
                       <div className="pc-detail-top">
                         <span>Booking {b.code}</span>
-                        <Status value={b.status} />
                       </div>
                       <div className="pc-details-grid">
                         <div>

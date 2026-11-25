@@ -1,3 +1,5 @@
+import { useOperationalActions } from '../../context/OperationalActionsContext';
+import { ActionRequiredIndicator } from '../operational-actions/OperationalActionUI';
 import { Plus } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import type { CourtBooking, ManagedCourt } from '../../types';
@@ -25,6 +27,7 @@ export function CourtTimetable({ courts, bookings, blocks, slots, date, statusFi
   onSelectSlot: (court: ManagedCourt, time: string) => void; onSelectCourt: (court: ManagedCourt) => void;
   onSelectBooking: (booking: CourtBooking) => void; onSelectBlock: (court: ManagedCourt, block: DeskBlock) => void;
 }) {
+  const { items: operationalItems } = useOperationalActions();
   const ranges = slots.flatMap(time => { const range = parseRange(time); return range ? [{ ...range, time }] : []; });
   if (!ranges.length) return <p className="desk-empty">No operating times configured.</p>;
   const start = Math.min(...ranges.map(range => range.start)), end = Math.max(...ranges.map(range => range.end));
@@ -76,14 +79,16 @@ export function CourtTimetable({ courts, bookings, blocks, slots, date, statusFi
               const clock = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
               const extra = block ? [block.coach?.name, ...(block.coaches?.map(coach => coach.name) || []), block.participantCount != null ? `${block.participantCount} participants` : block.participants?.length ? `${block.participants.length} participants` : null].filter(Boolean).join(' · ') : null;
               const style = { top: `${position.top}%`, height: `${position.height}%`, left: `calc(${position.lane / position.lanes * 100}% + 4px)`, width: `calc(${100 / position.lanes}% - 8px)` } as CSSProperties;
-              return <button type="button" key={event.id} className="court-timetable__event" data-kind={event.kind} style={style}
+              const bookingId = booking?.id || (block?.type === 'private' ? block.id : '');
+              const action = operationalItems.find(item => item.bookingId === bookingId);
+              return <div key={event.id} className="court-timetable__event-container" data-action={!!action || undefined} style={style}><button type="button" className="court-timetable__event" data-kind={event.kind}
                 aria-pressed={selectedRecordIds ? selectedRecordIds.includes(`${booking?.id || block?.id}|${date}`) : selectedRecordId === (booking?.id || block?.id)} data-muted={statusFilter !== 'all' && statusFilter !== event.kind}
                 title={`${title}\n${time}\n${type}${extra ? ` · ${extra}` : ''}${block?.note ? `\n${block.note}` : ''}${booking ? `\nBooking: ${label(booking.status)}\nPayment: ${label(booking.paymentStatus)}` : ''}`}
                 aria-label={`${title}, ${court.name}, ${time}, ${type}${block?.note ? `, ${block.note}` : ''}${booking ? `, Booking ${label(booking.status)}, Payment ${label(booking.paymentStatus)}` : ''}`}
                 onClick={() => booking ? onSelectBooking(booking) : block && onSelectBlock(court, block)}>
-                <strong>{title}</strong><span className="desk-event-time-full">{time}</span><span className="desk-event-time-compact" aria-hidden="true">{clock(event.start)}–{clock(event.end)}</span><small>{type}{extra ? ` · ${extra}` : ''}</small>
-                {booking && <span className="desk-event-status"><span>Booking: {label(booking.status)}</span><span>Payment: {label(booking.paymentStatus)}</span></span>}
-              </button>;
+                <strong>{title}</strong><span className="desk-event-time-full">{time}</span><span className="desk-event-time-compact" aria-hidden="true">{clock(event.start)}–{clock(event.end)}</span>{!action&&<small>{type}{extra ? ` · ${extra}` : ''}</small>}
+                {booking && !action && <span className="desk-event-status"><span>Booking: {label(booking.status)}</span><span>Payment: {label(booking.paymentStatus)}</span></span>}
+              </button>{action&&<div className="desk-event-action"><ActionRequiredIndicator bookingId={bookingId} compact={position.height < 6}/></div>}</div>;
             })}
           </div>;
         })}

@@ -371,6 +371,7 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
             .string()
             .regex(/^\d{4}-\d{2}-\d{2}$/)
             .optional(),
+          booking: z.string().min(1).optional(),
           coachId: z.string().optional(),
           paymentSource: z.string().optional(),
           paymentMethod: z.string().optional(),
@@ -382,6 +383,7 @@ export function createPrivateCourseFinanceRouter(db: PrismaClient, expire: () =>
         throw fail(400, "Start date must be before end date.");
       const where: Prisma.BookingWhereInput = {
         kind: "private_course",
+        ...(f.booking?{id:f.booking}:{}),
         ...(req.user!.role === "coach"
           ? { coach: { is: { userId: req.user!.id } } }
           : f.coachId

@@ -46,33 +46,18 @@ try {
     const pkg=await db.badmintonPackage.create({data:{title:'Foundation essentials',categoryId:foundation.id,price:30000,sessions:10,validity:30,description:'Foundation package',status:'active'}});
     const today=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Yangon'}));const date=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
     const enrollment=await db.badmintonEnrollment.create({data:{userId:data.memberId,studentId:data.memberId,studentName:'Alex Tan',phone:'09123',packageId:pkg.id,packageName:pkg.title,categoryCode:'FOUNDATION',startDate:date,expiryDate:data.date,sessionsTotal:10,sessionsRemaining:7}});
-    await page.goto(`${ui}/admin/badminton-packages`);
-    await page.getByText('Manage package categories',{exact:true}).click();
-    await page.getByLabel('Category name',{exact:true}).fill('Advanced players');await page.getByLabel('Stable category code',{exact:true}).fill('ADVANCED');
-    const createForm=page.getByLabel('Category name',{exact:true}).locator('..').locator('..');
-    await createForm.getByLabel('Description',{exact:true}).fill('Advanced badminton');
-    await page.getByRole('button',{name:'Create category',exact:true}).click();
-    const verification=page.getByRole('dialog',{name:'Confirm package changes',exact:true});await verification.getByLabel('Current password').fill('test-category-password');await verification.getByRole('button',{name:'Verify and save',exact:true}).click();
-    await page.getByText('ADVANCED · Active',{exact:true}).waitFor();
-    assert.equal((await db.badmintonPackageCategory.findUniqueOrThrow({where:{code:'ADVANCED'}})).description,'Advanced badminton');
-    const foundationForm=page.locator('form').filter({has:page.getByLabel('FOUNDATION display name',{exact:true})});
-    await foundationForm.getByLabel('FOUNDATION display name',{exact:true}).fill('Foundation Academy');
-    await foundationForm.getByRole('button',{name:'Save category',exact:true}).click();
-    await verification.getByLabel('Current password').fill('test-category-password');await verification.getByRole('button',{name:'Verify and save',exact:true}).click();
-    await page.getByText('Foundation Academy · FOUNDATION',{exact:true}).waitFor();
-
-    // One package is seeded in this isolated catalog.
-    await page.getByRole('button',{name:'Active Members',exact:true}).click();
-    let dialog=page.getByRole('dialog',{name:'Package members',exact:true});await dialog.getByText('Alex Tan',{exact:true}).click();
-    await dialog.getByText('member@example.test',{exact:true}).waitFor();await dialog.getByText('7 sessions · active',{exact:true}).waitFor();
-    await dialog.getByLabel('Search package members',{exact:true}).fill('no matching member');await dialog.getByText('No matching members.',{exact:true}).waitFor();
-    await dialog.getByLabel('Search package members',{exact:true}).fill('');
-    const filtered=page.waitForResponse(response=>response.url().includes('/members?')&&new URL(response.url()).searchParams.get('categoryCode')==='SOCIAL');
-    await dialog.getByLabel('Member package category',{exact:true}).selectOption('SOCIAL');await filtered;
-    await dialog.getByText('No matching members.',{exact:true}).waitFor();
-    await dialog.getByLabel('Member package category',{exact:true}).selectOption('FOUNDATION');
-    await dialog.getByText('Alex Tan',{exact:true}).waitFor();
-    await dialog.getByRole('button',{name:'Close',exact:true}).click();
+    // Extra enrollments for the same student must not inflate the student count.
+    await db.badmintonEnrollment.create({data:{userId:data.memberId,studentId:data.memberId,studentName:'Alex Tan',phone:'private duplicate',packageId:pkg.id,packageName:pkg.title,categoryCode:'FOUNDATION',startDate:date,expiryDate:data.date,sessionsTotal:10,sessionsRemaining:5}});
+    await db.badmintonEnrollment.create({data:{studentId:'expired-student',studentName:'Expired student',phone:'private expired',packageId:pkg.id,packageName:pkg.title,categoryCode:'FOUNDATION',startDate:'2020-01-01',expiryDate:'2020-02-01',sessionsTotal:10,sessionsRemaining:5}});
+    await page.goto(`${ui}/admin/badminton-packages`);await page.getByRole('heading',{name:pkg.title,exact:true}).waitFor();assert.equal(await page.getByText('Manage package categories',{exact:true}).count(),0);await page.getByRole('link',{name:'Manage categories',exact:true}).click();await page.waitForURL('**/admin/badminton-categories');
+    await page.getByRole('button',{name:'Create category',exact:true}).click();let edit=page.getByRole('dialog',{name:'Create category',exact:true});await edit.getByLabel('Category name',{exact:true}).fill('Advanced players');await edit.getByLabel('Category code',{exact:true}).fill('ADVANCED');await edit.getByLabel('Description (optional)',{exact:true}).fill('Advanced badminton');await edit.getByRole('button',{name:'Save category',exact:true}).click();
+    const verification=page.getByRole('dialog',{name:'Confirm package changes',exact:true});const verify=async()=>{await verification.getByLabel('Current password').fill('test-category-password');await verification.getByRole('button',{name:'Verify and save',exact:true}).click();await verification.waitFor({state:'hidden'});};await verify();await edit.waitFor({state:'hidden'});await page.getByRole('heading',{name:'Advanced players',exact:true}).waitFor();assert.equal((await db.badmintonPackageCategory.findUniqueOrThrow({where:{code:'ADVANCED'}})).description,'Advanced badminton');
+    const foundationCard=page.locator('.category-management-grid>li').filter({has:page.getByRole('heading',{name:'Foundation',exact:true})});await foundationCard.getByRole('button',{name:'Edit category',exact:true}).click();edit=page.getByRole('dialog',{name:'Edit category',exact:true});assert.equal(await edit.getByLabel('Category code',{exact:true}).isDisabled(),true);await edit.getByLabel('Category name',{exact:true}).fill('Foundation Academy');await edit.getByRole('button',{name:'Save category',exact:true}).click();await verify();await edit.waitFor({state:'hidden'});
+    for(const width of [1440,768,390,320]){await page.setViewportSize({width,height:1000});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(artifacts,`category-management-${width}.png`),fullPage:true});}
+    await page.setViewportSize({width:1440,height:1000});await page.goto(`${ui}/admin/badminton-packages`);await page.getByText('Foundation Academy',{exact:true}).waitFor();await page.getByRole('button',{name:'Active students',exact:true}).click();let dialog=page.getByRole('dialog',{name:'Active students',exact:true});await dialog.getByText('Alex Tan',{exact:true}).waitFor();assert.equal(await dialog.locator('.package-students-list li').count(),1);assert.equal(await dialog.locator('.package-students-count strong').innerText(),'1');assert.doesNotMatch(await dialog.innerText(),/member@example.test|09123|sessions|Expired student|Membership status|Category/);
+    for(const width of [1440,768,390,320]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(artifacts,`active-students-${width}.png`)});}await dialog.getByRole('button',{name:'Close',exact:true}).click();
+    for(const width of [1440,768,390,320]){await page.setViewportSize({width,height:1000});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(artifacts,`package-management-${width}.png`),fullPage:true});}
+    await page.setViewportSize({width:1440,height:1000});
     const dayOfWeek=new Date(`${data.date}T12:00:00Z`).getUTCDay();
     await db.courtBlock.create({data:{courtId:data.courts[7].id,date:'',dayOfWeek,title:'Foundation training',categoryCode:'FOUNDATION',type:'class',start:'08:00',end:'09:00'}});
     await db.courtBlock.create({data:{courtId:data.courts[6].id,date:'',dayOfWeek,title:'Social training',categoryCode:'SOCIAL',type:'class',start:'08:00',end:'09:00'}});
@@ -80,15 +65,14 @@ try {
     const manager=page.getByRole('region',{name:'Holiday Management',exact:true});
     await manager.getByLabel('Holiday name',{exact:true}).fill('Foundation training break');
     await manager.getByLabel('Foundation Academy',{exact:true}).check();
-    await manager.getByLabel('From date',{exact:true}).fill(data.date);await manager.getByLabel('To date',{exact:true}).fill(data.date);await manager.getByRole('button',{name:'Select date range',exact:true}).click();
+    await manager.getByRole('button',{name:`Holiday date ${data.date}`,exact:true}).click();
     await manager.getByRole('button',{name:'Override as Holiday',exact:true}).click();dialog=page.getByRole('dialog',{name:'Confirm holiday overrides',exact:true});
     await dialog.getByText('Foundation training · Court 7 · 08:00–09:00',{exact:true}).waitFor();assert.doesNotMatch(await dialog.innerText(),/Social training/);
     await dialog.getByRole('button',{name:'Confirm holiday overrides',exact:true}).click();await dialog.waitFor({state:'hidden'});
     assert.deepEqual((await db.courtDateOverride.findUniqueOrThrow({where:{date:data.date}})).categoryCodes,['FOUNDATION']);
     const movedDate=new Date(`${data.date}T12:00:00Z`);movedDate.setUTCDate(movedDate.getUTCDate()+7);const targetDate=movedDate.toISOString().slice(0,10);
     await manager.getByRole('button',{name:'Edit holiday',exact:true}).click();
-    await manager.getByLabel('From date',{exact:true}).fill(targetDate);await manager.getByLabel('To date',{exact:true}).fill(targetDate);
-    await manager.getByRole('button',{name:'Select date range',exact:true}).click();
+    await manager.getByRole('button',{name:`Holiday date ${data.date} configured`,exact:true}).click();if(targetDate.slice(0,7)!==data.date.slice(0,7))await manager.getByRole('button',{name:'Next holiday month',exact:true}).click();await manager.getByRole('button',{name:`Holiday date ${targetDate}`,exact:true}).click();
     await manager.getByRole('button',{name:'Override as Holiday',exact:true}).click();
     dialog=page.getByRole('dialog',{name:'Confirm holiday overrides',exact:true});
     await dialog.getByRole('region',{name:'Dates being restored',exact:true}).getByText(`${data.date} · Weekly classes will return.`,{exact:true}).waitFor();
@@ -96,15 +80,12 @@ try {
     assert.equal((await db.courtDateOverride.findUniqueOrThrow({where:{date:data.date}})).holidayActive,false);
     assert.equal((await db.courtDateOverride.findUniqueOrThrow({where:{date:targetDate}})).holidayActive,true);
     await manager.getByRole('button',{name:'Remove holiday',exact:true}).click();dialog=page.getByRole('dialog',{name:'Remove holiday',exact:true});await dialog.getByRole('button',{name:'Confirm holiday removal',exact:true}).click();await dialog.waitFor({state:'hidden'});
-    await page.goto(`${ui}/admin/badminton-packages`);await page.getByText('Manage package categories',{exact:true}).click();
-    await page.locator('form').filter({has:page.getByLabel('FOUNDATION display name',{exact:true})}).getByRole('button',{name:'Archive',exact:true}).click();
-    await verification.getByLabel('Current password').fill('test-category-password');await verification.getByRole('button',{name:'Verify and save',exact:true}).click();
-    await page.getByText('FOUNDATION · Archived',{exact:true}).waitFor();
+    await page.goto(`${ui}/admin/badminton-categories`);await page.locator('.category-management-grid>li').filter({has:page.getByRole('heading',{name:'Foundation Academy',exact:true})}).getByRole('button',{name:'Archive',exact:true}).click();await page.getByRole('dialog',{name:'Archive category?',exact:true}).getByRole('button',{name:'Archive category',exact:true}).click();await verify();await page.getByRole('dialog',{name:'Archive category?',exact:true}).waitFor({state:'hidden'});
     const sent=await context.request.post(`${api}/rescheduling/requests`,{headers:{Authorization:`Bearer ${data.token}`},data:{bookingId:data.bookingId,reason:'MAINTENANCE'}});assert.equal(sent.status(),201);const pendingRequest=await sent.json();
     const memberContext=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});await memberContext.addInitScript(token=>{localStorage.setItem('zawana_access_token',token);localStorage.setItem('zawana_language','en');},data.memberToken);
     const catalog=await memberContext.request.get(`${api}/packages/badminton`,{headers:{Authorization:`Bearer ${data.memberToken}`}});assert.equal(catalog.status(),200);assert.equal((await catalog.json()).some(p=>p.id===pkg.id),false);
     const memberPage=await memberContext.newPage();memberPage.on('pageerror',e=>errors.push(e.message));await memberPage.goto(`${ui}/member`);
-    await memberPage.getByRole('region',{name:'Active packages',exact:true}).getByText(pkg.title,{exact:true}).waitFor();
+    await memberPage.getByRole('region',{name:'Active packages',exact:true}).getByText(pkg.title,{exact:true}).first().waitFor();
     assert.equal(await memberPage.getByRole('region',{name:'Upcoming schedule',exact:true}).count(),1);
     assert.equal(await memberPage.getByRole('region',{name:'YOUR ZAWANA',exact:true}).count(),0);
     assert.equal(await memberPage.getByRole('link',{name:'Book a court',exact:true}).count(),1);
@@ -116,15 +97,12 @@ try {
     assert.equal((await db.badmintonEnrollment.findUniqueOrThrow({where:{id:enrollment.id}})).sessionsRemaining,7);
     const foContext=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});await foContext.addInitScript(token=>{localStorage.setItem('zawana_access_token',token);localStorage.setItem('zawana_language','en');},data.foToken);
     const foPage=await foContext.newPage();foPage.on('pageerror',e=>errors.push(e.message));await foPage.goto(`${ui}/badminton-fo/packages`);
-    const directory=foPage.getByRole('region',{name:'Package member directory',exact:true});
-    await directory.getByLabel('Package for member details',{exact:true}).selectOption(pkg.id);
-    await directory.getByRole('button',{name:'Active Members',exact:true}).click();
-    const foMembers=foPage.getByRole('dialog',{name:'Package members',exact:true});await foMembers.getByText('Alex Tan',{exact:true}).click();await foMembers.getByText('member@example.test',{exact:true}).waitFor();
-    await foMembers.getByText('7 sessions · active',{exact:true}).waitFor();
-    await foMembers.getByRole('button',{name:'Close',exact:true}).click();
+    await foPage.getByRole('heading',{name:'Packages',exact:true}).waitFor();
+    assert.equal(await foPage.getByRole('region',{name:'Package member directory',exact:true}).count(),0);
+    assert.equal(await foPage.getByRole('button',{name:'Active students',exact:true}).count(),0);
     assert.equal(await foPage.getByRole('button').filter({hasText:pkg.title}).count(),0,'Archived category packages must not be offered for FO activation');
     assert.equal(await foPage.getByText('Manage package categories',{exact:true}).count(),0);
     assert.ok(await foPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await foContext.close();
-    await memberContext.close();assert.deepEqual(errors,[]);console.log(JSON.stringify({ok:true,checks:['category creation with real password verification','category rename refreshes package cards','member category filter and contact search','archived categories excluded from sales; existing memberships preserved','category holiday preview, atomic date move, and confirmed removal','dashboard uses live package balances and functional links','responsive desktop/tablet/mobile dashboard','FO can view archived-category members without offering new sales','balances unchanged'],artifacts}));
+    await memberContext.close();await page.goto(`${ui}/admin/badminton-categories`);const advancedCard=page.locator('.category-management-grid>li').filter({has:page.getByRole('heading',{name:'Advanced players',exact:true})});await advancedCard.getByRole('button',{name:'Archive',exact:true}).click();await page.getByRole('dialog',{name:'Archive category?',exact:true}).getByRole('button',{name:'Archive category',exact:true}).click();await verify();await page.getByRole('dialog',{name:'Archive category?',exact:true}).waitFor({state:'hidden'});await advancedCard.getByRole('button',{name:'Reactivate',exact:true}).click();await page.getByRole('dialog',{name:'Reactivate category?',exact:true}).getByRole('button',{name:'Reactivate category',exact:true}).click();await verify();await page.getByRole('dialog',{name:'Reactivate category?',exact:true}).waitFor({state:'hidden'});assert.equal((await db.badmintonPackageCategory.findUniqueOrThrow({where:{code:'ADVANCED'}})).active,true);assert.deepEqual(errors,[]);console.log(JSON.stringify({ok:true,checks:['dedicated category CRUD page with real password verification','category rename refreshes package cards','active students show names and distinct total only','archived categories excluded from sales; existing memberships preserved','category holiday preview, atomic date move, and confirmed removal','dashboard uses live package balances and functional links','responsive desktop/tablet/mobile dashboard','FO activation excludes the member directory and archived-category sales','balances unchanged'],artifacts}));
   } finally { await db.$disconnect(); }
 } finally { await browser?.close(); children.forEach(child => child.kill()); }

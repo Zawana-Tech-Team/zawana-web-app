@@ -17,8 +17,8 @@ export function rescheduleEligibility(b: Pick<Booking, 'date' | 'time' | 'status
   if (!['confirmed', 'CONFIRMED'].includes(b.status))
     return { eligible: false, code: 'BOOKING_NOT_ELIGIBLE', message: `A ${b.status.toLowerCase()} booking cannot be rescheduled.` };
   const deadline = new Date(scheduleInstant(b.date, b.time).getTime() - 24 * 60 * 60_000);
-  return { eligible: now <= deadline, deadline: deadline.toISOString(), code: now <= deadline ? null : 'POLICY_WINDOW_EXPIRED',
-    message: now <= deadline ? 'Eligible: at least 24 hours before the session.' : 'Changes require at least 24 hours before the session.' };
+  return { eligible: now < deadline, deadline: deadline.toISOString(), code: now < deadline ? null : 'POLICY_WINDOW_EXPIRED',
+    message: now < deadline ? 'Eligible: more than 24 hours before the session.' : 'Changes require more than 24 hours before the session.' };
 }
 const snapshot = (b: Booking) => ({ courtId: b.courtId, date: b.date, time: b.time, price: b.price, status: b.status, paymentStatus: b.paymentStatus });
 async function authorized(db: Prisma.TransactionClient, id: string, actor: Actor) {

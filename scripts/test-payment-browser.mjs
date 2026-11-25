@@ -52,7 +52,7 @@ try {
     await page.getByText('Manual/simulated payment confirmed. No external charge was made.', { exact: true }).waitFor();
     assert.equal(booking.paymentStatus, 'paid'); assert.equal(calls, 2);
     await page.reload(); assert.equal(await page.getByRole('button', { name: 'Confirm manual payment', exact: true }).count(), 0);
-    await page.goto(`${origin}/payments`); await page.getByText('manual-receipt-1 · Manual (simulated)', { exact: true }).waitFor();
+    await page.goto(`${origin}/payments`);await page.locator('.payment-history-card').getByRole('heading',{name:'Private coaching',exact:true}).waitFor();await page.locator('.payment-history-details>summary').click();await page.getByText('manual-receipt-1',{exact:true}).waitFor();await page.getByText('· No external charge',{exact:true}).waitFor();
     const before = calls;
     await page.evaluate(async () => {
       const { startPayment } = await import('/src/services/paymentFlow.ts');

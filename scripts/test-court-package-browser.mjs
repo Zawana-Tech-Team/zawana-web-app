@@ -66,10 +66,10 @@ try {
       await dialog.getByLabel('Sessions', { exact: true }).scrollIntoViewIfNeeded();
       await dialog.getByLabel('Sessions', { exact: true }).fill('18');
       await dialog.getByLabel('Validity days', { exact: true }).fill('90');
-      assert.ok(await dialog.getByRole('button', { name: 'Create', exact: true }).isVisible());
+      assert.ok(await dialog.getByRole('button', { name: 'Create package', exact: true }).isVisible());
     }
-    await dialog.getByPlaceholder('Package title').fill('Upload QA');
-    await dialog.getByPlaceholder('Price', { exact: true }).fill('25000');
+    await dialog.getByLabel('Package title', {exact:true}).fill('Upload QA');
+    await dialog.getByLabel('Price MMK', {exact:true}).fill('25000');
     await dialog.locator('select').first().selectOption('bmc-foundation', { force: true });
     await dialog.getByRole('group', { name: 'Available days', exact: true }).getByLabel('Mon', { exact: true }).check();
     await dialog.getByRole('group', { name: 'Available days', exact: true }).getByLabel('Wed', { exact: true }).check();
@@ -82,12 +82,12 @@ try {
     const imageUrl = (await upload.json()).url;
     await page.screenshot({ path: join(artifacts, 'package-mobile-upload.png') });
     assert.ok(imageUrl.startsWith('/uploads/media/'));
-    await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Create package', exact: true }).click();
     await page.getByLabel('Current password').fill('qa-password');
     await page.getByRole('button', { name: 'Verify and save', exact: true }).click();
     await dialog.waitFor({ state: 'hidden' });
     await page.reload();
-    await page.getByText('Available days: Mon, Wed', { exact: true }).waitFor();
+    await page.locator('.package-management-days[aria-label="Available days for Upload QA"] [data-available=true]').filter({hasText:'Wed'}).waitFor();
     await page.getByRole('button', { name: 'Edit Upload QA', exact: true }).click();
     dialog = page.getByRole('dialog', { name: 'Edit badminton package', exact: true });
     assert.equal(await dialog.getByLabel('Sessions', { exact: true }).inputValue(), '18');
@@ -105,10 +105,10 @@ try {
     await page.getByRole('button', { name: 'Verify and save', exact: true }).click();
     await dialog.waitFor({ state: 'hidden' });
     assert.equal((await db.badmintonPackage.findFirstOrThrow({ where: { title: 'Upload QA' } })).imageUrl, null);
-    await page.getByText('Available days: Wed, Sat', { exact: true }).waitFor();
+    await page.locator('.package-management-days[aria-label="Available days for Upload QA"] [data-available=true]').filter({hasText:'Sat'}).waitFor();
     assert.deepEqual((await db.badmintonPackage.findFirstOrThrow({ where: { title: 'Upload QA' } })).availableDays, ['Wed', 'Sat']);
     await page.reload();
-    await page.getByText('Available days: Wed, Sat', { exact: true }).waitFor();
+    await page.locator('.package-management-days[aria-label="Available days for Upload QA"] [data-available=true]').filter({hasText:'Sat'}).waitFor();
     await page.getByRole('button', { name: 'Edit Upload QA', exact: true }).click();
     dialog = page.getByRole('dialog', { name: 'Edit badminton package', exact: true });
     const savedDays = dialog.getByRole('group', { name: 'Available days', exact: true });
@@ -121,7 +121,7 @@ try {
     await page.getByLabel('Current password').fill('qa-password');
     await page.getByRole('button', { name: 'Verify and save', exact: true }).click();
     await dialog.waitFor({ state: 'hidden' });
-    await page.getByText('Available days: No day restrictions set', { exact: true }).waitFor();
+    await page.locator('.package-management-days[aria-label="Available days for Upload QA"] [data-available=true]').nth(6).waitFor();
     assert.deepEqual((await db.badmintonPackage.findFirstOrThrow({ where: { title: 'Upload QA' } })).availableDays, []);
     const offered = await db.badmintonPackage.findFirstOrThrow({ where: { title: 'Upload QA' } });
     await db.badmintonPackage.update({ where: { id: offered.id }, data: { availableDays: ['Tue', 'Thu'], description: 'Description shown only in package details.', availableFrom: '09:00', availableUntil: '17:00', scheduleNotes: 'Weekday practice', courtRules: 'Indoor shoes required' } });
@@ -131,8 +131,9 @@ try {
     const memberPage = await memberContext.newPage(); memberPage.setDefaultTimeout(10000);
     memberPage.on('pageerror', error => errors.push(error.message));
     await memberPage.goto(`${ui}/membership`);
-    const offerCard = memberPage.locator('.package-offer').filter({ hasText: 'Upload QA' });
-    await offerCard.getByText('Tue, Thu', { exact: true }).waitFor();
+    await memberPage.getByRole('group',{name:'Membership sections',exact:true}).getByRole('button',{name:'Package Store',exact:true}).click();
+    const offerCard = memberPage.locator('.membership-store-card').filter({ hasText: 'Upload QA' });
+    await offerCard.getByRole('heading',{name:'Upload QA',exact:true}).waitFor();
     assert.equal(await offerCard.getByText('Description shown only in package details.', { exact: true }).count(), 0);
     assert.equal(await memberPage.getByRole('button', { name: /^Activate package/ }).count(), 0);
     const beforePurchases = await db.badmintonPackagePurchase.count({ where: { userId: data.memberId } });
@@ -151,11 +152,7 @@ try {
       await details.waitFor({ state: 'hidden' });
     }
     assert.equal(await db.badmintonPackagePurchase.count({ where: { userId: data.memberId } }), beforePurchases, 'Viewing details never purchases a package');
-    await memberPage.getByRole('button', { name: 'View details for Coming soon QA', exact: true }).click();
-    const comingDetails = memberPage.getByRole('dialog', { name: 'Coming soon QA details', exact: true });
-    assert.equal(await comingDetails.getByRole('button', { name: /^Activate package/ }).count(), 0);
-    assert.equal(await comingDetails.getByRole('link', { name: 'Contact Admin', exact: true }).count(), 1);
-    await comingDetails.getByRole('button', { name: 'Back to packages', exact: true }).click();
+    assert.equal(await memberPage.getByRole('button',{name:'View details for Coming soon QA',exact:true}).count(),0);
     await offerCard.getByRole('button', { name: 'View details for Upload QA', exact: true }).click();
     const memberDetails = memberPage.getByRole('dialog', { name: 'Upload QA details', exact: true });
     await memberPage.route(`**/member/badminton-packages/${offered.id}/purchase`, async route => { await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Package temporarily unavailable. Please retry.' }) }); }, { times: 1 });
@@ -167,7 +164,7 @@ try {
     await memberPage.getByRole('status').filter({ hasText: 'Upload QA is active' }).waitFor();
     assert.equal(await db.badmintonPackagePurchase.count({ where: { userId: data.memberId } }), beforePurchases + 1);
     await memberPage.reload();
-    await memberPage.getByRole('heading', { name: 'Your packages', exact: true }).waitFor();
+    await memberPage.getByRole('region',{name:'Active packages',exact:true}).getByRole('heading',{name:'Upload QA',exact:true}).waitFor();
     await memberContext.close();
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ ok: true, checks: ['floor persistence and validation', 'calendar beyond 100 records and reload', 'responsive package modal at 4 sizes', 'invalid upload rejection', 'device upload and stored file retrieval', 'package create and authenticated save', 'edit image persistence and removal', 'available days create, display, edit, reload and clear', 'member details before activation, mobile layout, failed activation retry and persistence'], artifacts }, null, 2));

@@ -1,5 +1,5 @@
 import { INBOX_CHANGED, INBOX_REFRESH } from '../services/notificationInbox';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Booking, CartItem, Notification, ReviveBooking, ReviveBookingStatus } from "../types";
 import { get, patch } from "../api";
 import { useAuth } from "./AuthContext";
@@ -27,6 +27,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id, userRole = user?.role;
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const inboxOwner=useRef('');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [reviveBookings, setReviveBookings] = useState<ReviveBooking[]>([]);
@@ -68,7 +69,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const requestId = ++revision;
       try {
         const rows = await get<any[]>('/notifications');
-        if (alive && revision === requestId) setNotifications(rows.filter(row => !cleared.has(row.id)).map(row => ({ ...row, time: row.createdAt })));
+        if (alive && revision === requestId) {inboxOwner.current=userId;setNotifications(rows.filter(row => !cleared.has(row.id)).map(row => ({ ...row, time: row.createdAt })));}
       } catch { /* Preserve the current inbox on a transient request failure. */ }
     };
     const changed = (event: Event) => {
@@ -76,11 +77,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ++revision; ids.forEach(id => cleared.add(id));
       setNotifications(rows => rows.filter(row => !ids.includes(row.id)));
     };
-    const refreshEvent = () => { void refreshInbox(); };
-    window.addEventListener(INBOX_CHANGED, changed); window.addEventListener(INBOX_REFRESH, refreshEvent); window.addEventListener('focus', refreshEvent);
+    const refreshEvent = () => { if(!document.hidden)void refreshInbox(); };
+    window.addEventListener(INBOX_CHANGED, changed); window.addEventListener(INBOX_REFRESH, refreshEvent); window.addEventListener('focus', refreshEvent);window.addEventListener('online',refreshEvent);document.addEventListener('visibilitychange',refreshEvent);
     void refreshInbox();
     const timer = setInterval(() => { if (!document.hidden) void refreshInbox(); }, 10000);
-    return () => { alive = false; clearInterval(timer); window.removeEventListener(INBOX_CHANGED, changed); window.removeEventListener(INBOX_REFRESH, refreshEvent); window.removeEventListener('focus', refreshEvent); };
+    return () => { alive = false; clearInterval(timer); window.removeEventListener(INBOX_CHANGED, changed); window.removeEventListener(INBOX_REFRESH, refreshEvent); window.removeEventListener('focus', refreshEvent);window.removeEventListener('online',refreshEvent);document.removeEventListener('visibilitychange',refreshEvent); };
   }, [userId, userRole]);
 
   const addBooking = (booking: Booking) => setBookings(v => [booking, ...v]);
@@ -121,7 +122,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return <C.Provider
     value={{
       bookings,
-      notifications,
+      notifications:inboxOwner.current===userId?notifications:[],
       cart,
       reviveBookings,
       loading,

@@ -1,11 +1,13 @@
+import { createPortal } from 'react-dom';
 import { startPayment } from '../services/paymentFlow';
 import { useViewedNotifications } from '../hooks/useViewedNotifications';
 import { INBOX_CHANGED, INBOX_REFRESH, removeViewedNotifications } from '../services/notificationInbox';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { popoverMotion } from '../design/motion';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Bell, Check, Volume2, VolumeX, X } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Bell, Check, Volume2, VolumeX, X } from 'lucide-react';
+import { NotificationGraphic, notificationTimestamp } from './notification/NotificationPresentation';
 import { get, post } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { LocalizedTree, useLanguage } from '../context/LanguageContext';
@@ -23,6 +25,16 @@ export function NotificationBell() {
     [error, setError] = useState('');
   const { user } = useAuth();
   const userId = user?.id, userRole = user?.role;
+  const staff=userRole==='admin'||userRole==='badminton_fo';
+  const [owner,setOwner]=useState('');
+  const visibleItems=owner===userId?items:[];
+  const [position,setPosition]=useState<{top:number;left:number;width:number;maxHeight:number}|null>(null);
+  useLayoutEffect(()=>{
+    if(!open)return;
+    const place=()=>{const rect=trigger.current?.getBoundingClientRect();if(!rect)return;const viewport=window.visualViewport;const width=viewport?.width||innerWidth,height=viewport?.height||innerHeight,left=viewport?.offsetLeft||0,top=viewport?.offsetTop||0;const panelWidth=Math.min(390,width-16),panelHeight=Math.min(560,height-16);const below=top+height-rect.bottom-14,above=rect.top-top-14;const flip=below<250&&above>below;setPosition({width:panelWidth,left:Math.max(left+8,Math.min(rect.right-panelWidth,left+width-panelWidth-8)),top:flip?Math.max(top+8,rect.top-Math.min(panelHeight,above)-6):rect.bottom+6,maxHeight:Math.max(80,Math.min(panelHeight,flip?above:below))});};
+    place();window.addEventListener('resize',place);window.addEventListener('scroll',place,true);window.visualViewport?.addEventListener('resize',place);
+    return()=>{window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);window.visualViewport?.removeEventListener('resize',place);};
+  },[open]);
   useViewedNotifications(panel, open, userId);
   const seen = useRef<Set<string> | null>(null),
     allowed = useRef(false),
@@ -66,15 +78,15 @@ export function NotificationBell() {
           if (fresh.length) play()
         }
         seen.current = new Set(active.map(n => n.id));
-        setItems(active);
+        setOwner(userId);setItems(active);setError('');
         setLoading(false)
       } catch {
-        if (alive) setLoading(false)
+        if (alive) {setLoading(false);setError('Notifications could not refresh. Check your connection and retry.');}
       }
     };
     const remove = (event: Event) => { const ids = (event as CustomEvent<{ ids: string[] }>).detail.ids; ++revision; ids.forEach(id => cleared.add(id)); setItems(rows => rows.filter(row => !ids.includes(row.id))); };
-    const refreshEvent = () => { void refresh(); };
-    window.addEventListener(INBOX_CHANGED, remove); window.addEventListener(INBOX_REFRESH, refreshEvent); window.addEventListener('focus', refreshEvent);
+    const refreshEvent = () => { if(!document.hidden)void refresh(); };
+    window.addEventListener(INBOX_CHANGED, remove); window.addEventListener(INBOX_REFRESH, refreshEvent); window.addEventListener('focus', refreshEvent);window.addEventListener('online',refreshEvent);document.addEventListener('visibilitychange',refreshEvent);
     void refresh();
     const timer = window.setInterval(() => {
       if (!document.hidden) void refresh()
@@ -82,17 +94,18 @@ export function NotificationBell() {
     return () => {
       alive = false;
       window.clearInterval(timer);
-      window.removeEventListener(INBOX_CHANGED, remove); window.removeEventListener(INBOX_REFRESH, refreshEvent); window.removeEventListener('focus', refreshEvent);
+      window.removeEventListener(INBOX_CHANGED, remove); window.removeEventListener(INBOX_REFRESH, refreshEvent); window.removeEventListener('focus', refreshEvent);window.removeEventListener('online',refreshEvent);document.removeEventListener('visibilitychange',refreshEvent);
     }
   }, [play, userId, userRole]);
   useEffect(() => {
     if (!open) return;
+    const opener=trigger.current;
     panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const dismiss = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { setOpen(false); trigger.current?.focus(); }
     };
     document.addEventListener('keydown', dismiss);
-    return () => document.removeEventListener('keydown', dismiss);
+    return () => {document.removeEventListener('keydown', dismiss);if(opener?.isConnected)opener.focus({preventScroll:true});};
   }, [open]);
   const toggleSound = () => {
     const next = !sound;
@@ -136,14 +149,14 @@ export function NotificationBell() {
   };
   const cancelBooking = (item: any) =>
     finishAction(item, () => post(`/member/private-courses/${item.entityId}/cancel`, {}));
-  const unread = items.filter(n => !n.read).length;
+  const unread = visibleItems.filter(n => !n.read).length;
   return <LocalizedTree>
     <div className="relative">
       <button
         ref={trigger} type="button" aria-expanded={open} aria-controls={open ? "notification-panel" : undefined}
         aria-label={`${t('Notifications')}${unread ? `, ${t(`${unread} unread`)}` : ''}`}
-        onClick={() => setOpen(v => !v)}
-        className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-zawana-950/5"
+        onClick={() => {setPosition(null);setOpen(v => !v);}}
+        className={`relative grid h-10 w-10 place-items-center rounded-full hover:bg-zawana-950/5 ${staff?'staff-notification-trigger':''}`}
       >
         <Bell size={19} />
         {unread > 0 &&
@@ -151,36 +164,37 @@ export function NotificationBell() {
             {unread > 9 ? '9+' : unread}
           </span>}
       </button>
-      <AnimatePresence>{open &&
+      {createPortal(<LocalizedTree><AnimatePresence>{open &&
         <>
           <button
             aria-label="Close notifications"
-            className="fixed inset-0 z-40 cursor-default"
+            tabIndex={-1} className="fixed inset-0 z-[140] cursor-default"
             onClick={() => setOpen(false)}
           />
           <motion.section ref={panel} id="notification-panel" aria-label="Notifications"
             {...popoverMotion} initial={reduced ? false : popoverMotion.initial}
             transition={reduced ? { duration: 0 } : popoverMotion.transition}
-            className="premium-popover absolute right-0 top-12 z-50 w-[min(92vw,390px)] overflow-hidden rounded-2xl border border-zawana-950/10 bg-white shadow-2xl">
-            <header className="flex items-center justify-between border-b p-4">
+            style={{...position,visibility:position?'visible':'hidden'}} className={`premium-popover fixed z-[150] flex flex-col overflow-hidden rounded-2xl border border-zawana-950/10 bg-white shadow-2xl ${staff?'staff-notification-popover':''}`}>
+            <header className="flex items-center justify-between border-b border-zawana-950/10 p-4">
               <div>
-                <h2 className="font-black">Notifications</h2>
-                <p className="text-xs text-zawana-500">
+                <h2 className="font-semibold">Notifications{staff&&unread>0&&<span className="staff-notification-count">{unread} unread</span>}</h2>
+                {!staff&&<p className="text-xs text-zawana-500">
                   {unread ? `${unread} unread` : 'You’re all caught up'}
-                </p>
+                </p>}
               </div>
               <div className="flex items-center gap-1">
                 <button
                   title={sound ? 'Turn sound off' : 'Turn sound on'}
+                  aria-label={sound ? 'Turn sound off' : 'Turn sound on'}
                   onClick={toggleSound}
-                  className="rounded-lg p-2 hover:bg-zawana-950/5"
+                  className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 hover:bg-zawana-950/5"
                 >
                   {sound ? <Volume2 size={17} /> : <VolumeX size={17} />}
                 </button>
                 <button
                   aria-label="Close"
                   onClick={() => setOpen(false)}
-                  className="rounded-lg p-2 hover:bg-zawana-950/5"
+                  className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 hover:bg-zawana-950/5"
                 >
                   <X size={17} />
                 </button>
@@ -188,15 +202,15 @@ export function NotificationBell() {
             </header>
             {error &&
               <p role="alert" className="mx-4 mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-800">
-                {error}
+                {error}<button className="ml-2 min-h-10 underline" onClick={()=>window.dispatchEvent(new Event(INBOX_REFRESH))}>Retry</button>
               </p>}
-            <div className="max-h-[min(65vh,480px)] overflow-y-auto">
+            <div className="min-h-0 overflow-y-auto">
               {loading ?
                 <div className="space-y-2 p-4">
                   <div className="h-14 animate-pulse rounded-xl bg-zawana-950/5" />
                   <div className="h-14 animate-pulse rounded-xl bg-zawana-950/5" />
-                </div> : items.length ?
-                items.map(item => {
+                </div> : visibleItems.length ?
+                (staff?visibleItems.slice(0,6):visibleItems).map(item => {
                   const request =
                     user?.role === 'coach' &&
                     item.type === 'booking' &&
@@ -212,13 +226,13 @@ export function NotificationBell() {
                   return <div
                     key={item.id}
                     data-notification-id={item.id}
-                    className={`border-b p-4 ${item.read ? 'opacity-70' : 'bg-zawana-accent/[.06]'}`}
+                    className={staff?`staff-notification-preview ${!item.read?'is-unread':''}`:`border-b border-zawana-950/10 p-4 ${item.read ? 'opacity-70' : 'bg-zawana-accent/[.06]'}`}
                   >
                     <button
                       onClick={() => void openItem(item)}
                       className="flex w-full gap-3 text-left"
                     >
-                      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-zawana-950/5 text-zawana-accent">
+                      {staff?<NotificationGraphic notice={item}/>:<span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-zawana-950/5 text-zawana-accent">
                         {item.imageUrl ?
                           <img
                             src={item.imageUrl}
@@ -226,18 +240,18 @@ export function NotificationBell() {
                             className="h-full w-full object-cover"
                           /> :
                           <Bell size={17} />}
-                      </span>
+                      </span>}
                       <span className="min-w-0 flex-1">
                         <span className="flex items-start justify-between gap-2">
                           <b className="text-sm">{item.title}</b>
                           {!item.read &&
                             <i className="mt-1 h-2 w-2 shrink-0 rounded-full bg-zawana-accent" />}
                         </span>
-                        <span className="mt-1 block text-xs leading-5 text-zawana-500">
+                        <span className={`mt-1 block text-xs leading-5 text-zawana-500 ${staff?'staff-notification-preview-body':''}`}>
                           {item.body}
                         </span>
                         <span className="mt-2 block text-[10px] font-bold text-zawana-400">
-                          {new Date(item.createdAt).toLocaleString(locale)}
+                          {staff?notificationTimestamp(item.createdAt,locale):new Date(item.createdAt).toLocaleString(locale)}
                         </span>
                       </span>
                     </button>
@@ -280,8 +294,9 @@ export function NotificationBell() {
                 <div className="p-8 text-center text-sm text-zawana-500">
                   <Check className="mx-auto mb-2" />No active notifications.</div>}
             </div>
+            {staff&&<footer className="staff-notification-popover-footer"><Link to={`/${userRole==='admin'?'admin':'badminton-fo'}/notifications`} onClick={()=>setOpen(false)}>View all notifications<ArrowRight size={15} aria-hidden="true"/></Link></footer>}
           </motion.section>
-        </>}</AnimatePresence>
+        </>}</AnimatePresence></LocalizedTree>,document.body)}
     </div>
   </LocalizedTree>
 }

@@ -1,7 +1,7 @@
 import { PackageReauthentication } from './components/PackageReauthentication';
 import { PageSkeleton } from './components/UI';
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 // @ts-expect-error ScrollToTop is a JSX module without a TypeScript declaration.
 import ScrollToTop from './components/ScrollToTop';
 import RoleLayout from './components/RoleLayout';
@@ -86,7 +86,7 @@ const PaymentStatus = lazy(() =>
   import('./pages/PaymentStatus').then(module => ({ default: module.PaymentStatus }))
 );
 const QrCheckIn = lazy(() => import('./pages/QrCheckIn'));
-const StaffPrivateCourses = lazy(() => import('./pages/StaffPrivateCourses'));
+
 const Attendance = lazy(() => import('./pages/Attendance'));
 const CourtReschedule = lazy(() => import('./pages/CourtReschedule'));
 const MemberTraining = lazy(() => import('./pages/MemberTraining'));
@@ -146,13 +146,19 @@ const operational = (role: UserRole, path: string) =>
     }
   />;
 
+function RemovedCourseFinance({role}:{role:'admin'|'badminton_fo'|'coach'}){
+ const {search}=useLocation();const params=new URLSearchParams(search);params.set('kind','private_course');params.set('history','1');
+ const path=role==='admin'?'/admin/court-rentals':role==='coach'?'/coach/bookings':'/badminton-fo/bookings';
+ return <Navigate replace to={`${path}?${params}`}/>;
+}
+
 export default function App() {
   return <Suspense fallback={<RouteLoading />}>
     <ScrollToTop />
     <><PackageReauthentication /><Routes>
-      <Route path="/admin/course-finance" element={<Guard role="admin"><StaffPrivateCourses /></Guard>} />
-      <Route path="/coach/course-finance" element={<Guard role="coach"><StaffPrivateCourses /></Guard>} />
-      <Route path="/badminton-fo/course-finance" element={<Guard role="badminton_fo"><StaffPrivateCourses /></Guard>} />
+      <Route path="/admin/course-finance" element={<Guard role="admin"><RemovedCourseFinance role="admin" /></Guard>} />
+      <Route path="/coach/course-finance" element={<Guard role="coach"><RemovedCourseFinance role="coach" /></Guard>} />
+      <Route path="/badminton-fo/course-finance" element={<Guard role="badminton_fo"><RemovedCourseFinance role="badminton_fo" /></Guard>} />
 
       <Route path="/check-in" element={<QrCheckIn />} />
       {([
@@ -360,11 +366,12 @@ export default function App() {
       <Route path="/settings" element={<AccountSettings />} />
 
       {/* Admin */}
+      <Route path="/admin" element={<Guard role="admin"><Admin /></Guard>}/>
       {[
-        '/admin',
         '/admin/notifications',
         '/admin/court-rentals',
         '/admin/badminton-packages',
+        '/admin/badminton-categories',
         '/admin/gym-packages',
         '/admin/finance',
         '/admin/cms'
@@ -451,19 +458,19 @@ export default function App() {
         '/badminton-fo',
         '/badminton-fo/notifications',
         '/badminton-fo/packages',
-        '/badminton-fo/packages/check-in',
+        '/badminton-fo/check-in',
         '/badminton-fo/courts',
         '/badminton-fo/bookings',
         '/badminton-fo/transactions'
       ].map(path => operational('badminton_fo', path))}
       <Route path="/badminton-fo/pos" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/packages" replace /></Guard>} />
-      <Route path="/badminton-fo/check-in" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/packages/check-in" replace /></Guard>} />
+      <Route path="/badminton-fo/packages/check-in" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/check-in?tab=manual" replace /></Guard>} />
       <Route path="/badminton-fo/active-packages" element={<Guard role="badminton_fo"><Navigate to="/badminton-fo/packages" replace /></Guard>} />
       <Route
         path="/badminton-fo/students"
         element={
           <Guard role="badminton_fo">
-            <Navigate to="/badminton-fo/packages/check-in" replace />
+            <Navigate to="/badminton-fo/check-in?tab=manual" replace />
           </Guard>
         }
       />

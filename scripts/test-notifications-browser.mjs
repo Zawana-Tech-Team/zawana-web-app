@@ -38,7 +38,7 @@ try {
   await context.addInitScript(token => localStorage.setItem('zawana_access_token', token), fo.token);
   const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
   await page.goto(ui + '/badminton-fo/attendance');
-  await page.getByRole('heading', { name: 'Attendance.' }).waitFor();
+  await page.getByRole('heading', { name: 'Attendance', exact: true }).waitFor();
   await page.getByRole('button', { name: /^Notifications, / }).click();
   const panel = page.getByRole('region', { name: 'Notifications', exact: true });
   await panel.getByText('Viewed notification', { exact: true }).waitFor();
@@ -58,9 +58,10 @@ try {
 
   ids = seed();
   await page.goto(ui + '/badminton-fo/notifications');
-  await page.getByRole('heading', { name: 'Viewed notification', exact: true }).waitFor();
+  await page.getByRole('heading', { name: /^Viewed notification/ }).waitFor();
   await page.waitForTimeout(1300);
-  // Full navigation exercises pagehide/keepalive, as well as SPA surface cleanup.
+  await page.getByRole('listitem').filter({hasText:'Viewed notification'}).getByRole('button',{name:'Dismiss',exact:true}).click();
+  // The FO inbox uses explicit marking; the bell above verifies viewed-on-close persistence.
   await page.goto(ui + '/badminton-fo/attendance');
   await page.waitForFunction(async ({ api, token, id }) => {
     const rows = await (await fetch(api + '/notifications', { headers: { Authorization: `Bearer ${token}` } })).json();

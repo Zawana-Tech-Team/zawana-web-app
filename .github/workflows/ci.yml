@@ -8,6 +8,50 @@ permissions:
   contents: read
 
 jobs:
+  stabilization-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix backend --ignore-scripts
+      - run: npm ci --prefix tooling/gym
+      - run: npm --prefix backend run prisma:generate
+        env:
+          DATABASE_URL: file:./dev.db
+      - run: node tooling/gym/node_modules/playwright/cli.js install --with-deps chromium
+      - run: npm run lint:stabilization
+      - run: node scripts/test-stabilization-browser.mjs
+      - run: node scripts/test-member-attendance-browser.mjs
+      - run: node scripts/test-attendance-cleanup-browser.mjs
+      - run: node scripts/test-membership-renewals-browser.mjs
+      - run: node scripts/test-member-history-pagination-browser.mjs
+      - run: node scripts/test-admin-dashboard-browser.mjs
+      - run: node scripts/test-badminton-fo-dashboard-browser.mjs
+      - run: node scripts/test-badminton-fo-check-in-browser.mjs
+      - run: node scripts/test-user-management-browser.mjs
+      - run: node scripts/test-coach-management-browser.mjs
+      - run: node scripts/test-private-course-management-browser.mjs
+      - run: node scripts/test-admin-finance-content-browser.mjs
+      - run: node scripts/test-admin-rental-reschedule-browser.mjs
+      - run: node scripts/test-admin-court-selection-browser.mjs
+      - run: node scripts/test-rental-move-availability-browser.mjs
+      - run: node scripts/test-admin-refund-ui-browser.mjs
+      - run: node scripts/test-admin-request-tabs-browser.mjs
+      - run: node scripts/test-badminton-fo-court-parity-browser.mjs
+      - run: node scripts/test-staff-booking-history-browser.mjs
+      - run: node scripts/test-staff-requests-browser.mjs
+      - run: node scripts/test-court-package-browser.mjs
+      - run: node scripts/test-package-modals-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stabilization-browser
+          path: |
+            /tmp/zawana-court-desk-*/artifacts
+            /tmp/zawana-attendance-browser-*/*.png
   verify:
     runs-on: ubuntu-latest
 
